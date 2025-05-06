@@ -9,10 +9,15 @@ import { AuthProvider } from './lib/auth';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
+import { ThemeProvider, useTheme } from './lib/ThemeContext';
+import { useThemeColors } from './lib/ThemeUtils';
 
-export default function RootLayout() {
+// Composant pour le contenu de l'application
+function AppContent() {
   const colorScheme = useColorScheme();
   const { i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
 
   // Pas de prévention du masquage du splash screen
   // SplashScreen.preventAutoHideAsync();
@@ -46,73 +51,81 @@ export default function RootLayout() {
   }, []); // Retiré i18n des dépendances pour éviter des recrées multiples
 
   return (
-    <AuthProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          {/* Nous ajoutons d'abord un espace pour la barre d'état Android */}
-          {Platform.OS === 'android' && <View style={styles.statusBarSpace} />}
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          <Stack
-            screenOptions={{
-              headerStyle: {
-                backgroundColor: Colors.background,
-              },
-              headerTintColor: Colors.text.primary,
-              headerTitleStyle: {
-                color: Colors.text.primary,
-              },
-              contentStyle: {
-                backgroundColor: Colors.background,
-              },
-              animation: 'slide_from_right',
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        {/* Nous ajoutons d'abord un espace pour la barre d'état Android */}
+        {Platform.OS === 'android' && <View style={[styles.statusBarSpace, { backgroundColor: colors.background }]} />}
+        <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        <Stack
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: colors.background,
+            },
+            headerTintColor: colors.text.primary,
+            headerTitleStyle: {
+              color: colors.text.primary,
+            },
+            contentStyle: {
+              backgroundColor: colors.background,
+            },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen
+            name="index"
+            options={{
+              headerShown: false,
             }}
-          >
-            <Stack.Screen
-              name="index"
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="(auth)"
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="(app)"
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="scan"
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="direct-scan"
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="settings"
-              options={{
-                headerShown: false,
-              }}
-            />
-          </Stack>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </AuthProvider>
+          />
+          <Stack.Screen
+            name="(auth)"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="(app)"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="scan"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="direct-scan"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="settings"
+            options={{
+              headerShown: false,
+            }}
+          />
+        </Stack>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+// Composant racine qui fournit tous les contextes
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   statusBarSpace: {
     height: RNStatusBar.currentHeight,
-    backgroundColor: Colors.background,
   }
 });

@@ -7,9 +7,13 @@ import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
+import { useTheme } from '../lib/ThemeContext';
+import { useThemeColors } from '../lib/ThemeUtils';
 
 export default function MarketScreen() {
   const { t, i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
 
@@ -34,6 +38,20 @@ export default function MarketScreen() {
     };
   }, []);
 
+  // Écouter les changements de thème
+  useEffect(() => {
+    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+      console.log('Changement de thème détecté dans MarketScreen');
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    return () => {
+      if (themeListener) {
+        EventRegister.removeEventListener(themeListener);
+      }
+    };
+  }, []);
+
   // Vérifier les changements de langue lorsque l'écran est focalisé
   useFocusEffect(
     useCallback(() => {
@@ -53,19 +71,19 @@ export default function MarketScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('navigation.market')}</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>{t('navigation.market')}</Text>
         <TouchableOpacity>
-          <Ionicons name="search-outline" size={24} color={Colors.text.secondary} />
+          <Ionicons name="search-outline" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
       
       <ScrollView style={styles.content}>
         <View style={styles.emptyMarket}>
-          <Ionicons name="cart-outline" size={80} color={Colors.text.secondary} />
-          <Text style={styles.emptyTitle}>{t('market.empty')}</Text>
-          <Text style={styles.emptyText}>
+          <Ionicons name="cart-outline" size={80} color={colors.text.secondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('market.empty')}</Text>
+          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
             {t('market.emptyText')}
           </Text>
         </View>
@@ -77,7 +95,6 @@ export default function MarketScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -86,12 +103,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: Colors.background,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   content: {
     flex: 1,
@@ -106,13 +121,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },

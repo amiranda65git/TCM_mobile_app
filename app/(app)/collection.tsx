@@ -8,10 +8,14 @@ import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
+import { useTheme } from '../lib/ThemeContext';
+import { useThemeColors } from '../lib/ThemeUtils';
 
 export default function CollectionScreen() {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
 
@@ -36,6 +40,20 @@ export default function CollectionScreen() {
     };
   }, []);
 
+  // Écouter les changements de thème
+  useEffect(() => {
+    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+      console.log('Changement de thème détecté dans CollectionScreen');
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    return () => {
+      if (themeListener) {
+        EventRegister.removeEventListener(themeListener);
+      }
+    };
+  }, []);
+
   // Vérifier les changements de langue lorsque l'écran est focalisé
   useFocusEffect(
     useCallback(() => {
@@ -55,80 +73,80 @@ export default function CollectionScreen() {
   );
   
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('home.collection')}</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>{t('home.collection')}</Text>
         <TouchableOpacity>
-          <Ionicons name="options-outline" size={24} color={Colors.text.secondary} />
+          <Ionicons name="options-outline" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
       
       <View style={styles.collectionSummary}>
-        <View style={styles.valueContainer}>
+        <View style={[styles.valueContainer, { backgroundColor: colors.surface }]}>
           <View style={styles.valueHeader}>
-            <Text style={styles.valueLabel}>{t('home.currentValue')}</Text>
+            <Text style={[styles.valueLabel, { color: colors.text.secondary }]}>{t('home.currentValue')}</Text>
             <TouchableOpacity>
-              <Ionicons name="eye-outline" size={20} color={Colors.text.secondary} />
+              <Ionicons name="eye-outline" size={20} color={colors.text.secondary} />
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.valueAmount}>0,00 €</Text>
+          <Text style={[styles.valueAmount, { color: colors.text.primary }]}>0,00 €</Text>
           
           <View style={styles.valueChange}>
-            <Text style={styles.valueChangeText}>0,00%</Text>
-            <Text style={styles.valuePeriod}>{t('settings.alerts.lastWeek')}</Text>
+            <Text style={[styles.valueChangeText, { color: colors.text.secondary }]}>0,00%</Text>
+            <Text style={[styles.valuePeriod, { color: colors.text.secondary }]}>{t('settings.alerts.lastWeek')}</Text>
           </View>
         </View>
       </View>
       
       <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
-          <Text style={styles.statLabel}>{t('home.cards')}</Text>
+        <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.statNumber, { color: colors.text.primary }]}>0</Text>
+          <Text style={[styles.statLabel, { color: colors.text.secondary }]}>{t('home.cards')}</Text>
         </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
-          <Text style={styles.statLabel}>{t('home.editions')}</Text>
+        <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.statNumber, { color: colors.text.primary }]}>0</Text>
+          <Text style={[styles.statLabel, { color: colors.text.secondary }]}>{t('home.editions')}</Text>
         </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
-          <Text style={styles.statLabel}>{t('home.sold')}</Text>
+        <View style={[styles.statItem, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.statNumber, { color: colors.text.primary }]}>0</Text>
+          <Text style={[styles.statLabel, { color: colors.text.secondary }]}>{t('home.sold')}</Text>
         </View>
       </View>
       
       <View style={styles.actionsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsScroll}>
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="add-circle-outline" size={24} color={Colors.secondary} />
-            <Text style={styles.actionLabel}>{t('settings.add')}</Text>
+            <Ionicons name="add-circle-outline" size={24} color={colors.secondary} />
+            <Text style={[styles.actionLabel, { color: colors.text.secondary }]}>{t('settings.add')}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="folder-outline" size={24} color={Colors.secondary} />
-            <Text style={styles.actionLabel}>{t('home.createFolder')}</Text>
+            <Ionicons name="folder-outline" size={24} color={colors.secondary} />
+            <Text style={[styles.actionLabel, { color: colors.text.secondary }]}>{t('home.createFolder')}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="pricetag-outline" size={24} color={Colors.secondary} />
-            <Text style={styles.actionLabel}>{t('settings.sell')}</Text>
+            <Ionicons name="pricetag-outline" size={24} color={colors.secondary} />
+            <Text style={[styles.actionLabel, { color: colors.text.secondary }]}>{t('settings.sell')}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="filter-outline" size={24} color={Colors.secondary} />
-            <Text style={styles.actionLabel}>{t('settings.filter')}</Text>
+            <Ionicons name="filter-outline" size={24} color={colors.secondary} />
+            <Text style={[styles.actionLabel, { color: colors.text.secondary }]}>{t('settings.filter')}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="share-outline" size={24} color={Colors.secondary} />
-            <Text style={styles.actionLabel}>{t('settings.export')}</Text>
+            <Ionicons name="share-outline" size={24} color={colors.secondary} />
+            <Text style={[styles.actionLabel, { color: colors.text.secondary }]}>{t('settings.export')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
       
       <View style={styles.emptyCollection}>
-        <Ionicons name="folder-open-outline" size={80} color={Colors.text.secondary} />
-        <Text style={styles.emptyTitle}>{t('collection.empty')}</Text>
-        <Text style={styles.emptyText}>
+        <Ionicons name="folder-open-outline" size={80} color={colors.text.secondary} />
+        <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('collection.empty')}</Text>
+        <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
           {t('collection.emptyText')}
         </Text>
       </View>
@@ -139,7 +157,6 @@ export default function CollectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -148,18 +165,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: Colors.background,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   collectionSummary: {
     padding: 16,
   },
   valueContainer: {
-    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
   },
@@ -170,12 +184,10 @@ const styles = StyleSheet.create({
   },
   valueLabel: {
     fontSize: 16,
-    color: Colors.text.secondary,
   },
   valueAmount: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginVertical: 8,
   },
   valueChange: {
@@ -184,12 +196,10 @@ const styles = StyleSheet.create({
   },
   valueChangeText: {
     fontSize: 16,
-    color: Colors.text.secondary,
     marginRight: 8,
   },
   valuePeriod: {
     fontSize: 14,
-    color: Colors.text.secondary,
     opacity: 0.7,
   },
   statsContainer: {
@@ -199,7 +209,6 @@ const styles = StyleSheet.create({
   },
   statItem: {
     flex: 1,
-    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
@@ -208,11 +217,9 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   statLabel: {
     fontSize: 14,
-    color: Colors.text.secondary,
     marginTop: 4,
   },
   actionsContainer: {
@@ -229,7 +236,6 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 12,
-    color: Colors.text.secondary,
     marginTop: 4,
     textAlign: 'center',
   },
@@ -242,13 +248,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },

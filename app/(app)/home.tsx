@@ -9,11 +9,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
+import { useTheme } from '../lib/ThemeContext';
+import { useThemeColors } from '../lib/ThemeUtils';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
   const [username, setUsername] = useState(user?.email?.split('@')[0] || 'User');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -39,6 +43,20 @@ export default function HomeScreen() {
       // Supprimer l'écouteur lors du démontage du composant
       if (languageListener) {
         EventRegister.removeEventListener(languageListener);
+      }
+    };
+  }, []);
+  
+  // Écouter les changements de thème
+  useEffect(() => {
+    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+      console.log('Changement de thème détecté dans HomeScreen');
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    return () => {
+      if (themeListener) {
+        EventRegister.removeEventListener(themeListener);
       }
     };
   }, []);
@@ -126,45 +144,45 @@ export default function HomeScreen() {
   }, []);
 
   const CollectionCard = () => (
-    <View style={styles.collectionCard}>
+    <View style={[styles.collectionCard, { backgroundColor: colors.surface }]}>
       <View style={styles.collectionHeader}>
-        <Text style={styles.currentValue}>{t('home.currentValue')}</Text>
+        <Text style={[styles.currentValue, { color: colors.text.secondary }]}>{t('home.currentValue')}</Text>
         <TouchableOpacity onPress={() => setHideValues(!hideValues)}>
-          <Ionicons name={hideValues ? "eye-off-outline" : "eye-outline"} size={24} color={Colors.text.secondary} />
+          <Ionicons name={hideValues ? "eye-off-outline" : "eye-outline"} size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
       <View style={styles.valueContainer}>
-        <Text style={styles.value}>{hideValues ? "******" : "0,00 €"}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>AVG</Text>
+        <Text style={[styles.value, { color: colors.text.primary }]}>{hideValues ? "******" : "0,00 €"}</Text>
+        <View style={[styles.badge, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
         </View>
       </View>
-      <Text style={styles.percentage}>{hideValues ? "***" : "0.00 %"}</Text>
+      <Text style={[styles.percentage, { color: colors.text.secondary }]}>{hideValues ? "***" : "0.00 %"}</Text>
       <View style={styles.cardsCount}>
-        <Text style={styles.cardsText}>0 {t('home.cards')}</Text>
+        <Text style={[styles.cardsText, { color: colors.text.secondary }]}>0 {t('home.cards')}</Text>
       </View>
     </View>
   );
 
   const ActionCard = ({ title, icon, count, onPress }: any) => (
-    <TouchableOpacity style={styles.actionCard} onPress={onPress}>
+    <TouchableOpacity style={[styles.actionCard, { backgroundColor: colors.surface }]} onPress={onPress}>
       <View style={styles.actionIcon}>
         {icon}
       </View>
-      <Text style={styles.actionTitle}>{title}</Text>
-      <Text style={styles.actionCount}>{count}</Text>
+      <Text style={[styles.actionTitle, { color: colors.text.primary }]}>{title}</Text>
+      <Text style={[styles.actionCount, { color: colors.text.secondary }]}>{count}</Text>
     </TouchableOpacity>
   );
 
   const ListItem = ({ icon, title, count, onPress }: any) => (
-    <TouchableOpacity style={styles.listItem} onPress={onPress}>
+    <TouchableOpacity style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={onPress}>
       <View style={styles.listItemLeft}>
         {icon}
-        <Text style={styles.listItemTitle}>{title}</Text>
+        <Text style={[styles.listItemTitle, { color: colors.text.primary }]}>{title}</Text>
       </View>
       <View style={styles.listItemRight}>
-        <Text style={styles.listItemCount}>{count}</Text>
-        <Ionicons name="chevron-forward" size={24} color={Colors.text.secondary} />
+        <Text style={[styles.listItemCount, { color: colors.text.secondary }]}>{count}</Text>
+        <Ionicons name="chevron-forward" size={24} color={colors.text.secondary} />
       </View>
     </TouchableOpacity>
   );
@@ -172,26 +190,26 @@ export default function HomeScreen() {
   const NewsSection = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{t('home.news')}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.news')}</Text>
       </View>
       <TouchableOpacity 
         style={styles.bannerContainer}
         onPress={() => Linking.openURL('https://www.gamezest.ch/fr/')}
       >
-        <View style={styles.bannerBackground}>
-          <MaterialCommunityIcons name="cards" size={48} color={Colors.text.primary} style={styles.bannerIcon} />
+        <View style={[styles.bannerBackground, { backgroundColor: colors.primary }]}>
+          <MaterialCommunityIcons name="cards" size={48} color={colors.text.primary} style={styles.bannerIcon} />
         </View>
         <View style={styles.bannerOverlay}>
-          <Text style={styles.bannerText}>Découvrez les dernières cartes Pokémon</Text>
-          <Text style={styles.bannerSubText}>Visitez GameZest.ch</Text>
+          <Text style={[styles.bannerText, { color: colors.text.primary }]}>Découvrez les dernières cartes Pokémon</Text>
+          <Text style={[styles.bannerSubText, { color: colors.text.secondary }]}>Visitez GameZest.ch</Text>
         </View>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <View style={styles.userInfo}>
             <TouchableOpacity onPress={() => router.push('../settings')}>
@@ -201,26 +219,26 @@ export default function HomeScreen() {
                   style={styles.avatar}
                 />
               ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitial}>
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.avatarInitial, { color: colors.text.primary }]}>
                     {username ? username[0].toUpperCase() : 'U'}
                   </Text>
                 </View>
               )}
             </TouchableOpacity>
             <View>
-              <Text style={styles.greeting}>{t('home.greeting')},</Text>
-              <Text style={styles.username}>{username}</Text>
+              <Text style={[styles.greeting, { color: colors.text.secondary }]}>{t('home.greeting')},</Text>
+              <Text style={[styles.username, { color: colors.text.primary }]}>{username}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => router.push('../settings')}>
-            <Ionicons name="settings-outline" size={24} color={Colors.text.secondary} />
+            <Ionicons name="settings-outline" size={24} color={colors.text.secondary} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('home.collection')}</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.collection')}</Text>
           </View>
           <CollectionCard />
         </View>
@@ -228,38 +246,38 @@ export default function HomeScreen() {
         <View style={styles.actionCards}>
           <ActionCard
             title={t('home.editions')}
-            icon={<MaterialCommunityIcons name="pokeball" size={24} color={Colors.secondary} />}
+            icon={<MaterialCommunityIcons name="pokeball" size={24} color={colors.secondary} />}
             count={`${editionsCount} ${t('home.editions')}`}
             onPress={() => router.push('/collection')}
           />
           <ActionCard
             title={t('home.cardsCategory')}
-            icon={<MaterialCommunityIcons name="cards" size={24} color={Colors.secondary} />}
+            icon={<MaterialCommunityIcons name="cards" size={24} color={colors.secondary} />}
             count={`${cardsCount} ${t('home.cards')}`}
             onPress={() => router.push('/market')}
           />
         </View>
 
         <ListItem
-          icon={<Ionicons name="heart" size={24} color={Colors.secondary} />}
+          icon={<Ionicons name="heart" size={24} color={colors.secondary} />}
           title={t('home.wishlist')}
           count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../wishlist')}
         />
         <ListItem
-          icon={<Ionicons name="notifications" size={24} color={Colors.secondary} />}
+          icon={<Ionicons name="notifications" size={24} color={colors.secondary} />}
           title={t('home.alerts')}
           count={`0 ${t('home.alerts')}`}
           onPress={() => router.push('../alerts')}
         />
         <ListItem
-          icon={<Ionicons name="swap-horizontal" size={24} color={Colors.secondary} />}
+          icon={<Ionicons name="swap-horizontal" size={24} color={colors.secondary} />}
           title={t('home.tradelist')}
           count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../tradelist')}
         />
         <ListItem
-          icon={<Ionicons name="cash" size={24} color={Colors.secondary} />}
+          icon={<Ionicons name="cash" size={24} color={colors.secondary} />}
           title={t('home.sold')}
           count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../sold')}
@@ -277,12 +295,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
     paddingTop: Platform.OS === 'android' ? 25 : 0, // Espace pour la barre d'état
   },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -302,12 +318,10 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 14,
-    color: Colors.text.secondary,
   },
   username: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   section: {
     padding: 16,
@@ -321,14 +335,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   seeAll: {
     fontSize: 14,
     color: Colors.secondary,
   },
   collectionCard: {
-    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
   },
@@ -339,7 +351,6 @@ const styles = StyleSheet.create({
   },
   currentValue: {
     fontSize: 14,
-    color: Colors.text.secondary,
   },
   valueContainer: {
     flexDirection: 'row',
@@ -349,22 +360,18 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginRight: 8,
   },
   badge: {
-    backgroundColor: Colors.surface,
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   badgeText: {
     fontSize: 12,
-    color: Colors.text.secondary,
   },
   percentage: {
     fontSize: 14,
-    color: Colors.text.secondary,
     marginTop: 4,
   },
   cardsCount: {
@@ -372,7 +379,6 @@ const styles = StyleSheet.create({
   },
   cardsText: {
     fontSize: 14,
-    color: Colors.text.secondary,
   },
   actionCards: {
     flexDirection: 'row',
@@ -381,7 +387,6 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -392,12 +397,10 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginBottom: 8,
   },
   actionCount: {
     fontSize: 14,
-    color: Colors.text.secondary,
   },
   actionButton: {
     backgroundColor: Colors.secondary,
@@ -416,7 +419,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   listItemLeft: {
     flexDirection: 'row',
@@ -424,7 +426,6 @@ const styles = StyleSheet.create({
   },
   listItemTitle: {
     fontSize: 16,
-    color: Colors.text.primary,
     marginLeft: 12,
   },
   listItemRight: {
@@ -433,14 +434,12 @@ const styles = StyleSheet.create({
   },
   listItemCount: {
     fontSize: 14,
-    color: Colors.text.secondary,
     marginRight: 8,
   },
   avatarPlaceholder: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -448,7 +447,6 @@ const styles = StyleSheet.create({
   avatarInitial: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   bannerContainer: {
     width: '100%',
@@ -460,7 +458,6 @@ const styles = StyleSheet.create({
   bannerBackground: {
     width: '100%',
     height: '100%',
-    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -478,12 +475,10 @@ const styles = StyleSheet.create({
   bannerText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginBottom: 4,
   },
   bannerSubText: {
     fontSize: 14,
-    color: Colors.text.secondary,
   },
   footer: {
     height: 40,  // Augmentation de l'espace en bas pour éviter que la barre de navigation ne cache le contenu

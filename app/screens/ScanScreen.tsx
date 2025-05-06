@@ -8,6 +8,8 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../lib/ThemeContext';
+import { useThemeColors } from '../lib/ThemeUtils';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -25,6 +27,8 @@ export default function ScanScreen() {
   const router = useRouter();
   const camera = useRef<Camera>(null);
   const { t, i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
@@ -61,6 +65,20 @@ export default function ScanScreen() {
       // Supprimer l'écouteur lors du démontage du composant
       if (languageListener) {
         EventRegister.removeEventListener(languageListener);
+      }
+    };
+  }, []);
+
+  // Écouter les changements de thème
+  useEffect(() => {
+    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+      console.log('Changement de thème détecté dans ScanScreen');
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    return () => {
+      if (themeListener) {
+        EventRegister.removeEventListener(themeListener);
       }
     };
   }, []);
@@ -208,20 +226,20 @@ export default function ScanScreen() {
 
   if (!device || !hasPermission) {
     return (
-      <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color={Colors.secondary} />
-        <Text style={styles.text}>{t('scan.loadingCamera')}</Text>
+      <View style={[styles.centeredContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.secondary} />
+        <Text style={[styles.text, { color: colors.text.primary }]}>{t('scan.loadingCamera')}</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{t('scan.scanCard')}</Text>
+        <Text style={[styles.title, { color: colors.text.primary }]}>{t('scan.scanCard')}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -248,68 +266,74 @@ export default function ScanScreen() {
               ref={camera}
               style={styles.camera}
               device={device}
-              isActive={!isProcessing}
+              isActive={!photoUri}
               photo={true}
+              enableZoomGesture
             />
-            {/* Overlay de cadrage */}
-            <View style={styles.overlay} pointerEvents="none">
-              <View style={styles.cardFrame} />
-              {rectangleDetected && <View style={styles.detectedFrame} />}
+            
+            {/* Guide de placement de carte */}
+            <View style={styles.cardGuideOverlay}>
+              <View style={[styles.cardGuide, rectangleDetected && styles.cardGuideActive]} />
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Résultats de scan */}
+      {photoUri && scanResult.pokemonName && (
+        <View style={[styles.resultContainer, { backgroundColor: colors.surface }]}>
+          <View style={styles.resultHeader}>
+            <Text style={[styles.resultTitle, { color: colors.text.primary }]}>{t('scan.scanResults')}</Text>
+          </View>
+          
+          <View style={styles.resultContent}>
+            <View style={styles.resultRow}>
+              <Text style={[styles.resultLabel, { color: colors.text.secondary }]}>{t('scan.pokemonName')}:</Text>
+              <Text style={[styles.resultValue, { color: colors.text.primary }]}>{scanResult.pokemonName}</Text>
             </View>
             
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusText}>
-                {rectangleDetected ? t('scan.cardDetected') : t('scan.placeCard')}
-              </Text>
+            <View style={styles.resultRow}>
+              <Text style={[styles.resultLabel, { color: colors.text.secondary }]}>{t('scan.hp')}:</Text>
+              <Text style={[styles.resultValue, { color: colors.text.primary }]}>{scanResult.healthPoints}</Text>
             </View>
-          </View>
-        )}
-
-        {/* Zone d'affichage des résultats */}
-        {!isProcessing && photoUri && scanResult.pokemonName && (
-          <View style={styles.resultContainer}>
-            <View style={styles.resultHeader}>
-              <Text style={styles.resultTitle}>{t('scan.scanResults')}</Text>
-            </View>
-            <View style={styles.resultContent}>
-              <View style={styles.resultItem}>
-                <Text style={styles.resultLabel}>{t('scan.nameLabel')}:</Text>
-                <Text style={styles.resultValue}>{scanResult.pokemonName}</Text>
+            
+            {scanResult.cardNumber && (
+              <View style={styles.resultRow}>
+                <Text style={[styles.resultLabel, { color: colors.text.secondary }]}>{t('scan.cardNumber')}:</Text>
+                <Text style={[styles.resultValue, { color: colors.text.primary }]}>{scanResult.cardNumber}</Text>
               </View>
-              
-              {scanResult.healthPoints && (
-                <View style={styles.resultItem}>
-                  <Text style={styles.resultLabel}>{t('scan.hpLabel')}:</Text>
-                  <Text style={styles.resultValue}>{scanResult.healthPoints}</Text>
-                </View>
-              )}
-              
-              {scanResult.cardNumber && (
-                <View style={styles.resultItem}>
-                  <Text style={styles.resultLabel}>{t('scan.numberLabel')}:</Text>
-                  <Text style={styles.resultValue}>{scanResult.cardNumber}</Text>
-                </View>
-              )}
-            </View>
+            )}
           </View>
-        )}
-      </View>
+          
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.secondaryButton, { borderColor: colors.border }]}
+              onPress={() => handleStartScan()}
+            >
+              <Text style={[styles.actionButtonText, { color: colors.text.primary }]}>{t('scan.scanAgain')}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.primaryButton, { backgroundColor: colors.primary }]}
+              onPress={() => Alert.alert(t('scan.success'), t('scan.cardWillBeAdded'))}
+            >
+              <Text style={styles.primaryButtonText}>{t('scan.addToCollection')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
-      <View style={styles.footer}>
-        {photoUri ? (
-          <TouchableOpacity style={styles.button} onPress={handleStartScan}>
-            <Text style={styles.buttonText}>{t('scan.scanAgain')}</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={styles.captureButton} 
-            onPress={handleStartScan}
-            disabled={isProcessing}
-          >
-            <View style={styles.captureButtonInner} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Bouton de scan/retour */}
+      {!photoUri && (
+        <TouchableOpacity 
+          style={[styles.scanButton, { backgroundColor: colors.primary }]} 
+          onPress={handleStartScan}
+          disabled={isProcessing}
+        >
+          <Ionicons name="scan" size={24} color="#FFFFFF" />
+          <Text style={styles.scanButtonText}>{t('scan.scan')}</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -317,42 +341,38 @@ export default function ScanScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
   },
   text: {
-    color: Colors.text.primary,
     marginTop: 16,
     fontSize: 16,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
   backButton: {
     padding: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   placeholder: {
     width: 40,
   },
   cameraContainer: {
     flex: 1,
-    position: 'relative',
+    overflow: 'hidden',
+    marginBottom: 16,
   },
   cameraWrapper: {
     flex: 1,
@@ -361,62 +381,21 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  cardGuideOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cardFrame: {
+  cardGuide: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 8,
+  },
+  cardGuideActive: {
+    borderColor: '#4CAF50',
     borderWidth: 3,
-    borderColor: '#F8D030',
-    borderRadius: 12,
-    borderStyle: 'dashed',
-    backgroundColor: 'transparent',
-  },
-  detectedFrame: {
-    position: 'absolute',
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    borderWidth: 3,
-    borderColor: Colors.success,
-    borderRadius: 12,
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-  },
-  statusContainer: {
-    position: 'absolute',
-    bottom: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  placeholderCamera: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#2a2a2a',
-  },
-  placeholderText: {
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 32,
   },
   photoContainer: {
     flex: 1,
@@ -424,8 +403,6 @@ const styles = StyleSheet.create({
   },
   photo: {
     flex: 1,
-    width: '100%',
-    height: '100%',
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -435,83 +412,80 @@ const styles = StyleSheet.create({
   },
   processingText: {
     color: '#FFFFFF',
-    marginTop: 16,
     fontSize: 16,
-    fontWeight: 'bold',
+    marginTop: 16,
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 30,
+    borderRadius: 10,
+  },
+  scanButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   resultContainer: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
     margin: 16,
+    borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   resultHeader: {
-    backgroundColor: Colors.primary,
     padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   resultTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    textAlign: 'center',
   },
   resultContent: {
     padding: 16,
   },
-  resultItem: {
+  resultRow: {
     flexDirection: 'row',
-    marginBottom: 8,
-    alignItems: 'center',
+    marginBottom: 12,
   },
   resultLabel: {
-    color: Colors.text.secondary,
-    width: 80,
+    width: 100,
     fontSize: 16,
   },
   resultValue: {
-    color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
     flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
   },
-  footer: {
+  actionButtonsContainer: {
+    flexDirection: 'row',
     padding: 16,
-    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  button: {
+  actionButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+  },
+  primaryButton: {
     backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 200,
   },
-  buttonText: {
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  captureButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  captureButtonInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#fff',
+    fontWeight: '500',
   },
 }); 

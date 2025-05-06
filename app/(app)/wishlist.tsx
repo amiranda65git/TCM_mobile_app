@@ -7,9 +7,13 @@ import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
+import { useTheme } from '../lib/ThemeContext';
+import { useThemeColors } from '../lib/ThemeUtils';
 
 export default function WishlistScreen() {
   const { t, i18n } = useTranslation();
+  const { isDarkMode } = useTheme();
+  const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
 
@@ -34,6 +38,20 @@ export default function WishlistScreen() {
     };
   }, []);
 
+  // Écouter les changements de thème
+  useEffect(() => {
+    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+      console.log('Changement de thème détecté dans WishlistScreen');
+      setRefreshKey(prev => prev + 1);
+    });
+    
+    return () => {
+      if (themeListener) {
+        EventRegister.removeEventListener(themeListener);
+      }
+    };
+  }, []);
+
   // Vérifier les changements de langue lorsque l'écran est focalisé
   useFocusEffect(
     useCallback(() => {
@@ -53,23 +71,23 @@ export default function WishlistScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('home.wishlist')}</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>{t('home.wishlist')}</Text>
         <TouchableOpacity>
-          <Ionicons name="options-outline" size={24} color={Colors.text.secondary} />
+          <Ionicons name="options-outline" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
       
       <View style={styles.content}>
         <View style={styles.emptyWishlist}>
-          <Ionicons name="star-outline" size={80} color={Colors.text.secondary} />
-          <Text style={styles.emptyTitle}>{t('wishlist.empty')}</Text>
-          <Text style={styles.emptyText}>
+          <Ionicons name="star-outline" size={80} color={colors.text.secondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('wishlist.empty')}</Text>
+          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
             {t('wishlist.emptyText')}
           </Text>
           
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]}>
             <Ionicons name="add" size={24} color="#FFFFFF" />
             <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
           </TouchableOpacity>
@@ -82,7 +100,6 @@ export default function WishlistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -91,12 +108,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: Colors.background,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.text.primary,
   },
   content: {
     flex: 1,
@@ -111,19 +126,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: Colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
   },
   addButton: {
-    backgroundColor: Colors.secondary,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,

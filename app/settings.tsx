@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -35,22 +35,29 @@ import * as FileSystem from 'expo-file-system';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage } from './i18n/i18n.config';
 import { EventRegister } from 'react-native-event-listeners';
-
-// Contexte fictif pour le thème (à implémenter complètement plus tard)
-const ThemeContext = React.createContext({
-  isDarkMode: true,
-  toggleTheme: () => {}
-});
-
-const useTheme = () => useContext(ThemeContext);
+import { useTheme } from './lib/ThemeContext';
+import { useThemeColors } from './lib/ThemeUtils';
 
 // Configuration statique pour masquer l'en-tête d'Expo Router
 export const unstable_settings = {
   initialRouteName: 'settings',
 };
 
+// Interface pour les propriétés du composant MenuItem
+interface MenuItemProps {
+  icon: string;
+  iconColor?: string;
+  text: string;
+  onPress?: () => void;
+  rightComponent?: React.ReactNode;
+  isBorderless?: boolean;
+}
+
 export default function Settings() {
   const { t, i18n } = useTranslation();
+  const { isDarkMode, toggleTheme } = useTheme();
+  const colors = useThemeColors();
+  
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -61,20 +68,11 @@ export default function Settings() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState('');
   
-  // État pour le mode sombre (simulé en attendant l'implémentation complète)
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  
   // État pour afficher le modal de sélection de langue
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   
   // Langue courante
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
-  
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    // À implémenter: sauvegarder la préférence dans AsyncStorage
-    // et mettre à jour le thème global de l'application
-  };
   
   // Fonction pour changer la langue de l'application
   const handleChangeLanguage = async (language: string) => {
@@ -385,559 +383,510 @@ export default function Settings() {
     // Linking.openURL('https://votre-site.com/privacy');
   };
 
-  // Ajout du modal de sélection de langue
+  // Définir les styles dynamiques en fonction du thème
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingTop: Platform.OS === 'ios' ? 50 : 40,
+      paddingBottom: 10,
+      paddingHorizontal: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: colors.text.primary,
+      flex: 1,
+      textAlign: 'center',
+    },
+    backButton: {
+      padding: 10,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 20,
+    },
+    section: {
+      marginVertical: 12,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text.secondary,
+      marginVertical: 12,
+      marginHorizontal: 20,
+    },
+    userInfoContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    avatar: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
+      backgroundColor: colors.surface,
+    },
+    userDetails: {
+      marginLeft: 16,
+      flex: 1,
+    },
+    username: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text.primary,
+    },
+    email: {
+      fontSize: 14,
+      color: colors.text.secondary,
+      marginTop: 4,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 15,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    menuItemText: {
+      fontSize: 16,
+      color: colors.text.primary,
+      flex: 1,
+      marginLeft: 12,
+    },
+    logoutText: {
+      fontSize: 16,
+      color: colors.error,
+      flex: 1,
+      marginLeft: 12,
+    },
+    deleteAccountText: {
+      fontSize: 16,
+      color: colors.error,
+      flex: 1,
+      marginLeft: 12,
+    },
+    iconContainer: {
+      width: 30,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    badge: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+    },
+    badgeText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+    chevronContainer: {
+      marginLeft: 'auto',
+    },
+    versionText: {
+      textAlign: 'center',
+      color: colors.text.secondary,
+      fontSize: 12,
+      marginVertical: 16,
+    },
+    modalContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+      width: '80%',
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 20,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 2
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 5
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text.primary,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 16,
+      color: colors.text.primary,
+      backgroundColor: colors.surface,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    button: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: 'center',
+      marginHorizontal: 4,
+      borderRadius: 8,
+    },
+    cancelButton: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    saveButton: {
+      backgroundColor: colors.primary,
+    },
+    buttonText: {
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    cancelButtonText: {
+      color: colors.text.primary,
+    },
+    saveButtonText: {
+      color: '#FFFFFF',
+    },
+    errorText: {
+      color: colors.error,
+      marginBottom: 16,
+    },
+    themeSwitch: {
+      marginLeft: 'auto',
+    },
+    currentOption: {
+      fontSize: 16,
+      color: colors.text.secondary,
+      marginLeft: 'auto',
+      marginRight: 8,
+    },
+    languageOption: {
+      paddingVertical: 15,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    languageText: {
+      fontSize: 16,
+      color: colors.text.primary,
+    },
+    selectedLanguage: {
+      color: colors.primary,
+      fontWeight: 'bold',
+    },
+  });
+
+  // Composant pour un élément de menu
+  const MenuItem = ({ icon, iconColor, text, onPress = () => {}, rightComponent, isBorderless = false }: MenuItemProps) => (
+    <TouchableOpacity 
+      style={[
+        dynamicStyles.menuItem, 
+        isBorderless && { borderBottomWidth: 0 }
+      ]} 
+      onPress={onPress}
+    >
+      <View style={dynamicStyles.iconContainer}>
+        <Ionicons name={icon as any} size={22} color={iconColor || colors.text.primary} />
+      </View>
+      <Text style={[
+        dynamicStyles.menuItemText,
+        text === t('settings.logout') && dynamicStyles.logoutText,
+        text === t('settings.deleteAccount') && dynamicStyles.deleteAccountText,
+      ]}>
+        {text}
+      </Text>
+      {rightComponent || (
+        <View style={dynamicStyles.chevronContainer}>
+          <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Modal pour la sélection de langue
   const LanguageModal = () => (
     <Modal
       visible={showLanguageModal}
       transparent={true}
       animationType="fade"
+      onRequestClose={() => setShowLanguageModal(false)}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('settings.chooseLanguage')}</Text>
+      <View style={dynamicStyles.modalContainer}>
+        <View style={dynamicStyles.modalContent}>
+          <Text style={dynamicStyles.modalTitle}>{t('settings.chooseLanguage')}</Text>
           
           <TouchableOpacity 
-            style={[
-              styles.languageOption, 
-              currentLanguage === 'fr' && styles.languageOptionSelected
-            ]}
+            style={dynamicStyles.languageOption} 
             onPress={() => handleChangeLanguage('fr')}
           >
-            <Text 
-              style={[
-                styles.languageOptionText, 
-                currentLanguage === 'fr' && styles.languageOptionTextSelected
-              ]}
-            >
+            <Text style={[
+              dynamicStyles.languageText, 
+              currentLanguage === 'fr' && dynamicStyles.selectedLanguage
+            ]}>
               {t('settings.french')}
             </Text>
-            {currentLanguage === 'fr' && (
-              <Ionicons name="checkmark" size={20} color={Colors.secondary} />
-            )}
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[
-              styles.languageOption, 
-              currentLanguage === 'en' && styles.languageOptionSelected
-            ]}
+            style={[dynamicStyles.languageOption, { borderBottomWidth: 0 }]} 
             onPress={() => handleChangeLanguage('en')}
           >
-            <Text 
-              style={[
-                styles.languageOptionText, 
-                currentLanguage === 'en' && styles.languageOptionTextSelected
-              ]}
-            >
+            <Text style={[
+              dynamicStyles.languageText, 
+              currentLanguage === 'en' && dynamicStyles.selectedLanguage
+            ]}>
               {t('settings.english')}
             </Text>
-            {currentLanguage === 'en' && (
-              <Ionicons name="checkmark" size={20} color={Colors.secondary} />
-            )}
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.modalButton}
+            style={[dynamicStyles.button, dynamicStyles.cancelButton, { marginTop: 16 }]} 
             onPress={() => setShowLanguageModal(false)}
           >
-            <Text style={styles.modalButtonText}>{t('settings.alerts.cancel')}</Text>
+            <Text style={[dynamicStyles.buttonText, dynamicStyles.cancelButtonText]}>
+              {t('settings.changeUsernameModal.cancel')}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 
+  // Maintenant, passons au rendu de l'écran
   return (
-    <>
-      {/* Configuration de la Stack pour masquer l'en-tête natif */}
-      <Stack.Screen 
-        options={{ 
-          headerShown: false
-        }} 
-      />
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       
-      <SafeAreaView style={styles.safeArea}>
-        {/* En-tête personnalisé avec bouton de retour */}
-        <View style={styles.customHeader}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+      <View style={dynamicStyles.header}>
+        <TouchableOpacity style={dynamicStyles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={dynamicStyles.title}>{t('settings.title')}</Text>
+        <View style={{ width: 44 }} /> {/* Pour l'équilibre du header */}
+      </View>
+      
+      <ScrollView style={dynamicStyles.content} showsVerticalScrollIndicator={false}>
+        {/* Section Profil */}
+        <View style={dynamicStyles.section}>
+          <TouchableOpacity style={dynamicStyles.userInfoContainer} onPress={handleAvatarChange}>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={dynamicStyles.avatar} />
+            ) : (
+              <View style={dynamicStyles.avatar}>
+                <Ionicons name="person" size={40} color={colors.text.secondary} />
+              </View>
+            )}
+            
+            <View style={dynamicStyles.userDetails}>
+              <Text style={dynamicStyles.username}>{username}</Text>
+              <Text style={dynamicStyles.email}>{user?.email}</Text>
+            </View>
+            
+            {uploadingAvatar ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Ionicons name="camera-outline" size={24} color={colors.text.secondary} />
+            )}
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('settings.title')}</Text>
-          <View style={{width: 24}} /> {/* Pour équilibrer l'en-tête */}
+          
+          <MenuItem 
+            icon="pencil" 
+            text={t('settings.modifyUsername')} 
+            onPress={handleOpenUsernameModal}
+          />
         </View>
-
-        <ScrollView style={styles.container}>
-          <View style={styles.avatarSection}>
-            <TouchableOpacity 
-              style={styles.avatarContainer}
-              onPress={handleAvatarChange}
-              disabled={uploadingAvatar}
-            >
-              {uploadingAvatar ? (
-                <View style={styles.avatarImage}>
-                  <ActivityIndicator color={Colors.secondary} size="large" />
-                </View>
-              ) : (
-                <>
-                  {avatar ? (
-                    <Image source={{ uri: avatar }} style={styles.avatarImage} />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarInitial}>
-                        {username ? username[0].toUpperCase() : user?.email ? user.email[0].toUpperCase() : 'U'}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.editIconContainer}>
-                    <Ionicons name="camera" size={18} color="#FFFFFF" />
-                  </View>
-                </>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.userName}>{username || user?.email || 'Utilisateur'}</Text>
-            <TouchableOpacity onPress={handleOpenUsernameModal}>
-              <Text style={styles.changeUsername}>{t('settings.modifyUsername')}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={handlePremium}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="cash-outline" size={24} color={Colors.secondary} />
+        
+        {/* Section Abonnement */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.subscription')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="diamond" 
+            iconColor="#FFD700"
+            text={t('settings.free')} 
+            rightComponent={
+              <View style={dynamicStyles.badge}>
+                <Text style={dynamicStyles.badgeText}>{t('settings.free')}</Text>
               </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.subscription')}</Text>
-                <Text style={styles.itemSubtitle}>{t('settings.free')}</Text>
-              </View>
-              <TouchableOpacity onPress={handlePremium}>
-                <Text style={styles.upgradeButton}>{t('settings.upgradeToPremium')}</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={toggleTheme}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons 
-                  name={isDarkMode ? "moon-outline" : "sunny-outline"} 
-                  size={24} 
-                  color={Colors.secondary} 
-                />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.customization')}</Text>
-                <Text style={styles.itemSubtitle}>
-                  {isDarkMode ? t('settings.darkTheme') : t('settings.lightTheme')}
-                </Text>
-              </View>
+            }
+            isBorderless
+          />
+          
+          <MenuItem 
+            icon="rocket" 
+            text={t('settings.upgradeToPremium')} 
+            onPress={handlePremium}
+          />
+        </View>
+        
+        {/* Section Personnalisation */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.customization')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon={isDarkMode ? "moon" : "sunny"} 
+            text={isDarkMode ? t('settings.darkTheme') : t('settings.lightTheme')} 
+            rightComponent={
               <Switch
                 value={isDarkMode}
                 onValueChange={toggleTheme}
-                trackColor={{false: '#767577', true: Colors.secondary}}
-                thumbColor={isDarkMode ? '#f4f3f4' : '#f4f3f4'}
+                trackColor={{ false: '#767577', true: Colors.primary }}
+                thumbColor="#f4f3f4"
+                ios_backgroundColor="#767577"
+                style={dynamicStyles.themeSwitch}
               />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={() => setShowLanguageModal(true)}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="language-outline" size={24} color={Colors.secondary} />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.language')}</Text>
-                <Text style={styles.itemSubtitle}>
+            }
+          />
+          
+          <MenuItem 
+            icon="language" 
+            text={t('settings.language')} 
+            rightComponent={
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={dynamicStyles.currentOption}>
                   {currentLanguage === 'fr' ? t('settings.french') : t('settings.english')}
                 </Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
               </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={handlePermissions}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="lock-closed-outline" size={24} color={Colors.secondary} />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.permissions')}</Text>
-                <Text style={styles.itemSubtitle}>{t('settings.manageAccess')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={handleChangePassword}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="key-outline" size={24} color={Colors.secondary} />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.password')}</Text>
-                <Text style={styles.itemSubtitle}>{t('settings.modify')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
+            }
+            onPress={() => setShowLanguageModal(true)}
+          />
+        </View>
+        
+        {/* Section Permissions */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.permissions')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="shield-checkmark" 
+            text={t('settings.manageAccess')} 
+            onPress={handlePermissions}
+          />
+        </View>
+        
+        {/* Section Sécurité */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.password')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="lock-closed" 
+            text={t('settings.modify')} 
+            onPress={handleChangePassword}
+          />
+        </View>
+        
+        {/* Section À propos */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.about')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="document-text" 
+            text={t('settings.termsAndConditions')} 
+            onPress={handleOpenTerms}
+          />
           
-          <View style={styles.section}>
-            <Text style={styles.sectionHeaderText}>{t('settings.about')}</Text>
-            
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={handleOpenTerms}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="document-text-outline" size={24} color={Colors.secondary} />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.termsAndConditions')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sectionItem}
-              onPress={handleOpenPrivacy}
-            >
-              <View style={styles.itemIconContainer}>
-                <Ionicons name="shield-outline" size={24} color={Colors.secondary} />
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{t('settings.privacyPolicy')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.dangerButton}
-              onPress={handleLogout}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.dangerButtonText}>{t('settings.logout')}</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Bouton de suppression de compte commenté
-            <TouchableOpacity 
-              style={[styles.dangerButton, styles.deleteButton]}
-              onPress={handleDeleteAccount}
-            >
-              <Text style={styles.dangerButtonText}>Supprimer le compte</Text>
-            </TouchableOpacity>
-            */}
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.version}>{t('settings.version')} 1.0.0</Text>
-          </View>
+          <MenuItem 
+            icon="shield" 
+            text={t('settings.privacyPolicy')} 
+            onPress={handleOpenPrivacy}
+          />
+        </View>
+        
+        {/* Section Compte */}
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.account')}</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="log-out" 
+            iconColor={colors.error}
+            text={t('settings.logout')} 
+            onPress={handleLogout}
+          />
           
-          {/* Espace en bas pour éviter que le contenu soit caché par la navigation */}
-          <View style={{ height: 40 }} />
-
-        </ScrollView>
-
-        {/* Modal pour modifier le pseudo */}
-        <Modal
-          visible={showUsernameModal}
-          transparent={true}
-          animationType="fade"
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{t('settings.changeUsernameModal.title')}</Text>
+          <MenuItem 
+            icon="trash" 
+            iconColor={colors.error}
+            text={t('settings.deleteAccount')} 
+            onPress={handleDeleteAccount}
+            isBorderless
+          />
+        </View>
+        
+        <Text style={dynamicStyles.versionText}>
+          {t('settings.version')} 1.0.0
+        </Text>
+      </ScrollView>
+      
+      {/* Modals */}
+      <LanguageModal />
+      
+      <Modal
+        visible={showUsernameModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowUsernameModal(false)}
+      >
+        <View style={dynamicStyles.modalContainer}>
+          <View style={dynamicStyles.modalContent}>
+            <Text style={dynamicStyles.modalTitle}>{t('settings.changeUsernameModal.title')}</Text>
+            
+            <TextInput
+              style={dynamicStyles.input}
+              value={newUsername}
+              onChangeText={handleUsernameChange}
+              placeholder={t('settings.changeUsernameModal.placeholder')}
+              placeholderTextColor={colors.text.secondary}
+              autoCapitalize="none"
+            />
+            
+            {usernameError ? (
+              <Text style={dynamicStyles.errorText}>{usernameError}</Text>
+            ) : null}
+            
+            <View style={dynamicStyles.buttonRow}>
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.cancelButton]}
+                onPress={() => setShowUsernameModal(false)}
+              >
+                <Text style={[dynamicStyles.buttonText, dynamicStyles.cancelButtonText]}>
+                  {t('settings.changeUsernameModal.cancel')}
+                </Text>
+              </TouchableOpacity>
               
-              <TextInput
-                style={styles.usernameInput}
-                value={newUsername}
-                onChangeText={handleUsernameChange}
-                placeholder={t('settings.changeUsernameModal.placeholder')}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              
-              {usernameError ? (
-                <Text style={styles.errorText}>{usernameError}</Text>
-              ) : null}
-              
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={styles.modalButton}
-                  onPress={() => setShowUsernameModal(false)}
-                >
-                  <Text style={styles.modalButtonText}>{t('settings.changeUsernameModal.cancel')}</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.modalButtonPrimary]}
-                  onPress={saveUsername}
-                  disabled={checkingUsername}
-                >
-                  {checkingUsername ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.modalButtonTextPrimary}>{t('settings.changeUsernameModal.save')}</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.saveButton]}
+                onPress={saveUsername}
+                disabled={checkingUsername || newUsername === username || !newUsername.trim()}
+              >
+                {checkingUsername ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={[dynamicStyles.buttonText, dynamicStyles.saveButtonText]}>
+                    {t('settings.changeUsernameModal.save')}
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-        
-        {/* Modal pour changer la langue */}
-        <LanguageModal />
-      </SafeAreaView>
-    </>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  customHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 40 : 10,
-    paddingBottom: 10,
-    backgroundColor: Colors.background,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    textAlign: 'center',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  avatarContainer: {
-    position: 'relative',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 50,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 50,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInitial: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-  },
-  editIconContainer: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: Colors.secondary,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userName: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  changeUsername: {
-    marginTop: 8,
-    fontSize: 14,
-    color: Colors.secondary,
-    fontWeight: '500',
-  },
-  section: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
-  },
-  sectionHeaderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 12,
-    marginLeft: 8,
-  },
-  sectionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  itemIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  itemSubtitle: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    marginTop: 2,
-  },
-  upgradeButton: {
-    color: Colors.secondary,
-    fontWeight: '600',
-  },
-  dangerButton: {
-    backgroundColor: Colors.error,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  deleteButton: {
-    backgroundColor: Colors.surface,
-    borderWidth: 2,
-    borderColor: Colors.error,
-  },
-  dangerButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  version: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 20,
-    width: '85%',
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 16,
-  },
-  usernameInput: {
-    backgroundColor: Colors.background,
-    width: '100%',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    color: Colors.text.primary,
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: 14,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  modalButton: {
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  modalButtonPrimary: {
-    backgroundColor: Colors.secondary,
-  },
-  modalButtonText: {
-    color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalButtonTextPrimary: {
-    color: Colors.text.primary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  languageOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 10,
-    width: '100%',
-    backgroundColor: Colors.background,
-  },
-  languageOptionSelected: {
-    backgroundColor: 'rgba(74, 144, 226, 0.1)',
-    borderWidth: 1,
-    borderColor: Colors.secondary,
-  },
-  languageOptionText: {
-    fontSize: 16,
-    color: Colors.text.primary,
-  },
-  languageOptionTextSelected: {
-    color: Colors.secondary,
-    fontWeight: 'bold',
-  },
-}); 
+} 
