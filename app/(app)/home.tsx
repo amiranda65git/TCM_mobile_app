@@ -7,17 +7,41 @@ import { useAuth } from '../lib/auth';
 import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
-import translations from '../i18n/fr.js';
+import { useTranslation } from 'react-i18next';
+import { EventRegister } from 'react-native-event-listeners';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [username, setUsername] = useState(user?.email?.split('@')[0] || 'User');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [hideValues, setHideValues] = useState(false);
   const [editionsCount, setEditionsCount] = useState(0);
   const [cardsCount, setCardsCount] = useState(0);
+  const [languageListener, setLanguageListener] = useState<any>(null);
+
+  // Écouter les changements de langue
+  useEffect(() => {
+    // Écouter l'événement de changement de langue
+    const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
+      if (language && typeof language === 'string') {
+        console.log('Changement de langue détecté dans HomeScreen:', language);
+        // Forcer un rafraîchissement du composant
+        setRefreshKey(prev => prev + 1);
+      }
+    });
+    
+    setLanguageListener(listener);
+    
+    return () => {
+      // Supprimer l'écouteur lors du démontage du composant
+      if (languageListener) {
+        EventRegister.removeEventListener(languageListener);
+      }
+    };
+  }, []);
 
   // Charge les données utilisateur à chaque fois que l'écran est focalisé
   useFocusEffect(
@@ -37,6 +61,16 @@ export default function HomeScreen() {
               setRefreshKey(prev => prev + 1);
             }
             
+            // Vérifier si la langue a changé
+            const languageChanged = await AsyncStorage.getItem('@language_changed');
+            if (languageChanged === 'true') {
+              // Réinitialiser le flag
+              await AsyncStorage.removeItem('@language_changed');
+              console.log('Language has been changed, refreshing data...');
+              // Force un rafraîchissement en incrémentant la clé
+              setRefreshKey(prev => prev + 1);
+            }
+            
             // Essayer de récupérer l'avatar depuis le stockage local
             const localAvatar = await AsyncStorage.getItem('@user_avatar');
             if (localAvatar) {
@@ -46,15 +80,17 @@ export default function HomeScreen() {
             // Récupérer les données de l'utilisateur depuis la base de données en utilisant la fonction centralisée
             const { data, error } = await getUserProfile(user.id, 'username, avatar_url');
               
-            if (data) {
-              if (data.username && data.username !== username) {
-                console.log('Username updated:', data.username);
-                setUsername(data.username);
+            if (data && typeof data === 'object') {
+              const userData = data as Record<string, any>;
+              
+              if (userData.username && userData.username !== username) {
+                console.log('Username updated:', userData.username);
+                setUsername(userData.username);
               }
               
-              if (data.avatar_url) {
-                setAvatar(data.avatar_url);
-                await AsyncStorage.setItem('@user_avatar', data.avatar_url);
+              if (userData.avatar_url) {
+                setAvatar(userData.avatar_url);
+                await AsyncStorage.setItem('@user_avatar', userData.avatar_url);
               }
             } else if (error) {
               console.error("Erreur lors de la récupération des données utilisateur:", error);
@@ -92,7 +128,7 @@ export default function HomeScreen() {
   const CollectionCard = () => (
     <View style={styles.collectionCard}>
       <View style={styles.collectionHeader}>
-        <Text style={styles.currentValue}>{translations.home.currentValue}</Text>
+        <Text style={styles.currentValue}>{t('home.currentValue')}</Text>
         <TouchableOpacity onPress={() => setHideValues(!hideValues)}>
           <Ionicons name={hideValues ? "eye-off-outline" : "eye-outline"} size={24} color={Colors.text.secondary} />
         </TouchableOpacity>
@@ -105,7 +141,7 @@ export default function HomeScreen() {
       </View>
       <Text style={styles.percentage}>{hideValues ? "***" : "0.00 %"}</Text>
       <View style={styles.cardsCount}>
-        <Text style={styles.cardsText}>0 {translations.home.cards}</Text>
+        <Text style={styles.cardsText}>0 {t('home.cards')}</Text>
       </View>
     </View>
   );
@@ -136,7 +172,7 @@ export default function HomeScreen() {
   const NewsSection = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{translations.home.news}</Text>
+        <Text style={styles.sectionTitle}>{t('home.news')}</Text>
       </View>
       <TouchableOpacity 
         style={styles.bannerContainer}
@@ -173,7 +209,7 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
             <View>
-              <Text style={styles.greeting}>{translations.home.greeting},</Text>
+              <Text style={styles.greeting}>{t('home.greeting')},</Text>
               <Text style={styles.username}>{username}</Text>
             </View>
           </View>
@@ -184,48 +220,48 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{translations.home.collection}</Text>
+            <Text style={styles.sectionTitle}>{t('home.collection')}</Text>
           </View>
           <CollectionCard />
         </View>
 
         <View style={styles.actionCards}>
           <ActionCard
-            title={translations.home.editions}
+            title={t('home.editions')}
             icon={<MaterialCommunityIcons name="pokeball" size={24} color={Colors.secondary} />}
-            count={`${editionsCount} ${translations.home.editions}`}
+            count={`${editionsCount} ${t('home.editions')}`}
             onPress={() => router.push('/collection')}
           />
           <ActionCard
-            title={translations.home.cardsCategory}
+            title={t('home.cardsCategory')}
             icon={<MaterialCommunityIcons name="cards" size={24} color={Colors.secondary} />}
-            count={`${cardsCount} ${translations.home.cards}`}
+            count={`${cardsCount} ${t('home.cards')}`}
             onPress={() => router.push('/market')}
           />
         </View>
 
         <ListItem
           icon={<Ionicons name="heart" size={24} color={Colors.secondary} />}
-          title={translations.home.wishlist}
-          count={`0 ${translations.home.cards}`}
+          title={t('home.wishlist')}
+          count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../wishlist')}
         />
         <ListItem
           icon={<Ionicons name="notifications" size={24} color={Colors.secondary} />}
-          title={translations.home.alerts}
-          count={`0 ${translations.home.alerts}`}
+          title={t('home.alerts')}
+          count={`0 ${t('home.alerts')}`}
           onPress={() => router.push('../alerts')}
         />
         <ListItem
           icon={<Ionicons name="swap-horizontal" size={24} color={Colors.secondary} />}
-          title={translations.home.tradelist}
-          count={`0 ${translations.home.cards}`}
+          title={t('home.tradelist')}
+          count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../tradelist')}
         />
         <ListItem
           icon={<Ionicons name="cash" size={24} color={Colors.secondary} />}
-          title={translations.home.sold}
-          count={`0 ${translations.home.cards}`}
+          title={t('home.sold')}
+          count={`0 ${t('home.cards')}`}
           onPress={() => router.push('../sold')}
         />
 

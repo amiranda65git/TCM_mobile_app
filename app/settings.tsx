@@ -13,9 +13,10 @@ import {
   Switch,
   SafeAreaView,
   Platform,
-  Linking
+  Linking,
+  StatusBar
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   supabase, 
@@ -31,6 +32,9 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from './constants/Colors';
 import * as FileSystem from 'expo-file-system';
+import { useTranslation } from 'react-i18next';
+import { changeLanguage } from './i18n/i18n.config';
+import { EventRegister } from 'react-native-event-listeners';
 
 // Contexte fictif pour le thème (à implémenter complètement plus tard)
 const ThemeContext = React.createContext({
@@ -40,7 +44,13 @@ const ThemeContext = React.createContext({
 
 const useTheme = () => useContext(ThemeContext);
 
+// Configuration statique pour masquer l'en-tête d'Expo Router
+export const unstable_settings = {
+  initialRouteName: 'settings',
+};
+
 export default function Settings() {
+  const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -54,10 +64,25 @@ export default function Settings() {
   // État pour le mode sombre (simulé en attendant l'implémentation complète)
   const [isDarkMode, setIsDarkMode] = useState(true);
   
+  // État pour afficher le modal de sélection de langue
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  
+  // Langue courante
+  const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
+  
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
     // À implémenter: sauvegarder la préférence dans AsyncStorage
     // et mettre à jour le thème global de l'application
+  };
+  
+  // Fonction pour changer la langue de l'application
+  const handleChangeLanguage = async (language: string) => {
+    const success = await changeLanguage(language);
+    if (success) {
+      setCurrentLanguage(language);
+      setShowLanguageModal(false);
+    }
   };
 
   useEffect(() => {
@@ -76,14 +101,14 @@ export default function Settings() {
         // Récupérer le profil de l'utilisateur avec la fonction centralisée
         const { data: userData, error: userError } = await getUserProfile(data.user.id);
           
-        if (userData && userData.username) {
-          setUsername(userData.username);
-          setNewUsername(userData.username);
+        if (userData && 'username' in userData) {
+          setUsername(userData.username as string);
+          setNewUsername(userData.username as string);
           
           // Si l'utilisateur a un avatar, l'afficher
-          if (userData.avatar_url) {
-            setAvatar(userData.avatar_url);
-            await AsyncStorage.setItem('@user_avatar', userData.avatar_url);
+          if ('avatar_url' in userData && userData.avatar_url) {
+            setAvatar(userData.avatar_url as string);
+            await AsyncStorage.setItem('@user_avatar', userData.avatar_url as string);
           }
         } else {
           // Utiliser l'email comme pseudo par défaut
@@ -102,7 +127,7 @@ export default function Settings() {
         }
         
         // Tentative de récupération de l'avatar depuis le stockage local si non trouvé
-        if (!userData?.avatar_url) {
+        if (!userData || !('avatar_url' in userData) || !userData.avatar_url) {
           const localAvatar = await AsyncStorage.getItem('@user_avatar');
           if (localAvatar) {
             setAvatar(localAvatar);
@@ -159,7 +184,7 @@ export default function Settings() {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert('Permission refusée', 'Nous avons besoin de l\'accès à votre galerie pour changer votre avatar');
+        Alert.alert(t('settings.alerts.error'), t('settings.alerts.permissionDenied'));
         return;
       }
       
@@ -175,7 +200,7 @@ export default function Settings() {
       }
     } catch (error) {
       console.error('Erreur lors du choix de l\'image:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors du choix de l\'image');
+      Alert.alert(t('settings.alerts.error'), t('settings.alerts.error'));
     }
   };
 
@@ -198,8 +223,8 @@ export default function Settings() {
       } catch (readError) {
         console.error('Erreur lors de la lecture du fichier:', readError);
         Alert.alert(
-          'Erreur de lecture', 
-          'Impossible de lire le fichier image. Réessayez avec une autre image.'
+          t('settings.alerts.error'), 
+          t('settings.alerts.readError')
         );
         return;
       }
@@ -210,17 +235,17 @@ export default function Settings() {
       if (!success) {
         console.error('Erreur lors de la mise à jour de l\'avatar:', error);
         Alert.alert(
-          'Erreur de sauvegarde', 
-          'L\'image a été sauvegardée localement mais pas sur le serveur. Réessayez ultérieurement.'
+          t('settings.alerts.error'), 
+          t('settings.alerts.saveError')
         );
         return;
       }
       
       // Succès
-      Alert.alert('Succès', 'Votre avatar a été mis à jour avec succès');
+      Alert.alert(t('settings.alerts.success'), t('settings.alerts.avatarUpdated'));
     } catch (error: any) {
       console.error('Erreur lors de l\'upload de l\'avatar:', error);
-      Alert.alert('Erreur', error.message || 'Une erreur est survenue lors de l\'upload de l\'avatar');
+      Alert.alert(t('settings.alerts.error'), error.message || t('settings.alerts.error'));
     } finally {
       setUploadingAvatar(false);
     }
@@ -242,19 +267,19 @@ export default function Settings() {
     
     // Vérifier que le pseudo n'est pas vide
     if (!usernameToCheck.trim()) {
-      setUsernameError('Le pseudo ne peut pas être vide');
+      setUsernameError(t('settings.alerts.emptyUsername'));
       return false;
     }
     
     // Vérifier la longueur du pseudo
     if (usernameToCheck.length < 3) {
-      setUsernameError('Le pseudo doit contenir au moins 3 caractères');
+      setUsernameError(t('settings.alerts.usernameTooShort'));
       return false;
     }
     
     // Vérifier les caractères spéciaux
     if (!/^[a-zA-Z0-9_]+$/.test(usernameToCheck)) {
-      setUsernameError('Le pseudo ne peut contenir que des lettres, chiffres et _');
+      setUsernameError(t('settings.alerts.usernameInvalidChars'));
       return false;
     }
     
@@ -265,19 +290,19 @@ export default function Settings() {
       const { isUnique, error } = await checkUsernameUniqueApi(user.id, usernameToCheck);
       
       if (error) {
-        setUsernameError('Erreur lors de la vérification du pseudo');
+        setUsernameError(t('settings.alerts.error'));
         return false;
       }
       
       if (!isUnique) {
-        setUsernameError('Ce pseudo est déjà utilisé');
+        setUsernameError(t('settings.alerts.usernameAlreadyTaken'));
         return false;
       }
       
       return true;
     } catch (error) {
       console.error('Erreur lors de la vérification du pseudo:', error);
-      setUsernameError('Erreur lors de la vérification du pseudo');
+      setUsernameError(t('settings.alerts.error'));
       return false;
     } finally {
       setCheckingUsername(false);
@@ -301,7 +326,7 @@ export default function Settings() {
       
       if (!success) {
         console.error('Erreur lors de la mise à jour du pseudo:', error);
-        setUsernameError('Erreur lors de la mise à jour du pseudo. Veuillez réessayer.');
+        setUsernameError(t('settings.alerts.error'));
         return;
       }
       
@@ -312,10 +337,10 @@ export default function Settings() {
       // Indiquer que le username a été modifié pour permettre aux autres écrans de se rafraîchir
       AsyncStorage.setItem('@username_updated', 'true');
       
-      Alert.alert('Succès', 'Votre pseudo a été mis à jour avec succès');
+      Alert.alert(t('settings.alerts.success'), t('settings.alerts.usernameUpdated'));
     } catch (error) {
       console.error('Erreur lors de la sauvegarde du pseudo:', error);
-      setUsernameError('Erreur lors de la sauvegarde du pseudo. Veuillez réessayer.');
+      setUsernameError(t('settings.alerts.error'));
     } finally {
       setCheckingUsername(false);
     }
@@ -323,257 +348,361 @@ export default function Settings() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Supprimer le compte',
-      'Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.',
+      t('settings.deleteAccount'),
+      t('settings.alerts.confirmDeleteAccount'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('settings.alerts.cancel'), style: 'cancel' },
         { 
-          text: 'Supprimer', 
+          text: t('settings.deleteAccount'), 
           style: 'destructive', 
-          onPress: () => Alert.alert('Fonctionnalité', 'La suppression de compte sera implémentée prochainement')
+          onPress: () => Alert.alert(t('settings.alerts.comingSoon'))
         }
       ]
     );
   };
 
   const handlePremium = () => {
-    Alert.alert('Premium', 'Fonctionnalité premium à venir prochainement');
+    Alert.alert(t('settings.subscription'), t('settings.alerts.comingSoon'));
   };
 
   const handlePermissions = () => {
-    Alert.alert('Permissions', 'Gestion des permissions à venir prochainement');
+    Alert.alert(t('settings.permissions'), t('settings.alerts.comingSoon'));
   };
 
   const handleChangePassword = () => {
-    Alert.alert('Changement de mot de passe', 'Cette fonctionnalité sera implémentée prochainement');
+    Alert.alert(t('settings.password'), t('settings.alerts.comingSoon'));
   };
   
   const handleOpenTerms = () => {
-    Alert.alert('Conditions générales', 'Les conditions générales seront disponibles prochainement');
+    Alert.alert(t('settings.termsAndConditions'), t('settings.alerts.comingSoon'));
     // Lorsque le lien sera disponible:
     // Linking.openURL('https://votre-site.com/terms');
   };
   
   const handleOpenPrivacy = () => {
-    Alert.alert('Politique de confidentialité', 'La politique de confidentialité sera disponible prochainement');
+    Alert.alert(t('settings.privacyPolicy'), t('settings.alerts.comingSoon'));
     // Lorsque le lien sera disponible:
     // Linking.openURL('https://votre-site.com/privacy');
   };
 
+  // Ajout du modal de sélection de langue
+  const LanguageModal = () => (
+    <Modal
+      visible={showLanguageModal}
+      transparent={true}
+      animationType="fade"
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{t('settings.chooseLanguage')}</Text>
+          
+          <TouchableOpacity 
+            style={[
+              styles.languageOption, 
+              currentLanguage === 'fr' && styles.languageOptionSelected
+            ]}
+            onPress={() => handleChangeLanguage('fr')}
+          >
+            <Text 
+              style={[
+                styles.languageOptionText, 
+                currentLanguage === 'fr' && styles.languageOptionTextSelected
+              ]}
+            >
+              {t('settings.french')}
+            </Text>
+            {currentLanguage === 'fr' && (
+              <Ionicons name="checkmark" size={20} color={Colors.secondary} />
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[
+              styles.languageOption, 
+              currentLanguage === 'en' && styles.languageOptionSelected
+            ]}
+            onPress={() => handleChangeLanguage('en')}
+          >
+            <Text 
+              style={[
+                styles.languageOptionText, 
+                currentLanguage === 'en' && styles.languageOptionTextSelected
+              ]}
+            >
+              {t('settings.english')}
+            </Text>
+            {currentLanguage === 'en' && (
+              <Ionicons name="checkmark" size={20} color={Colors.secondary} />
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.modalButton}
+            onPress={() => setShowLanguageModal(false)}
+          >
+            <Text style={styles.modalButtonText}>{t('settings.alerts.cancel')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
-        <View style={styles.avatarSection}>
+    <>
+      {/* Configuration de la Stack pour masquer l'en-tête natif */}
+      <Stack.Screen 
+        options={{ 
+          headerShown: false
+        }} 
+      />
+      
+      <SafeAreaView style={styles.safeArea}>
+        {/* En-tête personnalisé avec bouton de retour */}
+        <View style={styles.customHeader}>
           <TouchableOpacity 
-            style={styles.avatarContainer}
-            onPress={handleAvatarChange}
-            disabled={uploadingAvatar}
+            style={styles.backButton}
+            onPress={() => router.back()}
           >
-            {uploadingAvatar ? (
-              <View style={styles.avatarImage}>
-                <ActivityIndicator color={Colors.secondary} size="large" />
-              </View>
-            ) : (
-              <>
-                {avatar ? (
-                  <Image source={{ uri: avatar }} style={styles.avatarImage} />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitial}>
-                      {username ? username[0].toUpperCase() : user?.email ? user.email[0].toUpperCase() : 'U'}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.editIconContainer}>
-                  <Ionicons name="camera" size={18} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('settings.title')}</Text>
+          <View style={{width: 24}} /> {/* Pour équilibrer l'en-tête */}
+        </View>
+
+        <ScrollView style={styles.container}>
+          <View style={styles.avatarSection}>
+            <TouchableOpacity 
+              style={styles.avatarContainer}
+              onPress={handleAvatarChange}
+              disabled={uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <View style={styles.avatarImage}>
+                  <ActivityIndicator color={Colors.secondary} size="large" />
                 </View>
-              </>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.userName}>{username || user?.email || 'Utilisateur'}</Text>
-          <TouchableOpacity onPress={handleOpenUsernameModal}>
-            <Text style={styles.changeUsername}>Modifier le pseudo</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={handlePremium}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons name="cash-outline" size={24} color={Colors.secondary} />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Abonnement</Text>
-              <Text style={styles.itemSubtitle}>Gratuit</Text>
-            </View>
-            <TouchableOpacity onPress={handlePremium}>
-              <Text style={styles.upgradeButton}>Passer Premium</Text>
+              ) : (
+                <>
+                  {avatar ? (
+                    <Image source={{ uri: avatar }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarInitial}>
+                        {username ? username[0].toUpperCase() : user?.email ? user.email[0].toUpperCase() : 'U'}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.editIconContainer}>
+                    <Ionicons name="camera" size={18} color="#FFFFFF" />
+                  </View>
+                </>
+              )}
             </TouchableOpacity>
-          </TouchableOpacity>
+            <Text style={styles.userName}>{username || user?.email || 'Utilisateur'}</Text>
+            <TouchableOpacity onPress={handleOpenUsernameModal}>
+              <Text style={styles.changeUsername}>{t('settings.modifyUsername')}</Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={toggleTheme}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons 
-                name={isDarkMode ? "moon-outline" : "sunny-outline"} 
-                size={24} 
-                color={Colors.secondary} 
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={handlePremium}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="cash-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.subscription')}</Text>
+                <Text style={styles.itemSubtitle}>{t('settings.free')}</Text>
+              </View>
+              <TouchableOpacity onPress={handlePremium}>
+                <Text style={styles.upgradeButton}>{t('settings.upgradeToPremium')}</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={toggleTheme}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons 
+                  name={isDarkMode ? "moon-outline" : "sunny-outline"} 
+                  size={24} 
+                  color={Colors.secondary} 
+                />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.customization')}</Text>
+                <Text style={styles.itemSubtitle}>
+                  {isDarkMode ? t('settings.darkTheme') : t('settings.lightTheme')}
+                </Text>
+              </View>
+              <Switch
+                value={isDarkMode}
+                onValueChange={toggleTheme}
+                trackColor={{false: '#767577', true: Colors.secondary}}
+                thumbColor={isDarkMode ? '#f4f3f4' : '#f4f3f4'}
               />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Personnalisation</Text>
-              <Text style={styles.itemSubtitle}>Thème {isDarkMode ? 'sombre' : 'clair'}</Text>
-            </View>
-            <Switch
-              value={isDarkMode}
-              onValueChange={toggleTheme}
-              trackColor={{false: '#767577', true: Colors.secondary}}
-              thumbColor={isDarkMode ? '#f4f3f4' : '#f4f3f4'}
-            />
-          </TouchableOpacity>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={() => setShowLanguageModal(true)}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="language-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.language')}</Text>
+                <Text style={styles.itemSubtitle}>
+                  {currentLanguage === 'fr' ? t('settings.french') : t('settings.english')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={handlePermissions}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons name="lock-closed-outline" size={24} color={Colors.secondary} />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Permissions</Text>
-              <Text style={styles.itemSubtitle}>Gérer les accès</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={handlePermissions}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="lock-closed-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.permissions')}</Text>
+                <Text style={styles.itemSubtitle}>{t('settings.manageAccess')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={handleChangePassword}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons name="key-outline" size={24} color={Colors.secondary} />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Mot de passe</Text>
-              <Text style={styles.itemSubtitle}>Modifier</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.section}>
-          <Text style={styles.sectionHeaderText}>À propos</Text>
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={handleChangePassword}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="key-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.password')}</Text>
+                <Text style={styles.itemSubtitle}>{t('settings.modify')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
           
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={handleOpenTerms}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons name="document-text-outline" size={24} color={Colors.secondary} />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Conditions générales</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-          </TouchableOpacity>
+          <View style={styles.section}>
+            <Text style={styles.sectionHeaderText}>{t('settings.about')}</Text>
+            
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={handleOpenTerms}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="document-text-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.termsAndConditions')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.sectionItem}
+              onPress={handleOpenPrivacy}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="shield-outline" size={24} color={Colors.secondary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>{t('settings.privacyPolicy')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.dangerButton}
+              onPress={handleLogout}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.dangerButtonText}>{t('settings.logout')}</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Bouton de suppression de compte commenté
+            <TouchableOpacity 
+              style={[styles.dangerButton, styles.deleteButton]}
+              onPress={handleDeleteAccount}
+            >
+              <Text style={styles.dangerButtonText}>Supprimer le compte</Text>
+            </TouchableOpacity>
+            */}
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.version}>{t('settings.version')} 1.0.0</Text>
+          </View>
           
-          <TouchableOpacity 
-            style={styles.sectionItem}
-            onPress={handleOpenPrivacy}
-          >
-            <View style={styles.itemIconContainer}>
-              <Ionicons name="shield-outline" size={24} color={Colors.secondary} />
-            </View>
-            <View style={styles.itemContent}>
-              <Text style={styles.itemTitle}>Avis de confidentialité</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
+          {/* Espace en bas pour éviter que le contenu soit caché par la navigation */}
+          <View style={{ height: 40 }} />
 
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.dangerButton}
-            onPress={handleLogout}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.dangerButtonText}>Se déconnecter</Text>
-            )}
-          </TouchableOpacity>
+        </ScrollView>
 
-          {/* Bouton de suppression de compte commenté
-          <TouchableOpacity 
-            style={[styles.dangerButton, styles.deleteButton]}
-            onPress={handleDeleteAccount}
-          >
-            <Text style={styles.dangerButtonText}>Supprimer le compte</Text>
-          </TouchableOpacity>
-          */}
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.version}>TCMarket v1.0.0</Text>
-        </View>
-        
-        {/* Espace en bas pour éviter que le contenu soit caché par la navigation */}
-        <View style={{ height: 40 }} />
-
-      </ScrollView>
-
-      {/* Modal pour modifier le pseudo */}
-      <Modal
-        visible={showUsernameModal}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Modifier le pseudo</Text>
-            
-            <TextInput
-              style={styles.usernameInput}
-              value={newUsername}
-              onChangeText={handleUsernameChange}
-              placeholder="Entrez votre nouveau pseudo"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            
-            {usernameError ? (
-              <Text style={styles.errorText}>{usernameError}</Text>
-            ) : null}
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalButton}
-                onPress={() => setShowUsernameModal(false)}
-              >
-                <Text style={styles.modalButtonText}>Annuler</Text>
-              </TouchableOpacity>
+        {/* Modal pour modifier le pseudo */}
+        <Modal
+          visible={showUsernameModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('settings.changeUsernameModal.title')}</Text>
               
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={saveUsername}
-                disabled={checkingUsername}
-              >
-                {checkingUsername ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalButtonTextPrimary}>Enregistrer</Text>
-                )}
-              </TouchableOpacity>
+              <TextInput
+                style={styles.usernameInput}
+                value={newUsername}
+                onChangeText={handleUsernameChange}
+                placeholder={t('settings.changeUsernameModal.placeholder')}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              
+              {usernameError ? (
+                <Text style={styles.errorText}>{usernameError}</Text>
+              ) : null}
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={styles.modalButton}
+                  onPress={() => setShowUsernameModal(false)}
+                >
+                  <Text style={styles.modalButtonText}>{t('settings.changeUsernameModal.cancel')}</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={saveUsername}
+                  disabled={checkingUsername}
+                >
+                  {checkingUsername ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalButtonTextPrimary}>{t('settings.changeUsernameModal.save')}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+        
+        {/* Modal pour changer la langue */}
+        <LanguageModal />
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -581,23 +710,32 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingTop: Platform.OS === 'android' ? 25 : 0, // Espace pour la barre d'état
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ? StatusBar.currentHeight + 10 : 40 : 10,
+    paddingBottom: 10,
+    backgroundColor: Colors.background,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+    textAlign: 'center',
   },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
   avatarSection: {
     alignItems: 'center',
     marginVertical: 24,
-    marginTop: 40,  // Ajouter de l'espace supplémentaire en haut
   },
   avatarContainer: {
     position: 'relative',
@@ -777,5 +915,29 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontSize: 16,
     fontWeight: '500',
+  },
+  languageOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    width: '100%',
+    backgroundColor: Colors.background,
+  },
+  languageOptionSelected: {
+    backgroundColor: 'rgba(74, 144, 226, 0.1)',
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+  },
+  languageOptionText: {
+    fontSize: 16,
+    color: Colors.text.primary,
+  },
+  languageOptionTextSelected: {
+    color: Colors.secondary,
+    fontWeight: 'bold',
   },
 }); 

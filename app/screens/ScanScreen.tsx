@@ -5,6 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { Camera, useCameraDevice } from 'react-native-vision-camera';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
+import { useTranslation } from 'react-i18next';
+import { EventRegister } from 'react-native-event-listeners';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -21,6 +24,9 @@ const CARD_HEIGHT = CARD_WIDTH * CARD_RATIO;
 export default function ScanScreen() {
   const router = useRouter();
   const camera = useRef<Camera>(null);
+  const { t, i18n } = useTranslation();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -37,6 +43,43 @@ export default function ScanScreen() {
 
   // Récupérer la caméra arrière
   const device = useCameraDevice('back');
+
+  // Écouter les changements de langue
+  useEffect(() => {
+    // Écouter l'événement de changement de langue
+    const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
+      if (language && typeof language === 'string') {
+        console.log('Changement de langue détecté dans ScanScreen:', language);
+        // Forcer un rafraîchissement du composant
+        setRefreshKey(prev => prev + 1);
+      }
+    });
+    
+    setLanguageListener(listener);
+    
+    return () => {
+      // Supprimer l'écouteur lors du démontage du composant
+      if (languageListener) {
+        EventRegister.removeEventListener(languageListener);
+      }
+    };
+  }, []);
+
+  // Vérifier les changements de langue au focus
+  useEffect(() => {
+    async function checkLanguageChange() {
+      const languageChanged = await AsyncStorage.getItem('@language_changed');
+      if (languageChanged === 'true') {
+        // Réinitialiser le flag
+        await AsyncStorage.removeItem('@language_changed');
+        console.log('Language has been changed, refreshing scan screen...');
+        // Force un rafraîchissement en incrémentant la clé
+        setRefreshKey(prev => prev + 1);
+      }
+    }
+    
+    checkLanguageChange();
+  }, [refreshKey]);
 
   // Demander la permission caméra au montage
   useEffect(() => {
@@ -81,10 +124,10 @@ export default function ScanScreen() {
       setPhotoUri(photo.path);
       await processImage(photo.path);
     } catch (err) {
-      Alert.alert("Erreur", "Erreur lors de la capture de la photo");
+      Alert.alert(t('scan.error'), t('scan.captureError'));
       setIsProcessing(false);
     }
-  }, [isProcessing]);
+  }, [isProcessing, t]);
 
   // Capture manuelle
   const handleStartScan = async () => {
@@ -109,7 +152,7 @@ export default function ScanScreen() {
       setPhotoUri(photo.path);
       await processImage(photo.path);
     } catch (err) {
-      Alert.alert("Erreur", "Erreur lors de la capture de la photo");
+      Alert.alert(t('scan.error'), t('scan.captureError'));
       setIsProcessing(false);
     }
   };
@@ -153,10 +196,10 @@ export default function ScanScreen() {
           });
         }
       } else {
-        Alert.alert("Aucun texte détecté", "Veuillez réessayer avec une meilleure luminosité");
+        Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
       }
     } catch (e) {
-      Alert.alert("Erreur", "Erreur lors de l'analyse de l'image");
+      Alert.alert(t('scan.error'), t('scan.imageAnalysisError'));
     } finally {
       setIsProcessing(false);
       setRectangleDetected(false);
@@ -167,7 +210,7 @@ export default function ScanScreen() {
     return (
       <View style={styles.centeredContainer}>
         <ActivityIndicator size="large" color={Colors.secondary} />
-        <Text style={styles.text}>Chargement caméra...</Text>
+        <Text style={styles.text}>{t('scan.loadingCamera')}</Text>
       </View>
     );
   }
@@ -178,7 +221,7 @@ export default function ScanScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Scanner une carte</Text>
+        <Text style={styles.title}>{t('scan.scanCard')}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -195,7 +238,7 @@ export default function ScanScreen() {
             {isProcessing && (
               <View style={styles.processingOverlay}>
                 <ActivityIndicator size="large" color="#FFFFFF" />
-                <Text style={styles.processingText}>Analyse de la carte...</Text>
+                <Text style={styles.processingText}>{t('scan.analyzingCard')}</Text>
               </View>
             )}
           </View>
@@ -216,7 +259,7 @@ export default function ScanScreen() {
             
             <View style={styles.statusContainer}>
               <Text style={styles.statusText}>
-                {rectangleDetected ? "Carte détectée..." : "Alignez la carte dans le cadre"}
+                {rectangleDetected ? t('scan.cardDetected') : t('scan.placeCard')}
               </Text>
             </View>
           </View>
@@ -226,24 +269,24 @@ export default function ScanScreen() {
         {!isProcessing && photoUri && scanResult.pokemonName && (
           <View style={styles.resultContainer}>
             <View style={styles.resultHeader}>
-              <Text style={styles.resultTitle}>Résultats de l'analyse</Text>
+              <Text style={styles.resultTitle}>{t('scan.scanResults')}</Text>
             </View>
             <View style={styles.resultContent}>
               <View style={styles.resultItem}>
-                <Text style={styles.resultLabel}>Nom:</Text>
+                <Text style={styles.resultLabel}>{t('scan.nameLabel')}:</Text>
                 <Text style={styles.resultValue}>{scanResult.pokemonName}</Text>
               </View>
               
               {scanResult.healthPoints && (
                 <View style={styles.resultItem}>
-                  <Text style={styles.resultLabel}>PV:</Text>
+                  <Text style={styles.resultLabel}>{t('scan.hpLabel')}:</Text>
                   <Text style={styles.resultValue}>{scanResult.healthPoints}</Text>
                 </View>
               )}
               
               {scanResult.cardNumber && (
                 <View style={styles.resultItem}>
-                  <Text style={styles.resultLabel}>Numéro:</Text>
+                  <Text style={styles.resultLabel}>{t('scan.numberLabel')}:</Text>
                   <Text style={styles.resultValue}>{scanResult.cardNumber}</Text>
                 </View>
               )}
@@ -255,7 +298,7 @@ export default function ScanScreen() {
       <View style={styles.footer}>
         {photoUri ? (
           <TouchableOpacity style={styles.button} onPress={handleStartScan}>
-            <Text style={styles.buttonText}>Scanner une nouvelle carte</Text>
+            <Text style={styles.buttonText}>{t('scan.scanAgain')}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 

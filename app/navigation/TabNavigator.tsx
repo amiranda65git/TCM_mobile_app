@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons, FontAwesome6 } from '@expo/vector-icons';
@@ -7,13 +7,51 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import '../i18n/i18n.config';
 import { useRouter } from 'expo-router';
+import { EventRegister } from 'react-native-event-listeners';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [refreshKey, setRefreshKey] = useState(0);
 
+  // Écouter les changements de langue
+  useEffect(() => {
+    // Vérifier si la langue a changé au démarrage
+    const checkLanguageChanged = async () => {
+      const languageChanged = await AsyncStorage.getItem('@language_changed');
+      if (languageChanged === 'true') {
+        // Réinitialiser le flag
+        await AsyncStorage.removeItem('@language_changed');
+        console.log('Language has been changed, refreshing TabNavigator');
+        // Force un rafraîchissement
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    
+    checkLanguageChanged();
+    
+    // Écouter l'événement de changement de langue
+    const listener: any = EventRegister.addEventListener('changeLanguage', (language: any) => {
+      if (language && typeof language === 'string') {
+        console.log('Changement de langue détecté dans TabNavigator:', language);
+        // Force un rafraîchissement
+        setRefreshKey(prev => prev + 1);
+      }
+    });
+    
+    return () => {
+      // Supprimer l'écouteur lors du démontage du composant
+      if (listener) {
+        EventRegister.removeEventListener(listener);
+      }
+    };
+  }, []);
+
+  // Utilisation d'une clé pour forcer le rafraîchissement du composant
   return (
     <Tabs
+      key={refreshKey}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
@@ -33,7 +71,7 @@ export default function TabNavigator() {
           marginTop: -5,
         },
       }}
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <CustomTabBar key={refreshKey} {...props} />}
     >
       <Tabs.Screen
         name="home"

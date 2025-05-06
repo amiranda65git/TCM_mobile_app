@@ -1,13 +1,61 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { useTranslation } from 'react-i18next';
+import { EventRegister } from 'react-native-event-listeners';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 
 export default function WishlistScreen() {
+  const { t, i18n } = useTranslation();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [languageListener, setLanguageListener] = useState<any>(null);
+
+  // Écouter les changements de langue
+  useEffect(() => {
+    // Écouter l'événement de changement de langue
+    const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
+      if (language && typeof language === 'string') {
+        console.log('Changement de langue détecté dans WishlistScreen:', language);
+        // Forcer un rafraîchissement du composant
+        setRefreshKey(prev => prev + 1);
+      }
+    });
+    
+    setLanguageListener(listener);
+    
+    return () => {
+      // Supprimer l'écouteur lors du démontage du composant
+      if (languageListener) {
+        EventRegister.removeEventListener(languageListener);
+      }
+    };
+  }, []);
+
+  // Vérifier les changements de langue lorsque l'écran est focalisé
+  useFocusEffect(
+    useCallback(() => {
+      async function checkLanguageChange() {
+        const languageChanged = await AsyncStorage.getItem('@language_changed');
+        if (languageChanged === 'true') {
+          // Réinitialiser le flag
+          await AsyncStorage.removeItem('@language_changed');
+          console.log('Language has been changed, refreshing wishlist data...');
+          // Force un rafraîchissement en incrémentant la clé
+          setRefreshKey(prev => prev + 1);
+        }
+      }
+      
+      checkLanguageChange();
+    }, [])
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Wishlist</Text>
+        <Text style={styles.title}>{t('home.wishlist')}</Text>
         <TouchableOpacity>
           <Ionicons name="options-outline" size={24} color={Colors.text.secondary} />
         </TouchableOpacity>
@@ -16,14 +64,14 @@ export default function WishlistScreen() {
       <View style={styles.content}>
         <View style={styles.emptyWishlist}>
           <Ionicons name="star-outline" size={80} color={Colors.text.secondary} />
-          <Text style={styles.emptyTitle}>Liste de souhaits vide</Text>
+          <Text style={styles.emptyTitle}>{t('wishlist.empty')}</Text>
           <Text style={styles.emptyText}>
-            Ajoutez des cartes à votre wishlist pour les retrouver facilement ici.
+            {t('wishlist.emptyText')}
           </Text>
           
           <TouchableOpacity style={styles.addButton}>
             <Ionicons name="add" size={24} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Ajouter une carte</Text>
+            <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
           </TouchableOpacity>
         </View>
       </View>
