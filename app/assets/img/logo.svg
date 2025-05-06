@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200px" height="60px">
+  <text x="10" y="40" font-family="Arial" font-size="40" font-weight="bold" fill="#333">
+    TC<tspan fill="#4CAF50">Market</tspan>
+  </text>
+</svg> 
