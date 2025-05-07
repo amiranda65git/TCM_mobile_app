@@ -47,7 +47,7 @@ export default function WishlistScreen() {
     
     return () => {
       if (themeListener) {
-        EventRegister.removeEventListener(themeListener);
+        EventRegister.removeEventListener(themeListener  as string);
       }
     };
   }, []);
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 60,
+    paddingTop: 10,
     paddingBottom: 16,
   },
   title: {

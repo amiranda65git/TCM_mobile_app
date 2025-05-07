@@ -11,6 +11,7 @@ type ColorScheme = {
   };
   border: string;
   primary: string;
+  primaryLight: string;
   secondary: string;
   success: string;
   error: string;
@@ -26,6 +27,7 @@ const lightTheme: ColorScheme = {
   },
   border: '#E0E0E0',
   primary: '#4A90E2',
+  primaryLight: '#EBF3FD',
   secondary: '#1E2F4D',
   success: '#4CAF50',
   error: '#FF4B4B',
@@ -41,6 +43,7 @@ const darkTheme: ColorScheme = {
   },
   border: '#374869',
   primary: '#1E2F4D',
+  primaryLight: '#344973',
   secondary: '#4A90E2',
   success: '#4CAF50',
   error: '#FF4B4B',

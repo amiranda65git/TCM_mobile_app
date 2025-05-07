@@ -78,7 +78,7 @@ export default function ScanScreen() {
     
     return () => {
       if (themeListener) {
-        EventRegister.removeEventListener(themeListener);
+        EventRegister.removeEventListener(themeListener as string);
       }
     };
   }, []);

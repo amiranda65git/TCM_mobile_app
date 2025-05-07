@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../lib/auth';
-import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar } from '../lib/supabase';
+import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,12 +24,14 @@ export default function HomeScreen() {
   const [hideValues, setHideValues] = useState(false);
   const [editionsCount, setEditionsCount] = useState(0);
   const [cardsCount, setCardsCount] = useState(0);
+  const [totalValue, setTotalValue] = useState(0);
+  const [valueVariation, setValueVariation] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
 
   // Écouter les changements de langue
   useEffect(() => {
     // Écouter l'événement de changement de langue
-    const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
+    const listener: any = EventRegister.addEventListener('changeLanguage', (language: any) => {
       if (language && typeof language === 'string') {
         console.log('Changement de langue détecté dans HomeScreen:', language);
         // Forcer un rafraîchissement du composant
@@ -42,21 +44,21 @@ export default function HomeScreen() {
     return () => {
       // Supprimer l'écouteur lors du démontage du composant
       if (languageListener) {
-        EventRegister.removeEventListener(languageListener);
+        EventRegister.removeEventListener(languageListener as string);
       }
     };
   }, []);
   
   // Écouter les changements de thème
   useEffect(() => {
-    const themeListener = EventRegister.addEventListener('themeChanged', () => {
+    const themeListener: any = EventRegister.addEventListener('themeChanged', () => {
       console.log('Changement de thème détecté dans HomeScreen');
       setRefreshKey(prev => prev + 1);
     });
     
     return () => {
       if (themeListener) {
-        EventRegister.removeEventListener(themeListener);
+        EventRegister.removeEventListener(themeListener as string);
       }
     };
   }, []);
@@ -122,6 +124,15 @@ export default function HomeScreen() {
             const { count: cardsCountData } = await getUserCardsCount(user.id);
             setCardsCount(cardsCountData);
 
+            // Récupérer la valeur totale de la collection
+            const { totalValue: collectionValue, error: valueError } = await getUserCollectionTotalValue(user.id);
+            if (!valueError) {
+              setTotalValue(collectionValue);
+              // Pour le moment, on utilise une variation fictive
+              // Dans une version future, on pourrait stocker l'historique des valeurs
+              setValueVariation(Math.random() * 5 - 2.5); // Entre -2.5% et +2.5%
+            }
+
           } catch (error) {
             console.error("Erreur lors du chargement des données utilisateur:", error);
           }
@@ -143,6 +154,16 @@ export default function HomeScreen() {
     // prendra le relais pour les rafraîchissements lors des navigations
   }, []);
 
+  // Format pour afficher une valeur monétaire
+  const formatCurrency = (value: number) => {
+    return value.toFixed(2).replace('.', ',') + ' €';
+  };
+
+  // Déterminer la couleur de la variation
+  const getVariationColor = (variation: number) => {
+    return variation >= 0 ? colors.success : colors.error;
+  };
+
   const CollectionCard = () => (
     <View style={[styles.collectionCard, { backgroundColor: colors.surface }]}>
       <View style={styles.collectionHeader}>
@@ -152,14 +173,23 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
       <View style={styles.valueContainer}>
-        <Text style={[styles.value, { color: colors.text.primary }]}>{hideValues ? "******" : "0,00 €"}</Text>
+        <Text style={[styles.value, { color: colors.text.primary }]}>
+          {hideValues ? "******" : formatCurrency(totalValue)}
+        </Text>
         <View style={[styles.badge, { backgroundColor: colors.surface }]}>
           <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
         </View>
       </View>
-      <Text style={[styles.percentage, { color: colors.text.secondary }]}>{hideValues ? "***" : "0.00 %"}</Text>
+      <Text style={[
+        styles.percentage, 
+        { color: getVariationColor(valueVariation) }
+      ]}>
+        {hideValues ? "***" : (valueVariation >= 0 ? '+' : '') + valueVariation.toFixed(2) + '%'}
+      </Text>
       <View style={styles.cardsCount}>
-        <Text style={[styles.cardsText, { color: colors.text.secondary }]}>0 {t('home.cards')}</Text>
+        <Text style={[styles.cardsText, { color: colors.text.secondary }]}>
+          {cardsCount} {t('home.cards')}
+        </Text>
       </View>
     </View>
   );

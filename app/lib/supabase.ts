@@ -514,6 +514,186 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
   }
 };
 
+// Fonction pour récupérer les détails d'une édition et ses cartes
+export const getEditionDetails = async (editionId: string, userId: string) => {
+  try {
+    // 1. Obtenir les détails de l'édition
+    const { data: editionData, error: editionError } = await supabase
+      .from('editions')
+      .select('id, name, logo_image, symbol_image, release_date, printed_total, total')
+      .eq('id', editionId)
+      .single();
+    
+    if (editionError) {
+      console.error("Erreur lors de la récupération des détails de l'édition:", editionError);
+      return { data: null, error: editionError };
+    }
+    
+    // 2. Récupérer toutes les cartes de cette édition
+    const { data: cardsData, error: cardsError } = await supabase
+      .from('official_cards')
+      .select('id, name, number, rarity, image_small, image_large')
+      .eq('edition_id', editionId)
+      .order('number');
+    
+    if (cardsError) {
+      console.error("Erreur lors de la récupération des cartes de l'édition:", cardsError);
+      return { data: null, error: cardsError };
+    }
+    
+    // 3. Récupérer les cartes possédées par l'utilisateur
+    const { data: userCardsData, error: userCardsError } = await supabase
+      .from('user_cards')
+      .select('card_id, price, is_for_sale')
+      .eq('user_id', userId);
+    
+    if (userCardsError) {
+      console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
+      return { data: null, error: userCardsError };
+    }
+    
+    // 4. Récupérer les prix du marché les plus récents pour les cartes de cette édition
+    // On crée une liste des IDs de cartes pour la requête
+    const cardIds = cardsData.map((card: any) => card.id);
+    
+    const { data: marketPricesData, error: marketPricesError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_low, price_mid, price_high, date')
+      .in('card_id', cardIds)
+      .order('date', { ascending: false });
+    
+    if (marketPricesError) {
+      console.error("Erreur lors de la récupération des prix du marché:", marketPricesError);
+      // On continue même en cas d'erreur, on utilisera des prix par défaut
+    }
+    
+    // Maps pour stocker les différents prix du marché pour chaque carte
+    const marketPriceLowMap = new Map<string, number>();
+    const marketPriceMidMap = new Map<string, number>();
+    const marketPriceHighMap = new Map<string, number>();
+    const marketPriceMap = new Map<string, number>(); // Prix moyen par défaut
+    
+    // Pour chaque carte, on ne garde que le prix le plus récent
+    if (marketPricesData) {
+      // On trie d'abord par ID de carte et date (plus récente en premier)
+      marketPricesData.sort((a, b) => {
+        if (a.card_id !== b.card_id) {
+          return a.card_id.localeCompare(b.card_id);
+        }
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      
+      // On garde le premier prix (le plus récent) pour chaque carte
+      const processedCardIds = new Set<string>();
+      marketPricesData.forEach((priceData: any) => {
+        if (!processedCardIds.has(priceData.card_id)) {
+          if (priceData.price_low) {
+            marketPriceLowMap.set(priceData.card_id, parseFloat(priceData.price_low));
+          }
+          if (priceData.price_mid) {
+            marketPriceMidMap.set(priceData.card_id, parseFloat(priceData.price_mid));
+            // On utilise le prix moyen comme prix par défaut
+            marketPriceMap.set(priceData.card_id, parseFloat(priceData.price_mid));
+          }
+          if (priceData.price_high) {
+            marketPriceHighMap.set(priceData.card_id, parseFloat(priceData.price_high));
+          }
+          
+          processedCardIds.add(priceData.card_id);
+        }
+      });
+    }
+    
+    // Créer un Set des cartes possédées pour une recherche rapide
+    const ownedCardsSet = new Set<string>();
+    const cardPriceMap = new Map<string, number>();
+    const cardForSaleMap = new Map<string, boolean>();
+    
+    userCardsData?.forEach((card: any) => {
+      ownedCardsSet.add(card.card_id);
+      if (card.price !== null) {
+        cardPriceMap.set(card.card_id, card.price);
+      }
+      cardForSaleMap.set(card.card_id, card.is_for_sale || false);
+    });
+    
+    // Combiner les données
+    const cardsWithOwnership = cardsData.map((card: any) => {
+      const owned = ownedCardsSet.has(card.id);
+      // Priorité au prix défini par l'utilisateur, sinon on prend le prix du marché
+      const userPrice = cardPriceMap.get(card.id);
+      const marketPrice = marketPriceMap.get(card.id);
+      const price = userPrice !== undefined ? userPrice : marketPrice;
+      const isForSale = cardForSaleMap.get(card.id) || false;
+      
+      return {
+        ...card,
+        owned,
+        price,
+        is_for_sale: isForSale,
+        market_price_low: marketPriceLowMap.get(card.id),
+        market_price_mid: marketPriceMidMap.get(card.id),
+        market_price_high: marketPriceHighMap.get(card.id)
+      };
+    });
+    
+    // Calculer les statistiques
+    const ownedCardsCount = cardsWithOwnership.filter((card: any) => card.owned).length;
+    
+    // Calculer la valeur totale des cartes possédées
+    const totalValue = cardsWithOwnership.reduce((total: number, card: any) => {
+      if (card.owned) {
+        if (card.price !== null && card.price !== undefined) {
+          return total + card.price;
+        } else {
+          // Si pas de prix défini, on utilise une valeur par défaut de 0
+          return total;
+        }
+      }
+      return total;
+    }, 0);
+    
+    // Formatter les données à retourner
+    const editionDetail = {
+      ...editionData,
+      cards: cardsWithOwnership,
+      ownedCards: ownedCardsCount,
+      totalValue: totalValue
+    };
+    
+    return { data: editionDetail, error: null };
+  } catch (error) {
+    console.error("Erreur inattendue lors de la récupération des détails de l'édition:", error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour calculer la valeur totale de la collection d'un utilisateur
+export const getUserCollectionTotalValue = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        price
+      `)
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error("Erreur lors du calcul de la valeur totale de la collection:", error);
+      return { totalValue: 0, error };
+    }
+    
+    // Calculer la valeur totale
+    const totalValue = data?.reduce((total, card) => total + (card.price || 0), 0) || 0;
+    
+    return { totalValue, error: null };
+  } catch (error) {
+    console.error("Exception lors du calcul de la valeur totale:", error);
+    return { totalValue: 0, error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -530,7 +710,9 @@ const SupabaseService = {
   checkUsernameUnique,
   updateUsername,
   createUserProfile,
-  getUserCardsGroupedByEdition
+  getUserCardsGroupedByEdition,
+  getEditionDetails,
+  getUserCollectionTotalValue
 };
 
 export default SupabaseService; 

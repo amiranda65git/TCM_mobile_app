@@ -390,7 +390,7 @@ export default function Settings() {
       backgroundColor: colors.background,
     },
     header: {
-      paddingTop: Platform.OS === 'ios' ? 50 : 40,
+      paddingTop: Platform.OS === 'ios' ? 10 : 10,
       paddingBottom: 10,
       paddingHorizontal: 20,
       flexDirection: 'row',
