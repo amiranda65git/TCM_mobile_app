@@ -24,8 +24,15 @@ export default {
     news: 'News'
   },
   collection: {
-    empty: 'Empty collection',
+    empty: 'Empty Collection',
     emptyText: 'Add your first cards using the Scan tab or the Add button above.'
+  },
+  edition: {
+    details: 'Edition Details',
+    notFound: 'Edition not found',
+    value: 'Total Value',
+    cardsOwned: 'Cards Owned',
+    allCards: 'All Cards'
   },
   wishlist: {
     empty: 'Empty wishlist',
@@ -152,5 +159,10 @@ export default {
     scan: 'Scan',
     market: 'Market',
     wishlist: 'Trading'
+  },
+  general: {
+    loading: 'Loading...',
+    back: 'Back',
+    common: 'Common'
   }
 }; 

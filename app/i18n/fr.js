@@ -27,6 +27,13 @@ export default {
     empty: 'Collection vide',
     emptyText: 'Ajoutez vos premières cartes en utilisant l\'onglet Scan ou le bouton Ajouter ci-dessus.'
   },
+  edition: {
+    details: 'Détails de l\'édition',
+    notFound: 'Édition non trouvée',
+    value: 'Valeur totale',
+    cardsOwned: 'Cartes possédées',
+    allCards: 'Toutes les cartes'
+  },
   wishlist: {
     empty: 'Liste de souhaits vide',
     emptyText: 'Ajoutez des cartes à votre wishlist pour les retrouver facilement ici.',
@@ -152,5 +159,10 @@ export default {
     scan: 'Scan',
     market: 'Marché',
     wishlist: 'Trading'
+  },
+  general: {
+    loading: 'Chargement...',
+    back: 'Retour',
+    common: 'Commune'
   }
 }; 

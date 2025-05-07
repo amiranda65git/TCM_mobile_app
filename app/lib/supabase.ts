@@ -60,24 +60,32 @@ export const getUserData = async (userId: string) => {
 // Fonction pour récupérer le nombre d'éditions de l'utilisateur
 export const getUserEditionsCount = async (userId: string) => {
   try {
+    // Récupérer les cartes de l'utilisateur avec leurs éditions
     const { data, error } = await supabase
-      .from('user_editions')
-      .select('edition_id', { count: 'exact' })
+      .from('user_cards')
+      .select(`
+        card_id,
+        official_cards(
+          edition_id
+        )
+      `)
       .eq('user_id', userId);
 
     if (error) {
-      // Vérifier si l'erreur est due à une table inexistante
-      if (error.code === '42P01') {
-        console.log("La table user_editions n'existe pas encore. C'est normal pendant le développement.");
-        return { count: 0, error: null };
-      }
       console.error("Erreur lors de la récupération des éditions:", error);
       return { count: 0, error };
     }
 
-    // Calcul du nombre d'éditions uniques
-    const uniqueEditions = new Set(data?.map(item => item.edition_id) || []);
-    return { count: uniqueEditions.size, error: null };
+    // Calculer le nombre d'éditions uniques
+    const uniqueSetIds = new Set();
+    
+    data?.forEach((card: any) => {
+      if (card.official_cards && card.official_cards.edition_id) {
+        uniqueSetIds.add(card.official_cards.edition_id);
+      }
+    });
+    
+    return { count: uniqueSetIds.size, error: null };
   } catch (error) {
     console.error("Erreur inattendue lors de la récupération des éditions:", error);
     return { count: 0, error };
@@ -400,6 +408,112 @@ export const createUserProfile = async (userId: string, username: string, email:
   }
 };
 
+// Fonction pour récupérer les cartes d'un utilisateur regroupées par édition
+export const getUserCardsGroupedByEdition = async (userId: string) => {
+  try {
+    // 1. Récupérer les cartes de l'utilisateur avec les informations de base
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        user_id,
+        card_id,
+        condition,
+        is_for_sale,
+        price,
+        official_cards(
+          id,
+          name,
+          edition_id,
+          rarity,
+          image_small,
+          image_large
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error("Erreur lors de la récupération des cartes de l'utilisateur:", error);
+      return { data: null, error };
+    }
+
+    // Récupérer la liste de tous les edition_id des cartes
+    const editionIds = new Set<string>();
+    data?.forEach((card: any) => {
+      if (card.official_cards && card.official_cards.edition_id) {
+        editionIds.add(card.official_cards.edition_id);
+      }
+    });
+
+    // 2. Récupérer les informations des éditions
+    const { data: editionsData, error: editionsError } = await supabase
+      .from('editions')
+      .select('id, name, logo_image, symbol_image, release_date, printed_total, total')
+      .in('id', Array.from(editionIds));
+
+    if (editionsError) {
+      console.error("Erreur lors de la récupération des éditions:", editionsError);
+      return { data: null, error: editionsError };
+    }
+
+    // Créer un dictionnaire pour un accès facile aux données des éditions
+    const editionsMap: Record<string, any> = {};
+    editionsData?.forEach((edition: any) => {
+      editionsMap[edition.id] = edition;
+    });
+
+    // 3. Regrouper les cartes par édition
+    const groupedCards: Record<string, any> = {};
+    
+    data?.forEach((card: any) => {
+      if (!card.official_cards || !card.official_cards.edition_id) return;
+      
+      const editionId = card.official_cards.edition_id;
+      const editionData = editionsMap[editionId];
+      
+      if (!editionData) return; // Si l'édition n'existe pas dans la table editions
+      
+      if (!groupedCards[editionId]) {
+        groupedCards[editionId] = {
+          id: editionId,
+          name: editionData.name,
+          logo_url: editionData.logo_image,
+          symbol_url: editionData.symbol_image,
+          release_date: editionData.release_date,
+          printed_total: editionData.printed_total || 0,
+          total: editionData.total || 0,
+          cards: []
+        };
+      }
+      
+      groupedCards[editionId].cards.push({
+        id: card.id,
+        card_id: card.card_id,
+        card_name: card.official_cards.name,
+        card_image: card.official_cards.image_large || card.official_cards.image_small,
+        rarity: card.official_cards.rarity,
+        quantity: 1, // Par défaut, nous supposons que l'utilisateur possède 1 exemplaire
+        condition: card.condition,
+        is_for_sale: card.is_for_sale || false,
+        price: card.price || 0
+      });
+    });
+    
+    // 4. Convertir l'objet en tableau pour faciliter l'affichage
+    const editions = Object.values(groupedCards);
+    
+    // 5. Trier les éditions par date de sortie (du plus récent au plus ancien)
+    editions.sort((a: any, b: any) => {
+      return new Date(b.release_date || 0).getTime() - new Date(a.release_date || 0).getTime();
+    });
+    
+    return { data: editions, error: null };
+  } catch (error) {
+    console.error("Erreur inattendue lors de la récupération des cartes de l'utilisateur:", error);
+    return { data: null, error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -415,7 +529,8 @@ const SupabaseService = {
   getUserProfile,
   checkUsernameUnique,
   updateUsername,
-  createUserProfile
+  createUserProfile,
+  getUserCardsGroupedByEdition
 };
 
 export default SupabaseService; 
