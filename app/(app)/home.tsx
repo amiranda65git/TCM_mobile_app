@@ -303,7 +303,7 @@ export default function HomeScreen() {
           icon={<Ionicons name="heart" size={24} color={colors.secondary} />}
           title={t('home.wishlist')}
           count={`${wishlistCount} ${t(wishlistCount > 1 ? 'home.cards' : 'home.card')}`}
-          onPress={() => router.push('../wishlist')}
+          onPress={() => router.push('../../screens/wishlist')}
         />
         <ListItem
           icon={<Ionicons name="notifications" size={24} color={colors.secondary} />}

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, SafeAreaView, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase } from '../../lib/supabase';
+import { LineChart } from 'react-native-chart-kit';
 
 interface PriceRecord {
   id: string;
@@ -102,6 +103,14 @@ export default function MarketPricesScreen() {
     );
   }
   
+  // Préparer les données pour le graphique
+  const chartLabels = priceHistory.slice().reverse().map(item => {
+    const d = new Date(item.date);
+    return d.toLocaleDateString().slice(0, 5); // format court
+  });
+  const chartData = priceHistory.slice().reverse().map(item => item.price_mid ?? 0);
+  const screenWidth = Dimensions.get('window').width - 32;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
@@ -128,6 +137,44 @@ export default function MarketPricesScreen() {
       <Text style={[styles.cardName, { color: colors.text.primary }]}>
         {cardName}
       </Text>
+      
+      {/* Graphique d'évolution du price_mid */}
+      {chartData.length > 1 && (
+        <LineChart
+          data={{
+            labels: chartLabels,
+            datasets: [
+              {
+                data: chartData,
+                color: () => colors.primary, // couleur de la courbe
+                strokeWidth: 2,
+              },
+            ],
+          }}
+          width={screenWidth}
+          height={180}
+          yAxisSuffix=" €"
+          chartConfig={{
+            backgroundColor: colors.background,
+            backgroundGradientFrom: colors.background,
+            backgroundGradientTo: colors.background,
+            decimalPlaces: 2,
+            color: (opacity = 1) => colors.primary,
+            labelColor: (opacity = 1) => colors.text.secondary,
+            propsForDots: {
+              r: '3',
+              strokeWidth: '2',
+              stroke: colors.primary,
+            },
+          }}
+          bezier
+          style={{
+            marginVertical: 8,
+            borderRadius: 12,
+            alignSelf: 'center',
+          }}
+        />
+      )}
       
       {/* En-tête du tableau */}
       <View style={[styles.tableHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>

@@ -166,7 +166,7 @@ export default {
     collection: 'Collection',
     scan: 'Scan',
     market: 'Market',
-    wishlist: 'Trading'
+    trading: 'Trading'
   },
   general: {
     loading: 'Loading...',

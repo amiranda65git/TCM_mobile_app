@@ -124,9 +124,9 @@ export default function TabNavigator() {
         }}
       />
       <Tabs.Screen
-        name="wishlist"
+        name="trading"
         options={{
-          title: t('navigation.wishlist'),
+          title: t('navigation.trading'),
           tabBarIcon: ({ color, focused }) => (
             <FontAwesome6 
               name={focused ? "comments-dollar" : "comments-dollar"} 
