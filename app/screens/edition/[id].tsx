@@ -6,8 +6,9 @@ import { useAuth } from '../../lib/auth';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
-import { supabase, getEditionDetails } from '../../lib/supabase';
+import { supabase, getEditionDetails, addOrRemoveFromWishlist } from '../../lib/supabase';
 import { Swipeable } from 'react-native-gesture-handler';
+import NotificationIcon from '../../components/NotificationIcon';
 
 interface CardInfo {
   id: string;
@@ -19,9 +20,11 @@ interface CardInfo {
   owned: boolean;
   price: number | null;
   is_for_sale: boolean;
+  has_price_alert: boolean;
   market_price_low?: number | null;
   market_price_mid?: number | null;
   market_price_high?: number | null;
+  has_wishlist: boolean;
 }
 
 interface EditionDetail {
@@ -43,7 +46,16 @@ interface UserCard {
 }
 
 // Composant pour afficher une carte avec swipe
-const SwipeableCard = ({ card, colors, t, router, onSellPress }: { card: CardInfo, colors: any, t: any, router: any, onSellPress: (card: CardInfo) => void }) => {
+const SwipeableCard = ({ card, colors, t, router, onSellPress, onPriceAlertPress, onWishlistPress }: 
+  { 
+    card: CardInfo, 
+    colors: any, 
+    t: any, 
+    router: any, 
+    onSellPress: (card: CardInfo) => void,
+    onPriceAlertPress: (card: CardInfo) => void,
+    onWishlistPress: (card: CardInfo) => void
+  }) => {
   const renderLeftActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
     // Faire apparaître l'action dès le début du swipe
     const scale = progress.interpolate({
@@ -110,8 +122,12 @@ const SwipeableCard = ({ card, colors, t, router, onSellPress }: { card: CardInf
     
     // Action différente selon si la carte est possédée ou non
     const backgroundColor = card.owned ? '#3498db' : '#f1c40f'; // Bleu pour alerte, Jaune pour wishlist
-    const actionText = card.owned ? t('card.priceAlert') : t('card.addToWishlist');
-    const iconName = card.owned ? 'notifications-outline' : 'star-outline';
+    const actionText = card.owned ? 
+      (card.has_price_alert ? t('card.removePriceAlert') : t('card.priceAlert')) : 
+      t('card.addToWishlist');
+    const iconName = card.owned ? 
+      (card.has_price_alert ? 'notifications' : 'notifications-outline') : 
+      'star-outline';
     
     return (
       <Animated.View 
@@ -133,8 +149,6 @@ const SwipeableCard = ({ card, colors, t, router, onSellPress }: { card: CardInf
   };
   
   const handleSwipeableOpen = (direction: 'left' | 'right') => {
-    // Le swipe vers la gauche (left) fait apparaître le bouton sur la droite
-    // Le swipe vers la droite (right) fait apparaître le bouton sur la gauche
     
     if (direction === 'left') {
       // Bouton Sell/Buy (à gauche)
@@ -142,15 +156,17 @@ const SwipeableCard = ({ card, colors, t, router, onSellPress }: { card: CardInf
         // Ouvrir le modal de vente
         onSellPress(card);
       } else {
-        // Rediriger vers la page de détail de la carte
-        router.push(`/screens/card/${card.id}`);
+        // Rediriger vers la page de d'achat de la carte
+        router.push(`/screens/market-prices/card-marketplace?id=${card.id}`);
       }
     } else if (direction === 'right') {
       // Bouton Alert/Wishlist (à droite)
       if (card.owned) {
-        // Implémenter la logique d'alerte de prix plus tard
+        // Implémenter la fonctionnalité d'alerte de prix
+        onPriceAlertPress(card);
       } else {
-        // Implémenter la logique d'ajout à la wishlist plus tard
+        // Ajout à la wishlist
+        onWishlistPress(card);
       }
     }
   };
@@ -203,9 +219,17 @@ const SwipeableCard = ({ card, colors, t, router, onSellPress }: { card: CardInf
             size={24} 
             color={card.owned ? colors.secondary : colors.text.secondary} 
           />
+          {card.has_wishlist && !card.owned && (
+            <Ionicons name="star" size={18} color="#FFD700" style={{ marginTop: 2 }} />
+          )}
           {card.owned && card.is_for_sale && (
             <Text style={[styles.forSaleBadge, { color: colors.secondary, borderColor: colors.secondary }]}>
               {t('card.forSale')}
+            </Text>
+          )}
+          {card.owned && card.has_price_alert && (
+            <Text style={[styles.alertBadge, { color: '#3498db', borderColor: '#3498db' }]}>
+              <Ionicons name="notifications" size={10} color="#3498db" /> {t('card.alert')}
             </Text>
           )}
         </View>
@@ -240,14 +264,43 @@ export default function EditionDetail() {
     
     setLoading(true);
     try {
-      const { data, error } = await getEditionDetails(id.toString(), user.id);
+      const { data: editionData, error } = await getEditionDetails(id.toString(), user.id);
       
       if (error) throw error;
       
-      if (data) {
-        setEditionDetail(data);
-        setTotalValue(data.totalValue || 0);
-        setOwnedCards(data.ownedCards || 0);
+      if (editionData) {
+        // Récupérer les alertes de prix de l'utilisateur pour cette édition
+        const { data: priceAlerts, error: alertsError } = await supabase
+          .from('price_alerts')
+          .select('card_id')
+          .eq('user_id', user.id);
+        
+        if (alertsError) throw alertsError;
+        
+        // Créer un ensemble pour une recherche plus rapide
+        const alertedCardIds = new Set(priceAlerts?.map(alert => alert.card_id) || []);
+        
+        // Récupérer la wishlist de l'utilisateur
+        const { data: wishlistData, error: wishlistError } = await supabase
+          .from('wishlists')
+          .select('card_id')
+          .eq('user_id', user.id);
+        if (wishlistError) throw wishlistError;
+        const wishlistCardIds = new Set(wishlistData?.map(w => w.card_id) || []);
+        
+        // Ajouter l'information des alertes de prix et wishlist aux cartes
+        const cardsWithAlerts = editionData.cards.map(card => ({
+          ...card,
+          has_price_alert: alertedCardIds.has(card.id),
+          has_wishlist: wishlistCardIds.has(card.id)
+        }));
+        
+        setEditionDetail({
+          ...editionData,
+          cards: cardsWithAlerts
+        } as EditionDetail);
+        setTotalValue(editionData.totalValue || 0);
+        setOwnedCards(editionData.ownedCards || 0);
       }
     } catch (error) {
       console.error("Erreur lors du chargement des détails de l'édition:", error);
@@ -276,6 +329,58 @@ export default function EditionDetail() {
     
     setSellingPrice(initialPrice);
     setSellModalVisible(true);
+  };
+
+  // Ajouter une alerte de prix
+  const handlePriceAlert = async (card: CardInfo) => {
+    if (!user) return;
+    
+    try {
+      // Vérifier si une alerte existe déjà pour cette carte
+      const { data: existingAlert, error: checkError } = await supabase
+        .from('price_alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('card_id', card.id)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        // Une erreur s'est produite (autre que "pas de résultat")
+        throw checkError;
+      }
+      
+      if (existingAlert) {
+        // Si une alerte existe déjà, la supprimer (toggle)
+        const { error: deleteError } = await supabase
+          .from('price_alerts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('card_id', card.id);
+        
+        if (deleteError) throw deleteError;
+        
+        // Afficher un message de confirmation
+        console.log('Alerte de prix supprimée');
+      } else {
+        // Sinon, ajouter une nouvelle alerte
+        const { error: insertError } = await supabase
+          .from('price_alerts')
+          .insert([
+            { user_id: user.id, card_id: card.id }
+          ]);
+        
+        if (insertError) throw insertError;
+        
+        // Afficher un message de confirmation
+        console.log('Alerte de prix ajoutée');
+      }
+      
+      // Rafraîchir les données
+      loadEditionDetails();
+      
+    } catch (error) {
+      console.error('Erreur lors de la gestion de l\'alerte de prix:', error);
+    }
   };
 
   // Soumettre l'ordre de vente
@@ -348,6 +453,18 @@ export default function EditionDetail() {
     return !isNaN(price) && price > 0;
   };
 
+  // Ajouter/retirer une carte à la wishlist
+  const handleWishlist = async (card: CardInfo) => {
+    if (!user) return;
+    const res = await addOrRemoveFromWishlist(user.id, card.id);
+    if (res.error) {
+      console.error('Erreur wishlist:', res.error);
+    } else {
+      console.log(res.added ? 'Carte ajoutée à la wishlist' : 'Carte retirée de la wishlist');
+      loadEditionDetails();
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -402,7 +519,9 @@ export default function EditionDetail() {
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
           {editionDetail.name}
         </Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          <NotificationIcon color={colors.text.primary} />
+        </View>
       </View>
       
       <ScrollView 
@@ -464,6 +583,8 @@ export default function EditionDetail() {
               t={t} 
               router={router}
               onSellPress={handleSellPress}
+              onPriceAlertPress={handlePriceAlert}
+              onWishlistPress={handleWishlist}
             />
           ))}
         </View>
@@ -735,6 +856,8 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   swipeActionContainer: {
     height: 80,
@@ -851,6 +974,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   forSaleBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    borderWidth: 1,
+    padding: 2,
+    paddingHorizontal: 4,
+    borderRadius: 4,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  alertBadge: {
     fontSize: 10,
     fontWeight: 'bold',
     borderWidth: 1,

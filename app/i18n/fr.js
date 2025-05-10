@@ -37,11 +37,19 @@ export default {
   wishlist: {
     empty: 'Liste de souhaits vide',
     emptyText: 'Ajoutez des cartes à votre wishlist pour les retrouver facilement ici.',
-    addCard: 'Ajouter une carte'
+    addCard: 'Ajouter à la wishlist',
+    removeCard: 'Retirer de la wishlist',
+    addCardShort: 'Ajouter',
+    removeCardShort: 'Retirer',
   },
   market: {
     empty: 'Marché en construction',
-    emptyText: 'Cette fonctionnalité sera bientôt disponible. Revenez prochainement pour acheter et vendre des cartes.'
+    emptyText: 'Cette fonctionnalité sera bientôt disponible. Revenez prochainement pour acheter et vendre des cartes.',
+    buyCard: 'Acheter une carte',
+    cardsForSale: 'Cartes en vente par la communauté',
+    noCardsForSale: 'Aucune carte en vente actuellement',
+    unknownSeller: 'Vendeur inconnu',
+    buyOnGamezest: 'Acheter sur GameZest.ch'
   },
   scan: {
     scanCard: 'Scanner une carte',
@@ -199,6 +207,18 @@ export default {
     updatePrice: 'Mettre à jour le prix',
     cancelSale: 'Annuler la vente',
     alreadyForSale: 'Cette carte est déjà en vente',
-    currentPrice: 'Prix actuel'
-  }
+    currentPrice: 'Prix actuel',
+    removePriceAlert: 'Supprimer l\'alerte',
+    alert: 'Alerte'
+  },
+  notifications: {
+    title: 'Notifications',
+    empty: 'Vous n\'avez aucune notification pour le moment',
+    clearAll: 'Tout effacer',
+    new: 'Nouveau',
+    priceChange: 'Variation de prix',
+    wishlistInterest: 'Intérêt wishlist',
+    yesterday: 'hier',
+    today: 'aujourd\'hui',
+  },
 }; 

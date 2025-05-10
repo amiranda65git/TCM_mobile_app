@@ -9,5 +9,10 @@ export function SettingsRoute() {
   return <Redirect href="/(app)/settings" />;
 }
 
+export function NotificationsRoute() {
+  // Cette route sera accessible via router.push('/notifications')
+  return <Redirect href="/screens/notifications" />;
+}
+
 // Exporter la fonction HomeRoute par défaut
 export default HomeRoute; 

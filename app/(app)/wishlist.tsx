@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Image, Animated } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
@@ -9,6 +9,86 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
+import { useAuth } from '../lib/auth';
+import { useRouter } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
+import { getUserWishlist, getOfficialCardDetails, getMarketPricesForCard, addOrRemoveFromWishlist } from '../lib/supabase';
+
+interface CardInfo {
+  id: string;
+  name: string;
+  number: string;
+  rarity: string;
+  image_small: string;
+  image_large: string;
+  price: number | null;
+  market_price_mid?: number | null;
+}
+
+const WishlistCard = ({ card, colors, t, router, onBuyPress, onRemovePress }: any) => {
+  const renderLeftActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
+    const scale = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.8, 1, 1], extrapolate: 'clamp' });
+    const opacity = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.5, 1, 1], extrapolate: 'clamp' });
+    const trans = dragX.interpolate({ inputRange: [0, 20, 50, 100], outputRange: [-10, 0, 0, 1], extrapolate: 'clamp' });
+    return (
+      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#2ecc71', transform: [{ translateX: trans }, { scale }], opacity }]}> 
+        <View style={styles.swipeAction}>
+          <Ionicons name="cart-outline" size={28} color="white" />
+          <Text style={styles.actionText}>{t('card.buy')}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+  const renderRightActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
+    const scale = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.8, 1, 1], extrapolate: 'clamp' });
+    const opacity = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.5, 1, 1], extrapolate: 'clamp' });
+    const trans = dragX.interpolate({ inputRange: [-100, -50, -20, 0], outputRange: [1, 0, 0, -10], extrapolate: 'clamp' });
+    return (
+      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#e74c3c', transform: [{ translateX: trans }, { scale }], opacity }]}> 
+        <View style={styles.swipeAction}>
+          <Ionicons name="star" size={28} color="white" />
+          <Text style={styles.actionText}>{t('wishlist.removeCard')}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+  const handleSwipeableOpen = (direction: 'left' | 'right') => {
+    if (direction === 'left') {
+      onBuyPress(card);
+    } else if (direction === 'right') {
+      onRemovePress(card);
+    }
+  };
+  return (
+    <Swipeable
+      renderLeftActions={renderLeftActions}
+      renderRightActions={renderRightActions}
+      onSwipeableOpen={handleSwipeableOpen}
+      friction={1.5}
+      leftThreshold={30}
+      rightThreshold={30}
+      overshootLeft={false}
+      overshootRight={false}
+    >
+      <TouchableOpacity style={[styles.cardItem, { backgroundColor: colors.surface }]} onPress={() => router.push(`/screens/card/${card.id}`)}>
+        {card.image_small ? (
+          <Image source={{ uri: card.image_small }} style={styles.cardImage} resizeMode="contain" />
+        ) : (
+          <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.surface }]} />
+        )}
+        <View style={styles.cardDetails}>
+          <Text style={[styles.cardName, { color: colors.text.primary }]} numberOfLines={1}>{card.name}</Text>
+          <Text style={[styles.cardNumber, { color: colors.text.secondary }]}>#{card.number}</Text>
+          <Text style={[styles.cardRarity, { color: colors.text.secondary }]}>{card.rarity || t('general.common')}</Text>
+          {card.market_price_mid && (
+            <Text style={[styles.cardPrice, { color: colors.secondary }]}> {card.market_price_mid.toFixed(2)} € </Text>
+          )}
+        </View>
+        <Ionicons name="star" size={18} color="#FFD700" style={{ marginLeft: 8, marginTop: 2 }} />
+      </TouchableOpacity>
+    </Swipeable>
+  );
+};
 
 export default function WishlistScreen() {
   const { t, i18n } = useTranslation();
@@ -16,6 +96,11 @@ export default function WishlistScreen() {
   const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
+  const { user } = useAuth();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [cards, setCards] = useState<CardInfo[]>([]);
+  const [search, setSearch] = useState('');
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -70,6 +155,55 @@ export default function WishlistScreen() {
     }, [])
   );
 
+  useEffect(() => {
+    loadWishlist();
+  }, [user?.id]);
+
+  const loadWishlist = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const { data: wishlistIds } = await getUserWishlist(user.id);
+      if (!wishlistIds || wishlistIds.length === 0) {
+        setCards([]);
+        setLoading(false);
+        return;
+      }
+      // Récupérer les infos détaillées pour chaque carte
+      const cardPromises = wishlistIds.map(async (cardId: string) => {
+        const { data: cardData } = await getOfficialCardDetails(cardId);
+        const { data: priceData } = await getMarketPricesForCard(cardId);
+        return cardData ? {
+          ...cardData,
+          price: priceData?.price_mid || null,
+          market_price_mid: priceData?.price_mid || null,
+        } : null;
+      });
+      let cardsData = (await Promise.all(cardPromises)).filter(Boolean) as CardInfo[];
+      // Tri décroissant par prix
+      cardsData = cardsData.sort((a, b) => (b.market_price_mid || 0) - (a.market_price_mid || 0));
+      setCards(cardsData);
+    } catch (e) {
+      setCards([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBuy = (card: CardInfo) => {
+    router.push(`/screens/market-prices/card-marketplace?id=${card.id}`);
+  };
+  const handleRemove = async (card: CardInfo) => {
+    if (!user) return;
+    await addOrRemoveFromWishlist(user.id, card.id);
+    loadWishlist();
+  };
+
+  const filteredCards = cards.filter(card =>
+    card.name.toLowerCase().includes(search.toLowerCase()) ||
+    card.number.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -79,7 +213,22 @@ export default function WishlistScreen() {
         </TouchableOpacity>
       </View>
       
-      <View style={styles.content}>
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text.primary }]}
+          placeholder={t('wishlist.search') || 'Rechercher une carte'}
+          placeholderTextColor={colors.text.secondary}
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : filteredCards.length === 0 ? (
         <View style={styles.emptyWishlist}>
           <Ionicons name="star-outline" size={80} color={colors.text.secondary} />
           <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('wishlist.empty')}</Text>
@@ -92,7 +241,21 @@ export default function WishlistScreen() {
             <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <ScrollView style={styles.cardsGrid} contentContainerStyle={{ paddingBottom: 40 }}>
+          {filteredCards.map(card => (
+            <WishlistCard
+              key={card.id}
+              card={card}
+              colors={colors}
+              t={t}
+              router={router}
+              onBuyPress={handleBuy}
+              onRemovePress={handleRemove}
+            />
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -113,10 +276,21 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F0F0', borderRadius: 8, marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 12, height: 40 },
+  searchInput: { flex: 1, fontSize: 16 },
+  cardsGrid: { flex: 1, paddingHorizontal: 16 },
+  cardItem: { flexDirection: 'row', borderRadius: 8, padding: 12, marginBottom: 8, alignItems: 'center', height: 80 },
+  cardImage: { width: 40, height: 56, borderRadius: 4 },
+  cardImagePlaceholder: { width: 40, height: 56, borderRadius: 4, opacity: 0.5 },
+  cardDetails: { flex: 1, marginLeft: 12 },
+  cardName: { fontWeight: 'bold', fontSize: 16 },
+  cardNumber: { fontSize: 12 },
+  cardRarity: { fontSize: 12, marginTop: 2 },
+  cardPrice: { fontSize: 14, fontWeight: 'bold', marginTop: 4 },
+  swipeActionContainer: { height: 80, width: 120, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5, marginBottom: 8, overflow: 'hidden' },
+  swipeAction: { flex: 1, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', paddingHorizontal: 16 },
+  actionText: { color: 'white', fontWeight: 'bold', marginLeft: 8, fontSize: 18 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyWishlist: {
     flex: 1,
     justifyContent: 'center',

@@ -6,7 +6,7 @@ import { useAuth } from '../../lib/auth';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
-import { supabase } from '../../lib/supabase';
+import { supabase, getUserWishlist, addOrRemoveFromWishlist } from '../../lib/supabase';
 
 interface CardPrice {
   low: number | null;
@@ -31,6 +31,7 @@ interface CardDetails {
   condition?: string;
   price?: number | null;
   is_for_sale: boolean;
+  has_price_alert?: boolean;
 }
 
 export default function CardDetailScreen() {
@@ -43,10 +44,12 @@ export default function CardDetailScreen() {
   
   const [loading, setLoading] = useState(true);
   const [cardDetails, setCardDetails] = useState<CardDetails | null>(null);
+  const [inWishlist, setInWishlist] = useState<boolean>(false);
   
   useEffect(() => {
     if (id && user) {
       loadCardDetails();
+      checkWishlist();
     }
   }, [id, user]);
   
@@ -90,6 +93,15 @@ export default function CardDetailScreen() {
         .order('date', { ascending: false })
         .limit(1);
       
+      // 4. Vérifier si l'utilisateur a mis une alerte de prix sur cette carte
+      const { data: priceAlertData, error: priceAlertError } = await supabase
+        .from('price_alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('card_id', id);
+      
+      if (priceAlertError) throw priceAlertError;
+      
       // Utiliser les prix du marché réels si disponibles, sinon générer des valeurs fictives
       let priceData: CardPrice;
       
@@ -128,7 +140,8 @@ export default function CardDetailScreen() {
         user_card_id: userCardData && userCardData.length > 0 ? userCardData[0].id : undefined,
         condition: userCardData && userCardData.length > 0 ? userCardData[0].condition : undefined,
         price: userCardData && userCardData.length > 0 ? userCardData[0].price : null,
-        is_for_sale: userCardData && userCardData.length > 0 ? userCardData[0].is_for_sale : false
+        is_for_sale: userCardData && userCardData.length > 0 ? userCardData[0].is_for_sale : false,
+        has_price_alert: priceAlertData && priceAlertData.length > 0
       };
       
       setCardDetails(cardDetails);
@@ -139,6 +152,12 @@ export default function CardDetailScreen() {
     }
   };
   
+  const checkWishlist = async () => {
+    if (!user || !id) return;
+    const { data: wishlist } = await getUserWishlist(user.id);
+    setInWishlist(wishlist.includes(id));
+  };
+  
   // Formatter les prix
   const formatPrice = (price: number | null) => {
     if (price === null) return 'N/A';
@@ -147,14 +166,17 @@ export default function CardDetailScreen() {
   
   // Action lorsqu'on clique sur Acheter
   const handleBuy = () => {
-    console.log('Acheter la carte', cardDetails?.id);
-    // La logique d'achat sera implémentée plus tard
+    if (!cardDetails) return;
+    
+    // Rediriger vers la page de marketplace pour cette carte
+    router.push(`/screens/market-prices/card-marketplace?id=${cardDetails.id}`);
   };
   
   // Action lorsqu'on clique sur Ajouter à la wishlist
-  const handleAddToWishlist = () => {
-    console.log('Ajouter à la wishlist', cardDetails?.id);
-    // La logique d'ajout à la wishlist sera implémentée plus tard
+  const handleWishlist = async () => {
+    if (!user || !cardDetails) return;
+    await addOrRemoveFromWishlist(user.id, cardDetails.id);
+    checkWishlist();
   };
   
   // Action lorsqu'on clique sur Vendre
@@ -190,9 +212,57 @@ export default function CardDetailScreen() {
   };
   
   // Action lorsqu'on clique sur Définir une alerte de prix
-  const handlePriceAlert = () => {
-    console.log('Définir une alerte de prix pour', cardDetails?.id);
-    // La logique d'alerte de prix sera implémentée plus tard
+  const handlePriceAlert = async () => {
+    if (!cardDetails || !user) return;
+    
+    try {
+      setLoading(true);
+      
+      // Vérifier si une alerte existe déjà pour cette carte
+      const { data: existingAlert, error: checkError } = await supabase
+        .from('price_alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('card_id', cardDetails.id)
+        .single();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        // Une erreur s'est produite (autre que "pas de résultat")
+        throw checkError;
+      }
+      
+      if (existingAlert) {
+        // Si une alerte existe déjà, la supprimer (toggle)
+        const { error: deleteError } = await supabase
+          .from('price_alerts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('card_id', cardDetails.id);
+        
+        if (deleteError) throw deleteError;
+        
+        console.log('Alerte de prix supprimée');
+      } else {
+        // Sinon, ajouter une nouvelle alerte
+        const { error: insertError } = await supabase
+          .from('price_alerts')
+          .insert([
+            { user_id: user.id, card_id: cardDetails.id }
+          ]);
+        
+        if (insertError) throw insertError;
+        
+        console.log('Alerte de prix ajoutée');
+      }
+      
+      // Rafraîchir les données
+      loadCardDetails();
+      
+    } catch (error) {
+      console.error('Erreur lors de la gestion de l\'alerte de prix:', error);
+    } finally {
+      setLoading(false);
+    }
   };
   
   if (loading) {
@@ -289,6 +359,10 @@ export default function CardDetailScreen() {
           
           {/* Détails de la carte */}
           <View style={styles.cardInfo}>
+            <Text style={[styles.cardName, { color: colors.text.primary }]}>
+              {cardDetails.name}
+            </Text>
+            
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: colors.text.secondary }]}>
                 {t('scan.numberLabel')}:
@@ -326,6 +400,20 @@ export default function CardDetailScreen() {
                 </Text>
               </View>
             )}
+            
+            {/* Badges */}
+            <View style={styles.badgesContainer}>
+              {cardDetails.is_for_sale && (
+                <Text style={[styles.badge, { color: colors.secondary, borderColor: colors.secondary }]}>
+                  <Ionicons name="pricetag" size={12} color={colors.secondary} /> {t('card.forSale')}
+                </Text>
+              )}
+              {cardDetails.has_price_alert && (
+                <Text style={[styles.badge, { color: '#3498db', borderColor: '#3498db', marginLeft: cardDetails.is_for_sale ? 8 : 0 }]}>
+                  <Ionicons name="notifications" size={12} color="#3498db" /> {t('card.alert')}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
         
@@ -419,11 +507,13 @@ export default function CardDetailScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#3498db' }]}
+                style={[styles.actionButton, { backgroundColor: cardDetails.has_price_alert ? '#2980b9' : '#3498db' }]}
                 onPress={handlePriceAlert}
               >
-                <Ionicons name="notifications-outline" size={24} color="white" />
-                <Text style={styles.actionButtonText}>{t('card.priceAlert')}</Text>
+                <Ionicons name={cardDetails.has_price_alert ? "notifications" : "notifications-outline"} size={24} color="white" />
+                <Text style={styles.actionButtonText}>
+                  {cardDetails.has_price_alert ? t('card.removePriceAlert') : t('card.priceAlert')}
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -438,10 +528,12 @@ export default function CardDetailScreen() {
               
               <TouchableOpacity 
                 style={[styles.actionButton, { backgroundColor: '#f1c40f' }]}
-                onPress={handleAddToWishlist}
+                onPress={handleWishlist}
               >
-                <Ionicons name="star-outline" size={24} color="white" />
-                <Text style={styles.actionButtonText}>{t('card.addToWishlist')}</Text>
+                <Ionicons name={inWishlist ? "star" : "star-outline"} size={24} color="white" />
+                <Text style={styles.actionButtonText}>
+                  {inWishlist ? t('wishlist.removeCard') : t('card.addToWishlist')}
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -552,17 +644,33 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 16,
   },
+  cardName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 4,
   },
   infoLabel: {
-    fontSize: 16,
+    fontSize: 14,
+    marginRight: 8,
   },
   infoValue: {
     fontSize: 16,
-    fontWeight: '500',
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  badge: {
+    fontSize: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   priceSection: {
     width: '100%',

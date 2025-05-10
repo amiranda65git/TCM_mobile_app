@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../lib/auth';
-import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue } from '../lib/supabase';
+import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue, getUserWishlist } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +27,7 @@ export default function HomeScreen() {
   const [totalValue, setTotalValue] = useState(0);
   const [valueVariation, setValueVariation] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
+  const [wishlistCount, setWishlistCount] = useState(0);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -147,6 +148,16 @@ export default function HomeScreen() {
       };
     }, [user, refreshKey, username])
   );
+
+  useEffect(() => {
+    const fetchWishlistCount = async () => {
+      if (user) {
+        const { data } = await getUserWishlist(user.id);
+        setWishlistCount(data.length);
+      }
+    };
+    fetchWishlistCount();
+  }, [user]);
 
   // Load initial data on component mount
   useEffect(() => {
@@ -291,7 +302,7 @@ export default function HomeScreen() {
         <ListItem
           icon={<Ionicons name="heart" size={24} color={colors.secondary} />}
           title={t('home.wishlist')}
-          count={`0 ${t('home.cards')}`}
+          count={`${wishlistCount} ${t(wishlistCount > 1 ? 'home.cards' : 'home.card')}`}
           onPress={() => router.push('../wishlist')}
         />
         <ListItem

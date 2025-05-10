@@ -694,6 +694,170 @@ export const getUserCollectionTotalValue = async (userId: string) => {
   }
 };
 
+// Fonction pour récupérer les détails d'une carte officielle
+export const getOfficialCardDetails = async (cardId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('official_cards')
+      .select('id, name, number, rarity, image_small, image_large')
+      .eq('id', cardId)
+      .single();
+    
+    if (error) {
+      console.error("Erreur lors de la récupération des détails de la carte:", error);
+      return { data: null, error };
+    }
+    
+    return { data, error: null };
+  } catch (error) {
+    console.error("Erreur inattendue lors de la récupération des détails de la carte:", error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour récupérer les prix du marché pour une carte
+export const getMarketPricesForCard = async (cardId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('market_prices')
+      .select('price_low, price_mid, price_high')
+      .eq('card_id', cardId)
+      .order('date', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error("Erreur lors de la récupération des prix du marché:", error);
+      return { data: null, error };
+    }
+    
+    return { data: data || null, error: null };
+  } catch (error) {
+    console.error("Erreur inattendue lors de la récupération des prix du marché:", error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour récupérer les cartes en vente pour une carte officielle
+export const getCardsForSale = async (cardId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id, 
+        user_id, 
+        card_id, 
+        condition, 
+        price, 
+        is_for_sale, 
+        created_at,
+        users:user_id (
+          username, 
+          avatar_url
+        )
+      `)
+      .eq('card_id', cardId)
+      .eq('is_for_sale', true)
+      .order('price', { ascending: true });
+    
+    if (error) {
+      console.error("Erreur lors de la récupération des cartes en vente:", error);
+      return { data: null, error };
+    }
+    
+    // Transformer la structure des données
+    const formattedData = data?.map(card => {
+      const userInfo = card.users || {};
+      return {
+        id: card.id,
+        user_id: card.user_id,
+        card_id: card.card_id,
+        condition: card.condition,
+        price: card.price,
+        is_for_sale: card.is_for_sale,
+        created_at: card.created_at,
+        user: {
+          username: userInfo.username || '',
+          avatar_url: userInfo.avatar_url || ''
+        }
+      };
+    }) || [];
+    
+    return { data: formattedData, error: null };
+  } catch (error) {
+    console.error("Erreur inattendue lors de la récupération des cartes en vente:", error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour ajouter ou retirer une carte de la wishlist
+export const addOrRemoveFromWishlist = async (userId: string, cardId: string) => {
+  try {
+    // Vérifier si la carte est déjà dans la wishlist
+    const { data: existing, error: checkError } = await supabase
+      .from('wishlists')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('card_id', cardId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError;
+    }
+
+    if (existing) {
+      // Si déjà dans la wishlist, on retire
+      const { error: deleteError } = await supabase
+        .from('wishlists')
+        .delete()
+        .eq('user_id', userId)
+        .eq('card_id', cardId);
+      if (deleteError) throw deleteError;
+      return { added: false };
+    } else {
+      // Sinon, on ajoute
+      const { error: insertError } = await supabase
+        .from('wishlists')
+        .insert([{ user_id: userId, card_id: cardId }]);
+      if (insertError) throw insertError;
+      return { added: true };
+    }
+  } catch (error) {
+    console.error('Erreur wishlist:', error);
+    return { error };
+  }
+};
+
+// Fonction pour récupérer la wishlist d'un utilisateur
+export const getUserWishlist = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('wishlists')
+      .select('card_id')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return { data: data?.map(w => w.card_id) || [], error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la wishlist:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour récupérer les alertes de prix d'un utilisateur
+export const getUserPriceAlerts = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('price_alerts')
+      .select('card_id')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return { data: data?.map(a => a.card_id) || [], error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des alertes de prix:', error);
+    return { data: [], error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -712,7 +876,13 @@ const SupabaseService = {
   createUserProfile,
   getUserCardsGroupedByEdition,
   getEditionDetails,
-  getUserCollectionTotalValue
+  getUserCollectionTotalValue,
+  getOfficialCardDetails,
+  getMarketPricesForCard,
+  getCardsForSale,
+  addOrRemoveFromWishlist,
+  getUserWishlist,
+  getUserPriceAlerts
 };
 
 export default SupabaseService; 

@@ -37,11 +37,19 @@ export default {
   wishlist: {
     empty: 'Empty wishlist',
     emptyText: 'Add cards to your wishlist to find them easily here.',
-    addCard: 'Add a card'
+    addCard: 'Add to wishlist',
+    removeCard: 'Remove from wishlist',
+    addCardShort: 'Add',
+    removeCardShort: 'Remove',
   },
   market: {
     empty: 'Market under construction',
-    emptyText: 'This feature will be available soon. Come back later to buy and sell cards.'
+    emptyText: 'This feature will be available soon. Come back later to buy and sell cards.',
+    buyCard: 'Buy a card',
+    cardsForSale: 'Community cards for sale',
+    noCardsForSale: 'No cards for sale at the moment',
+    unknownSeller: 'Unknown seller',
+    buyOnGamezest: 'Buy on GameZest.ch'
   },
   scan: {
     scanCard: 'Scan a card',
@@ -199,6 +207,18 @@ export default {
     updatePrice: 'Update Price',
     cancelSale: 'Cancel Sale',
     alreadyForSale: 'This card is already for sale',
-    currentPrice: 'Current Price'
-  }
+    currentPrice: 'Current Price',
+    removePriceAlert: 'Remove alert',
+    alert: 'Alert'
+  },
+  notifications: {
+    title: 'Notifications',
+    empty: 'You have no notifications at the moment',
+    clearAll: 'Clear all',
+    new: 'New',
+    priceChange: 'Price change',
+    wishlistInterest: 'Wishlist interest',
+    yesterday: 'yesterday',
+    today: 'today',
+  },
 }; 
