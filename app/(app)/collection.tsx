@@ -10,7 +10,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue } from '../lib/supabase';
+import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue, getCollectionPriceVariation } from '../lib/supabase';
 
 interface CardProps {
   id: string;
@@ -66,6 +66,7 @@ export default function CollectionScreen() {
   const [totalCollectionValue, setTotalCollectionValue] = useState(0);
   const [valueVariation, setValueVariation] = useState(0); // Variation en pourcentage
   const [hideValues, setHideValues] = useState(false); // État pour gérer l'affichage/masquage des valeurs
+  const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   
   // États pour les filtres et tri
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -211,12 +212,25 @@ export default function CollectionScreen() {
       }
       
       // Charger la valeur totale de la collection
-      const valueResult = await getUserCollectionTotalValue(user.id);
-      if (!valueResult.error) {
-        setTotalCollectionValue(valueResult.totalValue || 0);
-        // Pour le moment, on met une variation fictive
-        // Dans une version future, on pourrait stocker l'historique des valeurs
-        setValueVariation(Math.random() * 5 - 2.5); // Entre -2.5% et +2.5%
+      const { totalValue: collectionValue, error: valueError } = await getUserCollectionTotalValue(user.id);
+      if (!valueError) {
+        setTotalCollectionValue(collectionValue);
+        
+        // Récupérer la variation de prix réelle de la collection
+        const priceVariationResult = await getCollectionPriceVariation(user.id);
+        if (!priceVariationResult.error) {
+          setValueVariation(priceVariationResult.variation);
+          // Pour le débogage
+          setPriceDetailsDebug({
+            currentTotal: priceVariationResult.currentTotal,
+            previousTotal: priceVariationResult.previousTotal,
+            cardsWithPrices: priceVariationResult.cardsWithPrices
+          });
+          console.log('Variation de prix collection:', priceVariationResult);
+        } else {
+          console.error("Erreur lors du calcul de la variation de prix:", priceVariationResult.error);
+          setValueVariation(0);
+        }
       }
       
       // Charger les cartes groupées par édition
@@ -275,7 +289,14 @@ export default function CollectionScreen() {
 
   // Déterminer la couleur de la variation
   const getVariationColor = (variation: number) => {
-    return variation >= 0 ? colors.success : colors.error;
+    if (variation === 0) return colors.text.secondary; // Gris pour aucune variation
+    return variation > 0 ? colors.success : colors.error;
+  };
+
+  // Format pour afficher la variation
+  const formatVariation = (variation: number) => {
+    if (variation === 0) return "0%";
+    return (variation > 0 ? '+' : '') + variation.toFixed(2) + '%';
   };
 
   // Fonction pour basculer le tri d'une catégorie (maintenant utilise les états temporaires)
@@ -499,7 +520,7 @@ export default function CollectionScreen() {
                   styles.valueChangeText, 
                   { color: getVariationColor(valueVariation) }
                 ]}>
-                  {hideValues ? "***" : (valueVariation >= 0 ? '+' : '') + valueVariation.toFixed(2) + '%'}
+                  {hideValues ? "***" : formatVariation(valueVariation)}
                 </Text>
                 <Text style={[styles.valuePeriod, { color: colors.text.secondary }]}>
                   {t('settings.alerts.lastWeek')}

@@ -519,9 +519,6 @@ export default function EditionDetail() {
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
           {editionDetail.name}
         </Text>
-        <View style={styles.headerRight}>
-          <NotificationIcon color={colors.text.primary} />
-        </View>
       </View>
       
       <ScrollView 

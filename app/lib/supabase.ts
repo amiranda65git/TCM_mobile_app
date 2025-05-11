@@ -575,7 +575,7 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
     
     // Pour chaque carte, on ne garde que le prix le plus récent
     if (marketPricesData) {
-      // On trie d'abord par ID de carte et date (plus récente en premier)
+      // On trie d'abord par ID de carte et date (plus récent en premier)
       marketPricesData.sort((a, b) => {
         if (a.card_id !== b.card_id) {
           return a.card_id.localeCompare(b.card_id);
@@ -691,6 +691,142 @@ export const getUserCollectionTotalValue = async (userId: string) => {
   } catch (error) {
     console.error("Exception lors du calcul de la valeur totale:", error);
     return { totalValue: 0, error };
+  }
+};
+
+// Fonction pour calculer la variation de prix de la collection entre deux dates
+export const getCollectionPriceVariation = async (userId: string) => {
+  try {
+    // 1. Récupérer les cartes de l'utilisateur avec leurs IDs officiels
+    const { data: userCards, error: userCardsError } = await supabase
+      .from('user_cards')
+      .select(`
+        card_id
+      `)
+      .eq('user_id', userId);
+    
+    if (userCardsError) {
+      console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
+      return { variation: 0, error: userCardsError };
+    }
+    
+    if (!userCards || userCards.length === 0) {
+      return { variation: 0, error: null };
+    }
+    
+    // Récupérer les IDs des cartes pour la requête
+    const cardIds = userCards.map(card => card.card_id);
+    
+    // 2. Récupérer la date actuelle et d'il y a une semaine
+    const today = new Date();
+    const lastWeek = new Date();
+    lastWeek.setDate(today.getDate() - 8); // 8 jours en arrière pour avoir une semaine complète
+    
+    const todayStr = today.toISOString().split('T')[0];
+    const lastWeekStr = lastWeek.toISOString().split('T')[0];
+    
+    // 3. Récupérer les prix les plus récents jusqu'à aujourd'hui
+    const { data: currentPrices, error: currentError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid, date')
+      .in('card_id', cardIds)
+      .lte('date', todayStr)
+      .order('date', { ascending: false });
+    
+    if (currentError) {
+      console.error("Erreur lors de la récupération des prix actuels:", currentError);
+      return { variation: 0, error: currentError };
+    }
+    
+    // 4. Récupérer les prix jusqu'à la semaine dernière
+    const { data: previousPrices, error: previousError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid, date')
+      .in('card_id', cardIds)
+      .lte('date', lastWeekStr)
+      .order('date', { ascending: false });
+    
+    if (previousError) {
+      console.error("Erreur lors de la récupération des prix précédents:", previousError);
+      return { variation: 0, error: previousError };
+    }
+    
+    // 5. Calculer la moyenne des prix pour chaque période
+    
+    // Obtenir le prix le plus récent pour chaque carte (période actuelle)
+    const latestPriceByCard = new Map();
+    if (currentPrices) {
+      // Trier par card_id, puis par date (décroissante)
+      currentPrices.sort((a, b) => {
+        if (a.card_id !== b.card_id) return a.card_id.localeCompare(b.card_id);
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      
+      // Prendre le premier prix pour chaque carte (le plus récent)
+      for (const price of currentPrices) {
+        if (!latestPriceByCard.has(price.card_id) && price.price_mid !== null) {
+          latestPriceByCard.set(price.card_id, price.price_mid);
+        }
+      }
+    }
+    
+    // Obtenir le prix le plus récent pour chaque carte (période précédente)
+    const previousPriceByCard = new Map();
+    if (previousPrices) {
+      // Trier par card_id, puis par date (décroissante)
+      previousPrices.sort((a, b) => {
+        if (a.card_id !== b.card_id) return a.card_id.localeCompare(b.card_id);
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+      
+      // Prendre le premier prix pour chaque carte (le plus récent)
+      for (const price of previousPrices) {
+        if (!previousPriceByCard.has(price.card_id) && price.price_mid !== null) {
+          previousPriceByCard.set(price.card_id, price.price_mid);
+        }
+      }
+    }
+    
+    // Calculer la somme des prix actuels et précédents
+    let currentTotal = 0;
+    let previousTotal = 0;
+    let cardsWithBothPrices = 0;
+    
+    for (const cardId of cardIds) {
+      const currentPrice = latestPriceByCard.get(cardId);
+      const previousPrice = previousPriceByCard.get(cardId);
+      
+      if (currentPrice !== undefined) {
+        currentTotal += currentPrice;
+      }
+      
+      if (previousPrice !== undefined) {
+        previousTotal += previousPrice;
+      }
+      
+      if (currentPrice !== undefined && previousPrice !== undefined) {
+        cardsWithBothPrices++;
+      }
+    }
+    
+    // 6. Calculer la variation en pourcentage
+    if (previousTotal === 0 || cardsWithBothPrices === 0) {
+      // Pas assez de données pour calculer une variation
+      return { variation: 0, error: null };
+    }
+    
+    const variation = ((currentTotal - previousTotal) / previousTotal) * 100;
+    
+    return { 
+      variation, 
+      currentTotal,
+      previousTotal,
+      cardsWithPrices: cardsWithBothPrices,
+      error: null 
+    };
+  } catch (error) {
+    console.error("Exception lors du calcul de la variation de prix:", error);
+    return { variation: 0, error };
   }
 };
 
@@ -858,6 +994,326 @@ export const getUserPriceAlerts = async (userId: string) => {
   }
 };
 
+// Fonction pour récupérer les 100 cartes les plus chères (prix_mid le plus récent)
+export const getTopCards = async () => {
+  try {
+    // Récupération des cartes depuis la vue avec un JOIN pour obtenir l'image
+    const { data, error } = await supabase
+      .from('market_card_last')
+      .select(`
+        card_id, 
+        card_name, 
+        price_mid,
+        official_cards:card_id (
+          image_small,
+          edition_id,
+          editions:edition_id (
+            name
+          )
+        )
+      `)
+      .order('price_mid', { ascending: false })
+      .limit(100);
+  
+    
+    // Transformation des données pour ajouter l'image_small
+    const transformedData = data?.map(card => ({
+      card_id: card.card_id,
+      card_name: card.card_name,
+      price_mid: card.price_mid,
+      image_small: card.official_cards?.image_small,
+      edition_name: card.official_cards?.editions?.name
+    }));
+    
+    return { data: transformedData, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des top cartes:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour récupérer les cartes avec la plus forte hausse sur les 2 dernières dates
+export const getTopGainers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('market_card_last2_diff')
+      .select(`
+        card_id, 
+        card_name, 
+        last_price, 
+        prev_price, 
+        diff, 
+        diff_percent,
+        official_cards:card_id (
+          image_small,
+          edition_id,
+          editions:edition_id (
+            name
+          )
+        )
+      `)
+      .order('diff', { ascending: false })
+      .limit(50);
+    
+    if (error) {
+      console.error('Erreur dans getTopGainers:', error);
+      throw error;
+    }
+    
+    // Log des données reçues
+    console.log('Données brutes de getTopGainers:', JSON.stringify(data?.[0], null, 2));
+    
+    // Transformation des données pour ajouter l'image_small
+    const transformedData = data?.map(card => {
+      // Calculer diff et diff_percent si nécessaire
+      let diff = card.diff;
+      let diffPercent = card.diff_percent;
+      
+      // Si diff est null mais que nous avons last_price et prev_price, calculer manuellement
+      if ((diff === null || diff === undefined) && 
+          card.last_price !== null && card.last_price !== undefined &&
+          card.prev_price !== null && card.prev_price !== undefined) {
+        diff = card.last_price - card.prev_price;
+      }
+      
+      // Si diff_percent est null mais que nous avons prev_price, calculer manuellement
+      if ((diffPercent === null || diffPercent === undefined) &&
+          card.prev_price !== null && card.prev_price !== undefined && 
+          card.prev_price !== 0 &&
+          diff !== null && diff !== undefined) {
+        diffPercent = (diff / card.prev_price) * 100;
+      }
+      
+      // Si pas de prix précédent, ne pas calculer de différence
+      if (card.prev_price === null || card.prev_price === undefined) {
+        diff = 0;
+        diffPercent = 0;
+      }
+      
+      const transformed = {
+        card_id: card.card_id,
+        card_name: card.card_name,
+        last_price: card.last_price,
+        prev_price: card.prev_price,
+        diff: diff,
+        diff_percent: diffPercent,
+        image_small: card.official_cards?.image_small,
+        edition_name: card.official_cards?.editions?.name
+      };
+      return transformed;
+    });
+    
+    // Trier à nouveau par différence (descendant) après avoir recalculé les valeurs
+    const sortedData = transformedData?.sort((a, b) => {
+      // Si différence est la même, trier par pourcentage
+      if (b.diff === a.diff) {
+        return (b.diff_percent || 0) - (a.diff_percent || 0);
+      }
+      return (b.diff || 0) - (a.diff || 0);
+    }) || [];
+    
+    // Log des données transformées
+    console.log('Données transformées de getTopGainers:', JSON.stringify(sortedData?.[0], null, 2));
+    
+    return { data: sortedData, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des meilleures hausses:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour récupérer les cartes ayant la plus forte baisse sur les 2 dernières dates
+export const getTopLosers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('market_card_last2_diff')
+      .select(`
+        card_id, 
+        card_name, 
+        last_price, 
+        prev_price, 
+        diff, 
+        diff_percent,
+        official_cards:card_id (
+          image_small,
+          edition_id,
+          editions:edition_id (
+            name
+          )
+        )
+      `)
+      .order('diff', { ascending: true })
+      .limit(50);
+    
+    if (error) {
+      console.error('Erreur dans getTopLosers:', error);
+      throw error;
+    }
+    
+    // Log des données reçues
+    console.log('Données brutes de getTopLosers:', JSON.stringify(data?.[0], null, 2));
+    
+    // Transformation des données pour ajouter l'image_small
+    const transformedData = data?.map(card => {
+      // Calculer diff et diff_percent si nécessaire
+      let diff = card.diff;
+      let diffPercent = card.diff_percent;
+      
+      // Si diff est null mais que nous avons last_price et prev_price, calculer manuellement
+      if ((diff === null || diff === undefined) && 
+          card.last_price !== null && card.last_price !== undefined &&
+          card.prev_price !== null && card.prev_price !== undefined) {
+        diff = card.last_price - card.prev_price;
+      }
+      
+      // Si diff_percent est null mais que nous avons prev_price, calculer manuellement
+      if ((diffPercent === null || diffPercent === undefined) &&
+          card.prev_price !== null && card.prev_price !== undefined && 
+          card.prev_price !== 0 &&
+          diff !== null && diff !== undefined) {
+        diffPercent = (diff / card.prev_price) * 100;
+      }
+      
+      // Si pas de prix précédent, ne pas calculer de différence
+      if (card.prev_price === null || card.prev_price === undefined) {
+        diff = 0;
+        diffPercent = 0;
+      }
+      
+      const transformed = {
+        card_id: card.card_id,
+        card_name: card.card_name,
+        last_price: card.last_price,
+        prev_price: card.prev_price,
+        diff: diff,
+        diff_percent: diffPercent,
+        image_small: card.official_cards?.image_small,
+        edition_name: card.official_cards?.editions?.name
+      };
+      return transformed;
+    });
+    
+    // Trier à nouveau par différence (ascendant) après avoir recalculé les valeurs
+    const sortedData = transformedData?.sort((a, b) => {
+      // Si différence est la même, trier par pourcentage
+      if (a.diff === b.diff) {
+        return (a.diff_percent || 0) - (b.diff_percent || 0);
+      }
+      return (a.diff || 0) - (b.diff || 0);
+    }) || [];
+    
+    // Log des données transformées
+    console.log('Données transformées de getTopLosers:', JSON.stringify(sortedData?.[0], null, 2));
+    
+    return { data: sortedData, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des plus fortes baisses:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour récupérer les cartes surveillées (wishlist + alertes) d'un utilisateur
+export const getWatchedCards = async (userId: string) => {
+  try {
+    // Récupérer les card_id de la wishlist
+    const { data: wishlist, error: wishlistError } = await supabase
+      .from('wishlists')
+      .select('card_id')
+      .eq('user_id', userId);
+    
+    if (wishlistError) {
+      console.error('Erreur lors de la récupération de la wishlist:', wishlistError);
+      return { data: [], error: wishlistError };
+    }
+    
+    // Récupérer les card_id des alertes de prix
+    const { data: alerts, error: alertsError } = await supabase
+      .from('price_alerts')
+      .select('card_id')
+      .eq('user_id', userId);
+    
+    if (alertsError) {
+      console.error('Erreur lors de la récupération des alertes de prix:', alertsError);
+      return { data: [], error: alertsError };
+    }
+    
+    // Combiner les ID de cartes uniques de la wishlist et des alertes
+    const watchedCardIds = new Set<string>();
+    wishlist?.forEach((item: any) => watchedCardIds.add(item.card_id));
+    alerts?.forEach((item: any) => watchedCardIds.add(item.card_id));
+    
+    // Si aucune carte n'est surveillée, retourner un tableau vide
+    if (watchedCardIds.size === 0) {
+      return { data: [], error: null };
+    }
+    
+    // Récupérer les détails des cartes surveillées
+    const { data: cards, error: cardsError } = await supabase
+      .from('official_cards')
+      .select(`
+        id,
+        name,
+        number,
+        rarity,
+        image_small,
+        image_large,
+        edition_id,
+        editions:edition_id (
+          name
+        ),
+        market_prices!market_prices_card_id_fkey(
+          price_low,
+          price_mid,
+          price_high,
+          date
+        )
+      `)
+      .in('id', Array.from(watchedCardIds))
+      .order('name');
+    
+    if (cardsError) {
+      console.error('Erreur lors de la récupération des cartes surveillées:', cardsError);
+      return { data: [], error: cardsError };
+    }
+    
+    // Transformer les données pour supprimer les niveaux imbriqués
+    const transformedCards = cards?.map((card: any) => {
+      // Trouver le prix le plus récent
+      let latestPrice = null;
+      let latestDate = null;
+      
+      if (card.market_prices && card.market_prices.length > 0) {
+        // Trier les prix par date (plus récent en premier)
+        const sortedPrices = [...card.market_prices].sort((a, b) => 
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        
+        latestPrice = sortedPrices[0];
+        latestDate = latestPrice ? new Date(latestPrice.date).toISOString().split('T')[0] : null;
+      }
+      
+      return {
+        card_id: card.id,
+        card_name: card.name,
+        number: card.number,
+        rarity: card.rarity,
+        image_small: card.image_small,
+        image_large: card.image_large,
+        price_low: latestPrice?.price_low,
+        price_mid: latestPrice?.price_mid,
+        price_high: latestPrice?.price_high,
+        last_updated: latestDate,
+        edition_name: card.editions?.name
+      };
+    });
+    
+    return { data: transformedCards, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des cartes surveillées:', error);
+    return { data: [], error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -877,12 +1333,17 @@ const SupabaseService = {
   getUserCardsGroupedByEdition,
   getEditionDetails,
   getUserCollectionTotalValue,
+  getCollectionPriceVariation,
   getOfficialCardDetails,
   getMarketPricesForCard,
   getCardsForSale,
   addOrRemoveFromWishlist,
   getUserWishlist,
-  getUserPriceAlerts
+  getUserPriceAlerts,
+  getTopCards,
+  getTopGainers,
+  getTopLosers,
+  getWatchedCards
 };
 
 export default SupabaseService; 

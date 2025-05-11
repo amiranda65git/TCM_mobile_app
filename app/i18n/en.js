@@ -49,7 +49,16 @@ export default {
     cardsForSale: 'Community cards for sale',
     noCardsForSale: 'No cards for sale at the moment',
     unknownSeller: 'Unknown seller',
-    buyOnGamezest: 'Buy on GameZest.ch'
+    buyOnGamezest: 'Buy on GameZest.ch',
+    tabs: {
+      all: 'All cards',
+      gainers: 'Top gainers',
+      losers: 'Top losers',
+      watched: 'Watched cards'
+    },
+    noWatched: 'No watched cards yet.',
+    globalTrend: 'Global market trend',
+    newCard: 'New card'
   },
   scan: {
     scanCard: 'Scan a card',
@@ -171,7 +180,10 @@ export default {
   general: {
     loading: 'Loading...',
     back: 'Back',
-    common: 'Common'
+    common: 'Common',
+    skip: 'Skip',
+    next: 'Next',
+    getStarted: 'Get Started'
   },
   card: {
     buy: 'Buy',

@@ -103,12 +103,47 @@ export default function MarketPricesScreen() {
     );
   }
   
-  // Préparer les données pour le graphique
-  const chartLabels = priceHistory.slice().reverse().map(item => {
-    const d = new Date(item.date);
-    return d.toLocaleDateString().slice(0, 5); // format court
+  // 1. Récupérer les 10 dernières dates (triées du plus ancien au plus récent)
+  const uniqueDates = Array.from(new Set(
+    priceHistory.map(item => item.date)
+  )).sort(); // du plus ancien au plus récent
+
+  const last10Dates = uniqueDates.slice(-10);
+
+  // 2. Identifier toutes les sources présentes
+  const sources = Array.from(new Set(priceHistory.map(item => item.source)));
+
+  // 3. Palette de couleurs pour les courbes
+  const colorsPalette = [
+    colors.primary,
+    '#FF6384',
+    '#36A2EB',
+    '#FFCE56',
+    '#4BC0C0',
+    '#9966FF',
+    '#FF9F40'
+  ];
+
+  // 4. Préparer les datasets pour chaque source
+  const datasets = sources.map((source, idx) => {
+    const data = last10Dates.map(date => {
+      const record = priceHistory.find(item => item.source === source && item.date === date);
+      return record?.price_mid ?? null;
+    });
+    return {
+      data: data.map(v => v ?? 0),
+      color: () => colorsPalette[idx % colorsPalette.length],
+      strokeWidth: 2,
+      source
+    };
   });
-  const chartData = priceHistory.slice().reverse().map(item => item.price_mid ?? 0);
+
+  // 5. Préparer les labels (dates formatées)
+  const chartLabels = last10Dates.map(dateStr => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString().slice(0, 5);
+  });
+
   const screenWidth = Dimensions.get('window').width - 32;
 
   return (
@@ -139,17 +174,16 @@ export default function MarketPricesScreen() {
       </Text>
       
       {/* Graphique d'évolution du price_mid */}
-      {chartData.length > 1 && (
+      {datasets.length > 0 && (
         <LineChart
           data={{
             labels: chartLabels,
-            datasets: [
-              {
-                data: chartData,
-                color: () => colors.primary, // couleur de la courbe
-                strokeWidth: 2,
-              },
-            ],
+            datasets: datasets.map(ds => ({
+              data: ds.data,
+              color: ds.color,
+              strokeWidth: ds.strokeWidth,
+            })),
+            legend: datasets.map(ds => ds.source.replace('tcgplayer_', '')),
           }}
           width={screenWidth}
           height={180}

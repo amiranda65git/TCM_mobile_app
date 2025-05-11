@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Linking, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Linking, SafeAreaView, Platform, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../lib/auth';
-import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue, getUserWishlist } from '../lib/supabase';
+import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue, getUserWishlist, getCollectionPriceVariation } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const [valueVariation, setValueVariation] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -129,9 +130,22 @@ export default function HomeScreen() {
             const { totalValue: collectionValue, error: valueError } = await getUserCollectionTotalValue(user.id);
             if (!valueError) {
               setTotalValue(collectionValue);
-              // Pour le moment, on utilise une variation fictive
-              // Dans une version future, on pourrait stocker l'historique des valeurs
-              setValueVariation(Math.random() * 5 - 2.5); // Entre -2.5% et +2.5%
+              
+              // Récupérer la variation de prix réelle de la collection
+              const priceVariationResult = await getCollectionPriceVariation(user.id);
+              if (!priceVariationResult.error) {
+                setValueVariation(priceVariationResult.variation);
+                // Pour le débogage
+                setPriceDetailsDebug({
+                  currentTotal: priceVariationResult.currentTotal,
+                  previousTotal: priceVariationResult.previousTotal,
+                  cardsWithPrices: priceVariationResult.cardsWithPrices
+                });
+                console.log('Variation de prix:', priceVariationResult);
+              } else {
+                console.error("Erreur lors du calcul de la variation de prix:", priceVariationResult.error);
+                setValueVariation(0);
+              }
             }
 
           } catch (error) {
@@ -172,7 +186,14 @@ export default function HomeScreen() {
 
   // Déterminer la couleur de la variation
   const getVariationColor = (variation: number) => {
-    return variation >= 0 ? colors.success : colors.error;
+    if (variation === 0) return colors.text.secondary; // Gris pour aucune variation
+    return variation > 0 ? colors.success : colors.error;
+  };
+
+  // Format pour afficher la variation
+  const formatVariation = (variation: number) => {
+    if (variation === 0) return "0%";
+    return (variation > 0 ? '+' : '') + variation.toFixed(2) + '%';
   };
 
   const CollectionCard = () => (
@@ -195,7 +216,7 @@ export default function HomeScreen() {
         styles.percentage, 
         { color: getVariationColor(valueVariation) }
       ]}>
-        {hideValues ? "***" : (valueVariation >= 0 ? '+' : '') + valueVariation.toFixed(2) + '%'}
+        {hideValues ? "***" : formatVariation(valueVariation)}
       </Text>
       <View style={styles.cardsCount}>
         <Text style={[styles.cardsText, { color: colors.text.secondary }]}>
@@ -253,7 +274,18 @@ export default function HomeScreen() {
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <View style={styles.userInfo}>
-            <TouchableOpacity onPress={() => router.push('../settings')}>
+            <TouchableOpacity 
+              onPress={() => router.push('../settings')}
+              onLongPress={async () => {
+                // Fonction cachée pour réinitialiser l'onboarding (utile pour le développement)
+                try {
+                  await AsyncStorage.removeItem('@onboarding_completed');
+                  Alert.alert('Développement', 'État d\'onboarding réinitialisé. Redémarrez l\'application pour voir l\'écran de bienvenue.');
+                } catch (error) {
+                  console.error('Erreur lors de la réinitialisation de l\'onboarding:', error);
+                }
+              }}
+            >
               {avatar ? (
                 <Image
                   source={{ uri: avatar }}
