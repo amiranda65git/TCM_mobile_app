@@ -90,8 +90,10 @@ export default function WelcomeScreen() {
       <TouchableWithoutFeedback onPress={handleNext}>
         <View style={styles.slide}>
           <Image source={item.image} style={styles.image} resizeMode="cover" />
-          <View style={styles.textOverlay}>
-            <Text style={[styles.text, { color: Colors.background }]}>{t(item.textKey)}</Text>
+          <View style={styles.textContainer}>
+            <Text style={[styles.text, { color: Colors.primary }]}>
+              {t(item.textKey).toUpperCase()}
+            </Text>
           </View>
         </View>
       </TouchableWithoutFeedback>
@@ -101,12 +103,6 @@ export default function WelcomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      
-      <View style={styles.skipContainer}>
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={[styles.skipText, { color: colors.text.secondary }]}>{t('general.skip')}</Text>
-        </TouchableOpacity>
-      </View>
       
       <Carousel
         ref={carouselRef}
@@ -124,7 +120,7 @@ export default function WelcomeScreen() {
             key={i}
             style={[
               styles.paginationDot,
-              { backgroundColor: i === activeIndex ? Colors.background : 'rgba(255, 255, 255, 0.5)' }
+              { backgroundColor: i === activeIndex ? Colors.primary : 'rgba(255, 255, 255, 0.5)' }
             ]}
           />
         ))}
@@ -136,17 +132,6 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  skipContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40 : 40,
-    right: 16,
-    zIndex: 10,
-  },
-  skipText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
   },
   slide: {
     flex: 1,
@@ -161,24 +146,26 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
   },
-  textOverlay: {
+  textContainer: {
     position: 'absolute',
-    bottom: 120,
+    top: Platform.OS === 'android' ? StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40 : 40,
     left: 0,
     right: 0,
     padding: 20,
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingVertical: 30,
+    paddingVertical: 10,
+    zIndex: 10,
   },
   text: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '900',
     textAlign: 'center',
-    color: Colors.background,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    letterSpacing: 1.5,
+    lineHeight: 42,
+    marginHorizontal: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   pagination: {
     flexDirection: 'row',
@@ -193,7 +180,5 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     marginHorizontal: 8,
-    borderWidth: 1,
-    borderColor: 'white',
   },
 }); 

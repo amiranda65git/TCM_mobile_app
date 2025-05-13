@@ -23,7 +23,17 @@ export default {
       bundleIdentifier: 'com.tcmarket.app',
       infoPlist: {
         NSCameraUsageDescription: "Cette application a besoin d'accéder à votre caméra pour scanner les cartes Pokémon",
-        NSPhotoLibraryUsageDescription: "Cette application a besoin d'accéder à votre galerie pour sauvegarder les photos de cartes"
+        NSPhotoLibraryUsageDescription: "Cette application a besoin d'accéder à votre galerie pour sauvegarder les photos de cartes",
+        CFBundleURLTypes: [
+          {
+            CFBundleURLSchemes: ["tcmarket"]
+          }
+        ]
+      },
+      config: {
+        googleSignIn: {
+          reservedClientId: "com.googleusercontent.apps.728582124442-snb5ep3q7fq3liomedjkq87d3emf9s0n.apps.googleusercontent.com"
+        }
       }
     },
     android: {
@@ -36,6 +46,18 @@ export default {
         'CAMERA',
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE'
+      ],
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            {
+              scheme: "tcmarket"
+            }
+          ],
+          category: ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     web: {

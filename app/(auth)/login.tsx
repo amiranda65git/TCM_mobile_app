@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,10 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Linking
 } from 'react-native';
 import { router } from 'expo-router';
-import { signIn } from '../lib/supabase';
+import { signIn, signInWithGoogle, supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function Login() {
@@ -20,6 +21,52 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  // Écouter les événements d'authentification
+  useEffect(() => {
+    // S'abonner aux changements d'état de l'authentification
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          console.log('Utilisateur connecté via OAuth');
+          // Rediriger vers la page d'accueil
+          router.replace('/(app)/home');
+        }
+      }
+    );
+
+    // Configurer le gestionnaire de deep links
+    const handleDeepLink = async (event: { url: string }) => {
+      const url = event.url;
+      console.log('Deep link reçu:', url);
+      
+      // Vérifier si le deep link est lié à l'authentification
+      if (url && url.includes('auth/callback')) {
+        setIsGoogleLoading(true);
+        // Attendre un peu pour que Supabase traite le deep link
+        setTimeout(() => {
+          setIsGoogleLoading(false);
+        }, 2000);
+      }
+    };
+
+    // Ajouter l'écouteur de deep link
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Vérifier si l'application a été ouverte via un deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    // Nettoyage lors du démontage du composant
+    return () => {
+      authListener.subscription.unsubscribe();
+      subscription.remove();
+    };
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -41,9 +88,29 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    Alert.alert("Google", "Connexion via Google à implémenter");
-    // Fonctionnalité à implémenter
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true);
+      const { data, error } = await signInWithGoogle();
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data?.url) {
+        // Ouvrir l'URL d'authentification Google dans le navigateur
+        await Linking.openURL(data.url);
+      } else {
+        setIsGoogleLoading(false);
+      }
+    } catch (error: any) {
+      setIsGoogleLoading(false);
+      Alert.alert(
+        "Erreur de connexion", 
+        "Erreur lors de la connexion avec Google. Veuillez réessayer."
+      );
+      console.error("Erreur Google Login:", error);
+    }
   };
 
   const handleAppleLogin = () => {
@@ -111,9 +178,19 @@ export default function Login() {
             <View style={styles.dividerLine} />
           </View>
           
-          <TouchableOpacity style={styles.socialButton} onPress={handleGoogleLogin}>
-            <Ionicons name="logo-google" size={20} color="#DB4437" />
-            <Text style={styles.socialButtonText}>Continuer avec Google</Text>
+          <TouchableOpacity 
+            style={[styles.socialButton, isGoogleLoading && styles.buttonDisabled]} 
+            onPress={handleGoogleLogin}
+            disabled={isGoogleLoading}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator color="#DB4437" size="small" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color="#DB4437" />
+                <Text style={styles.socialButtonText}>Continuer avec Google</Text>
+              </>
+            )}
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.socialButton} onPress={handleAppleLogin}>

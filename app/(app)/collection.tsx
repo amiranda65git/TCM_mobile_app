@@ -129,42 +129,69 @@ export default function CollectionScreen() {
     }
   }, [filterModalVisible]);
 
-  // Appliquer les filtres et tris
-  useEffect(() => {
-    if (editions.length === 0) return;
-
-    let result = [...editions];
-
-    // Filtrer par nom d'édition
-    if (editionNameFilter.trim() !== '') {
-      result = result.filter(edition => 
-        edition.name.toLowerCase().includes(editionNameFilter.toLowerCase())
-      );
+  // Appliquer les filtres avec les valeurs fournies
+  const applyFiltersWithValues = (editionFilter: string, pokemonFilter: string, sortOption: SortOption) => {
+    console.log('Applying filters with values:', editionFilter, pokemonFilter);
+    
+    // Mettre à jour les états de filtres appliqués
+    setEditionNameFilter(editionFilter);
+    setPokemonNameFilter(pokemonFilter);
+    setCurrentSortOption(sortOption);
+    if (sortOption.includes('asc')) {
+      setSortDirection('asc');
+    } else {
+      setSortDirection('desc');
     }
-
+    
+    // Déterminer la catégorie de tri
+    if (sortOption.includes('name')) {
+      setCurrentSortCategory('name');
+    } else if (sortOption.includes('date')) {
+      setCurrentSortCategory('date');
+    } else if (sortOption.includes('value')) {
+      setCurrentSortCategory('value');
+    } else if (sortOption.includes('cards')) {
+      setCurrentSortCategory('cards');
+    }
+    
+    // Appliquer les filtres immédiatement
+    if (editions.length === 0) return;
+    
+    let result = [...editions];
+    console.log('Total editions before filtering:', result.length);
+    
+    // Filtrer par nom d'édition
+    if (editionFilter.trim() !== '') {
+      console.log('Filtering by edition name:', editionFilter);
+      result = result.filter(edition => 
+        edition.name.toLowerCase().includes(editionFilter.toLowerCase())
+      );
+      console.log('Editions after name filter:', result.length);
+    }
+    
     // Filtrer par nom de Pokémon dans les cartes
-    if (pokemonNameFilter.trim() !== '') {
+    if (pokemonFilter.trim() !== '') {
+      console.log('Filtering by pokemon name:', pokemonFilter);
       result = result.filter(edition => 
         edition.cards.some(card => 
-          card.card_name.toLowerCase().includes(pokemonNameFilter.toLowerCase())
+          card.card_name.toLowerCase().includes(pokemonFilter.toLowerCase())
         )
       );
+      console.log('Editions after pokemon filter:', result.length);
     }
-
+    
     // Appliquer le tri
-    result = sortEditions(result, currentSortOption);
-
+    result = sortEditions(result, sortOption);
+    
+    console.log('Final filtered editions count:', result.length);
+    // Mettre à jour les éditions filtrées et fermer le modal
     setFilteredEditions(result);
-  }, [editions, editionNameFilter, pokemonNameFilter, currentSortOption]);
-
-  // Appliquer les filtres temporaires lors du clic sur "Appliquer"
-  const applyFilters = () => {
-    setEditionNameFilter(tempEditionNameFilter);
-    setPokemonNameFilter(tempPokemonNameFilter);
-    setCurrentSortOption(tempSortOption);
-    setCurrentSortCategory(tempSortCategory);
-    setSortDirection(tempSortDirection);
     setFilterModalVisible(false);
+  };
+  
+  // Ancienne fonction applyFilters pour compatibilité
+  const applyFilters = () => {
+    applyFiltersWithValues(tempEditionNameFilter, tempPokemonNameFilter, tempSortOption);
   };
 
   // Fonction de tri des éditions
@@ -236,8 +263,9 @@ export default function CollectionScreen() {
       // Charger les cartes groupées par édition
       const collectionResult = await getUserCardsGroupedByEdition(user.id);
       if (!collectionResult.error && collectionResult.data) {
-        setEditions(collectionResult.data);
-        setFilteredEditions(collectionResult.data);
+        const sortedData = sortEditions(collectionResult.data, currentSortOption);
+        setEditions(sortedData);
+        setFilteredEditions(sortedData);
       }
     } catch (error) {
       console.error('Erreur lors du chargement des données de collection:', error);
@@ -347,11 +375,15 @@ export default function CollectionScreen() {
 
   // Fonction pour réinitialiser les filtres appliqués
   const resetAppliedFilters = () => {
-    setEditionNameFilter('');
-    setPokemonNameFilter('');
-    setCurrentSortOption(SortOption.NAME_DESC);
-    setCurrentSortCategory('name');
-    setSortDirection('desc');
+    // Réinitialiser les filtres appliqués
+    applyFiltersWithValues('', '', SortOption.NAME_DESC);
+    
+    // Réinitialiser aussi les filtres temporaires
+    setTempEditionNameFilter('');
+    setTempPokemonNameFilter('');
+    setTempSortOption(SortOption.NAME_DESC);
+    setTempSortCategory('name');
+    setTempSortDirection('desc');
   };
 
   // Composant pour une option de tri (utilise maintenant les états temporaires)
@@ -384,99 +416,133 @@ export default function CollectionScreen() {
   };
 
   // Modal de filtres (mise à jour pour utiliser les états temporaires)
-  const FilterModal = () => (
-    <Modal
-      visible={filterModalVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setFilterModalVisible(false)}
-      statusBarTranslucent={true}
-      hardwareAccelerated={true}
-    >
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+  const FilterModal = () => {
+    const [localEditionFilter, setLocalEditionFilter] = useState(tempEditionNameFilter);
+    const [localPokemonFilter, setLocalPokemonFilter] = useState(tempPokemonNameFilter);
+    
+    // Réinitialiser les valeurs locales quand le modal s'ouvre
+    useEffect(() => {
+      if (filterModalVisible) {
+        setLocalEditionFilter(tempEditionNameFilter);
+        setLocalPokemonFilter(tempPokemonNameFilter);
+      }
+    }, [filterModalVisible]);
+    
+    // Mettre à jour les valeurs temporaires seulement quand on applique
+    const handleApply = () => {
+      console.log('handleApply - Valeurs locales:', localEditionFilter, localPokemonFilter);
+      
+      // Mettre à jour les états temporaires (pour maintenir la cohérence)
+      setTempEditionNameFilter(localEditionFilter);
+      setTempPokemonNameFilter(localPokemonFilter);
+      
+      // Appeler directement applyFiltersWithValues avec les valeurs locales
+      applyFiltersWithValues(localEditionFilter, localPokemonFilter, tempSortOption);
+    };
+    
+    // Réinitialiser les valeurs locales
+    const handleReset = () => {
+      setLocalEditionFilter('');
+      setLocalPokemonFilter('');
+      setTempSortOption(SortOption.NAME_DESC);
+      setTempSortCategory('name');
+      setTempSortDirection('desc');
+    };
+    
+    return (
+      <Modal
+        visible={filterModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setFilterModalVisible(false)}
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, { color: colors.text.primary }]}>Filtres et tri</Text>
-                  <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-                    <Ionicons name="close" size={24} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView 
-                  style={styles.modalScrollContent} 
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
-                >
-                  <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Filtres</Text>
-                  
-                  <View style={styles.filterSection}>
-                    <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>Nom de l'édition</Text>
-                    <TextInput
-                      style={[styles.filterInput, { backgroundColor: colors.background, color: colors.text.primary, borderColor: colors.border }]}
-                      value={tempEditionNameFilter}
-                      onChangeText={setTempEditionNameFilter}
-                      placeholder="Rechercher une édition..."
-                      placeholderTextColor={colors.text.secondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      blurOnSubmit={false}
-                    />
-                  </View>
-                  
-                  <View style={styles.filterSection}>
-                    <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>Nom du Pokémon</Text>
-                    <TextInput
-                      style={[styles.filterInput, { backgroundColor: colors.background, color: colors.text.primary, borderColor: colors.border }]}
-                      value={tempPokemonNameFilter}
-                      onChangeText={setTempPokemonNameFilter}
-                      placeholder="Rechercher un Pokémon..."
-                      placeholderTextColor={colors.text.secondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      blurOnSubmit={false}
-                    />
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: colors.text.primary }]}>Filtres et tri</Text>
+                    <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                      <Ionicons name="close" size={24} color={colors.text.secondary} />
+                    </TouchableOpacity>
                   </View>
 
-                  <Text style={[styles.sectionTitle, { color: colors.text.primary, marginTop: 20 }]}>Trier par</Text>
-                  
-                  <View style={styles.sortOptionsContainer}>
-                    <SortOptionItem title="Nom" category="name" icon="sort-by-alpha" />
-                    <SortOptionItem title="Date de sortie" category="date" icon="calendar-today" />
-                    <SortOptionItem title="Valeur" category="value" icon="attach-money" />
-                    <SortOptionItem title="Nombre de cartes" category="cards" icon="format-list-numbered" />
-                  </View>
-                </ScrollView>
-
-                <View style={styles.modalFooter}>
-                  <TouchableOpacity 
-                    style={[styles.resetButton, { borderColor: colors.border }]} 
-                    onPress={resetTempFilters}
+                  <ScrollView 
+                    style={styles.modalScrollContent} 
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
                   >
-                    <Text style={[styles.resetButtonText, { color: colors.text.primary }]}>Réinitialiser</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.applyButton, { backgroundColor: colors.primary }]} 
-                    onPress={applyFilters}
-                  >
-                    <Text style={styles.applyButtonText}>Appliquer</Text>
-                  </TouchableOpacity>
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Filtres</Text>
+                    
+                    <View style={styles.filterSection}>
+                      <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>Nom de l'édition</Text>
+                      <TextInput
+                        style={[styles.filterInput, { backgroundColor: colors.background, color: colors.text.primary, borderColor: colors.border }]}
+                        value={localEditionFilter}
+                        onChangeText={setLocalEditionFilter}
+                        placeholder="Rechercher une édition..."
+                        placeholderTextColor={colors.text.secondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        blurOnSubmit={false}
+                      />
+                    </View>
+                    
+                    <View style={styles.filterSection}>
+                      <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>Nom du Pokémon</Text>
+                      <TextInput
+                        style={[styles.filterInput, { backgroundColor: colors.background, color: colors.text.primary, borderColor: colors.border }]}
+                        value={localPokemonFilter}
+                        onChangeText={setLocalPokemonFilter}
+                        placeholder="Rechercher un Pokémon..."
+                        placeholderTextColor={colors.text.secondary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        blurOnSubmit={false}
+                      />
+                    </View>
+
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary, marginTop: 20 }]}>Trier par</Text>
+                    
+                    <View style={styles.sortOptionsContainer}>
+                      <SortOptionItem title="Nom" category="name" icon="sort-by-alpha" />
+                      <SortOptionItem title="Date de sortie" category="date" icon="calendar-today" />
+                      <SortOptionItem title="Valeur" category="value" icon="attach-money" />
+                      <SortOptionItem title="Nombre de cartes" category="cards" icon="format-list-numbered" />
+                    </View>
+                  </ScrollView>
+
+                  <View style={styles.modalFooter}>
+                    <TouchableOpacity 
+                      style={[styles.resetButton, { borderColor: colors.border }]} 
+                      onPress={handleReset}
+                    >
+                      <Text style={[styles.resetButtonText, { color: colors.text.primary }]}>Réinitialiser</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.applyButton, { backgroundColor: colors.primary }]} 
+                      onPress={handleApply}
+                    >
+                      <Text style={styles.applyButtonText}>Appliquer</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  };
   
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

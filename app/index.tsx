@@ -23,9 +23,6 @@ export default function Index() {
       } finally {
         setCheckingOnboarding(false);
       }
-
-      //todo : A supprimer après test
-      setOnboardingCompleted(true);
     }
     
     checkOnboardingStatus();

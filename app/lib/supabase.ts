@@ -6,6 +6,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+
+// Types pour les relations Supabase
+interface UserInfo {
+  username: string;
+  avatar_url: string;
+}
+
+interface Edition {
+  name: string;
+}
+
+interface OfficialCard {
+  image_small: string;
+  edition_id: string;
+  editions: Edition;
+}
 
 // Configuration de Supabase
 const supabaseUrl = 'https://dzbdoptsnbonimwunwva.supabase.co';
@@ -903,7 +920,14 @@ export const getCardsForSale = async (cardId: string) => {
     
     // Transformer la structure des données
     const formattedData = data?.map(card => {
-      const userInfo = card.users || {};
+      // Vérifier si users est un objet ou un tableau et extraire les données en conséquence
+      let userInfo: UserInfo;
+      if (Array.isArray(card.users)) {
+        userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
+      } else {
+        userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
+      }
+      
       return {
         id: card.id,
         user_id: card.user_id,
@@ -1017,13 +1041,18 @@ export const getTopCards = async () => {
   
     
     // Transformation des données pour ajouter l'image_small
-    const transformedData = data?.map(card => ({
-      card_id: card.card_id,
-      card_name: card.card_name,
-      price_mid: card.price_mid,
-      image_small: card.official_cards?.image_small,
-      edition_name: card.official_cards?.editions?.name
-    }));
+    const transformedData = data?.map(card => {
+      // Extraire les données de official_cards de manière sûre
+      const officialCard = card.official_cards as unknown as OfficialCard;
+      
+      return {
+        card_id: card.card_id,
+        card_name: card.card_name,
+        price_mid: card.price_mid,
+        image_small: officialCard?.image_small,
+        edition_name: officialCard?.editions?.name
+      };
+    });
     
     return { data: transformedData, error: null };
   } catch (error) {
@@ -1065,6 +1094,9 @@ export const getTopGainers = async () => {
     
     // Transformation des données pour ajouter l'image_small
     const transformedData = data?.map(card => {
+      // Extraire les données de official_cards de manière sûre
+      const officialCard = card.official_cards as unknown as OfficialCard;
+      
       // Calculer diff et diff_percent si nécessaire
       let diff = card.diff;
       let diffPercent = card.diff_percent;
@@ -1090,17 +1122,16 @@ export const getTopGainers = async () => {
         diffPercent = 0;
       }
       
-      const transformed = {
+      return {
         card_id: card.card_id,
         card_name: card.card_name,
         last_price: card.last_price,
         prev_price: card.prev_price,
         diff: diff,
         diff_percent: diffPercent,
-        image_small: card.official_cards?.image_small,
-        edition_name: card.official_cards?.editions?.name
+        image_small: officialCard?.image_small,
+        edition_name: officialCard?.editions?.name
       };
-      return transformed;
     });
     
     // Trier à nouveau par différence (descendant) après avoir recalculé les valeurs
@@ -1155,6 +1186,9 @@ export const getTopLosers = async () => {
     
     // Transformation des données pour ajouter l'image_small
     const transformedData = data?.map(card => {
+      // Extraire les données de official_cards de manière sûre
+      const officialCard = card.official_cards as unknown as OfficialCard;
+      
       // Calculer diff et diff_percent si nécessaire
       let diff = card.diff;
       let diffPercent = card.diff_percent;
@@ -1180,17 +1214,16 @@ export const getTopLosers = async () => {
         diffPercent = 0;
       }
       
-      const transformed = {
+      return {
         card_id: card.card_id,
         card_name: card.card_name,
         last_price: card.last_price,
         prev_price: card.prev_price,
         diff: diff,
         diff_percent: diffPercent,
-        image_small: card.official_cards?.image_small,
-        edition_name: card.official_cards?.editions?.name
+        image_small: officialCard?.image_small,
+        edition_name: officialCard?.editions?.name
       };
-      return transformed;
     });
     
     // Trier à nouveau par différence (ascendant) après avoir recalculé les valeurs
@@ -1314,6 +1347,30 @@ export const getWatchedCards = async (userId: string) => {
   }
 };
 
+// Fonction pour se connecter avec Google
+export const signInWithGoogle = async () => {
+  try {
+    // Démarrage de l'authentification OAuth avec Google
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: Platform.OS === 'web' ? window.location.origin : undefined,
+        skipBrowserRedirect: true
+      }
+    });
+
+    if (error) {
+      console.error('Erreur lors de la connexion avec Google:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error('Erreur inattendue lors de la connexion avec Google:', error);
+    return { data: null, error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -1343,7 +1400,8 @@ const SupabaseService = {
   getTopCards,
   getTopGainers,
   getTopLosers,
-  getWatchedCards
+  getWatchedCards,
+  signInWithGoogle
 };
 
 export default SupabaseService; 

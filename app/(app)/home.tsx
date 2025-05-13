@@ -74,7 +74,7 @@ export default function HomeScreen() {
         if (user) {
           try {
             // Vérifier si le username a été mis à jour
-            const usernameUpdated = await AsyncStorage.getItem('@username_updated');
+         /*   const usernameUpdated = await AsyncStorage.getItem('@username_updated');
             if (usernameUpdated === 'true') {
               // Réinitialiser le flag
               await AsyncStorage.removeItem('@username_updated');
@@ -82,7 +82,7 @@ export default function HomeScreen() {
               // Force un rafraîchissement en incrémentant la clé
               setRefreshKey(prev => prev + 1);
             }
-            
+          */ 
             // Vérifier si la langue a changé
             const languageChanged = await AsyncStorage.getItem('@language_changed');
             if (languageChanged === 'true') {
