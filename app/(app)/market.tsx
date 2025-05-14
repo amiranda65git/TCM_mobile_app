@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Image, TextInput, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards } from '../lib/supabase';
+import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchCards } from '../lib/supabase';
 import { LineChart } from 'react-native-chart-kit';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
@@ -105,6 +105,16 @@ export default function MarketScreen() {
   const { user } = useAuth();
   const [watched, setWatched] = useState<any[]>([]);
   const [watchedLoading, setWatchedLoading] = useState(true);
+  
+  // État pour la recherche
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const [filteredCards, setFilteredCards] = useState<any[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterName, setFilterName] = useState('');
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -178,11 +188,21 @@ export default function MarketScreen() {
     if (index === 0) {
       setAllLoading(true);
       getTopCards().then(({ data }) => {
-        setAllCards(data || []);
+        const cards = data || [];
+        setAllCards(cards);
+        
+        // Si un filtre est actif, appliquer le filtre aux cartes
+        if (isFiltering && filterName) {
+          const filtered = cards.filter(card => 
+            card.card_name.toLowerCase().includes(filterName.toLowerCase())
+          );
+          setFilteredCards(filtered);
+        }
+        
         setAllLoading(false);
       });
     }
-  }, [index, refreshKey]);
+  }, [index, refreshKey, isFiltering, filterName]);
 
   useEffect(() => {
     if (index === 1) {
@@ -192,10 +212,19 @@ export default function MarketScreen() {
         // Utiliser la fonction de nettoyage avant de définir les données
         const cleanData = sanitizeNumericData(data || []);
         setGainers(cleanData);
+        
+        // Si un filtre est actif, appliquer le filtre aux cartes
+        if (isFiltering && filterName) {
+          const filtered = cleanData.filter(card => 
+            card.card_name.toLowerCase().includes(filterName.toLowerCase())
+          );
+          setFilteredCards(filtered);
+        }
+        
         setGainersLoading(false);
       });
     }
-  }, [index, refreshKey]);
+  }, [index, refreshKey, isFiltering, filterName]);
 
   useEffect(() => {
     if (index === 2) {
@@ -205,149 +234,309 @@ export default function MarketScreen() {
         // Utiliser la fonction de nettoyage avant de définir les données
         const cleanData = sanitizeNumericData(data || []);
         setLosers(cleanData);
+        
+        // Si un filtre est actif, appliquer le filtre aux cartes
+        if (isFiltering && filterName) {
+          const filtered = cleanData.filter(card => 
+            card.card_name.toLowerCase().includes(filterName.toLowerCase())
+          );
+          setFilteredCards(filtered);
+        }
+        
         setLosersLoading(false);
       });
     }
-  }, [index, refreshKey]);
+  }, [index, refreshKey, isFiltering, filterName]);
 
   useEffect(() => {
     if (index === 3 && user?.id) {
       setWatchedLoading(true);
       getWatchedCards(user.id).then(({ data }) => {
-        setWatched(data || []);
+        const watchedData = data || [];
+        setWatched(watchedData);
+        
+        // Si un filtre est actif, appliquer le filtre aux cartes
+        if (isFiltering && filterName) {
+          const filtered = watchedData.filter(card => 
+            card.card_name.toLowerCase().includes(filterName.toLowerCase())
+          );
+          setFilteredCards(filtered);
+        }
+        
         setWatchedLoading(false);
       });
     }
-  }, [index, refreshKey, user?.id]);
+  }, [index, refreshKey, user?.id, isFiltering, filterName]);
+
+  // Nouvel effet pour la recherche
+  useEffect(() => {
+    const delaySearch = setTimeout(async () => {
+      if (searchQuery.trim().length >= 2) {
+        setIsSearching(true);
+        const { data, error } = await searchCards(searchQuery);
+        if (!error && data) {
+          setSearchResults(data);
+        } else {
+          setSearchResults([]);
+        }
+        setIsSearching(false);
+        setShowSuggestions(true);
+      } else {
+        setSearchResults([]);
+        setShowSuggestions(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(delaySearch);
+  }, [searchQuery]);
+
+  // Fonction qui filtre les cartes par nom au lieu d'ouvrir la page de détail
+  const handleCardSelect = (cardName: string) => {
+    setFilterName(cardName);
+    setIsFiltering(true);
+    setSearchQuery('');
+    setShowSuggestions(false);
+    Keyboard.dismiss();
+    
+    // Filtrer les cartes en fonction de l'onglet actif
+    let cardsToFilter;
+    switch (index) {
+      case 0:
+        cardsToFilter = allCards;
+        break;
+      case 1:
+        cardsToFilter = gainers;
+        break;
+      case 2:
+        cardsToFilter = losers;
+        break;
+      case 3:
+        cardsToFilter = watched;
+        break;
+      default:
+        cardsToFilter = allCards;
+    }
+    
+    const filtered = cardsToFilter.filter(card => 
+      card.card_name.toLowerCase().includes(cardName.toLowerCase())
+    );
+    setFilteredCards(filtered);
+  };
+
+  // Fonction pour effacer le filtre
+  const clearFilter = () => {
+    setIsFiltering(false);
+    setFilterName('');
+    setFilteredCards([]);
+  };
 
   const screenWidth = Dimensions.get('window').width - 32;
 
-  // Placeholders pour chaque onglet
+  // Placeholders pour chaque onglet avec prise en compte du filtrage
   const AllCardsRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
       {allLoading ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
-        <FlatList
-          data={allCards}
-          keyExtractor={item => item.card_id}
-          renderItem={({ item }) => (
-            <CardListItem 
-              card={item} 
-              colors={colors} 
-              onPress={() => router.push(`/screens/card/${item.card_id}`)}
-            />
+        <>
+          {isFiltering && (
+            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
+              <Text style={{ color: colors.text.primary, flex: 1 }}>
+                {t('market.filteredBy')}: {filterName}
+              </Text>
+              <TouchableOpacity onPress={clearFilter}>
+                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           )}
-          contentContainerStyle={{ paddingBottom: 120 }}
-        />
+          <FlatList
+            data={isFiltering ? filteredCards : allCards}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <CardListItem 
+                card={item} 
+                colors={colors} 
+                onPress={() => router.push(`/screens/card/${item.card_id}`)}
+              />
+            )}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            ListEmptyComponent={
+              isFiltering ? (
+                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                  {t('market.noFilterResults')}
+                </Text>
+              ) : null
+            }
+          />
+        </>
       )}
     </View>
   );
+  
   const GainersRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
       {gainersLoading ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
-        <FlatList
-          data={gainers}
-          keyExtractor={item => item.card_id}
-          renderItem={({ item }) => (
-            <CardListItem 
-              card={{ ...item, price_mid: item.last_price }} 
-              colors={colors} 
-              onPress={() => router.push(`/screens/card/${item.card_id}`)}
-            >
-              <View style={{ alignItems: 'flex-end' }}>
-                {(item.diff === 0 && item.prev_price === null) ? (
-                  <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
-                    {t('market.newCard')}
-                  </Text>
-                ) : (
-                  <>
-                    <Text style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
-                      {typeof item.diff === 'number' ? 
-                        `${item.diff > 0 ? '+' : ''}${item.diff.toFixed(2)} €` : 
-                        '+0.00 €'}
-                    </Text>
-                    {item.diff_percent !== 0 && (
-                      <Text style={{ color: '#2ecc71', fontSize: 11, marginLeft: 8 }}>
-                        {typeof item.diff_percent === 'number' ? 
-                          `${item.diff_percent > 0 ? '+' : ''}${item.diff_percent.toFixed(2)}%` : 
-                          '+0.00%'}
-                      </Text>
-                    )}
-                  </>
-                )}
-              </View>
-            </CardListItem>
+        <>
+          {isFiltering && (
+            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
+              <Text style={{ color: colors.text.primary, flex: 1 }}>
+                {t('market.filteredBy')}: {filterName}
+              </Text>
+              <TouchableOpacity onPress={clearFilter}>
+                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           )}
-          contentContainerStyle={{ paddingBottom: 120 }}
-        />
+          <FlatList
+            data={isFiltering ? filteredCards : gainers}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <CardListItem 
+                card={{ ...item, price_mid: item.last_price }} 
+                colors={colors} 
+                onPress={() => router.push(`/screens/card/${item.card_id}`)}
+              >
+                <View style={{ alignItems: 'flex-end' }}>
+                  {(item.diff === 0 && item.prev_price === null) ? (
+                    <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
+                      {t('market.newCard')}
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
+                        {typeof item.diff === 'number' ? 
+                          `${item.diff > 0 ? '+' : ''}${item.diff.toFixed(2)} €` : 
+                          '+0.00 €'}
+                      </Text>
+                      {item.diff_percent !== 0 && (
+                        <Text style={{ color: '#2ecc71', fontSize: 11, marginLeft: 8 }}>
+                          {typeof item.diff_percent === 'number' ? 
+                            `${item.diff_percent > 0 ? '+' : ''}${item.diff_percent.toFixed(2)}%` : 
+                            '+0.00%'}
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              </CardListItem>
+            )}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            ListEmptyComponent={
+              isFiltering ? (
+                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                  {t('market.noFilterResults')}
+                </Text>
+              ) : null
+            }
+          />
+        </>
       )}
     </View>
   );
+  
   const LosersRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
       {losersLoading ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
-        <FlatList
-          data={losers}
-          keyExtractor={item => item.card_id}
-          renderItem={({ item }) => (
-            <CardListItem 
-              card={{ ...item, price_mid: item.last_price }} 
-              colors={colors} 
-              onPress={() => router.push(`/screens/card/${item.card_id}`)}
-            >
-              <View style={{ alignItems: 'flex-end' }}>
-                {(item.diff === 0 && item.prev_price === null) ? (
-                  <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
-                    {t('market.newCard')}
-                  </Text>
-                ) : (
-                  <>
-                    <Text style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
-                      {typeof item.diff === 'number' ? 
-                        `${item.diff.toFixed(2)} €` : 
-                        '0.00 €'}
-                    </Text>
-                    {item.diff_percent !== 0 && (
-                      <Text style={{ color: '#e74c3c', fontSize: 11, marginLeft: 8 }}>
-                        {typeof item.diff_percent === 'number' ? 
-                          `${item.diff_percent.toFixed(2)}%` : 
-                          '0.00%'}
-                      </Text>
-                    )}
-                  </>
-                )}
-              </View>
-            </CardListItem>
+        <>
+          {isFiltering && (
+            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
+              <Text style={{ color: colors.text.primary, flex: 1 }}>
+                {t('market.filteredBy')}: {filterName}
+              </Text>
+              <TouchableOpacity onPress={clearFilter}>
+                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           )}
-          contentContainerStyle={{ paddingBottom: 120 }}
-        />
+          <FlatList
+            data={isFiltering ? filteredCards : losers}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <CardListItem 
+                card={{ ...item, price_mid: item.last_price }} 
+                colors={colors} 
+                onPress={() => router.push(`/screens/card/${item.card_id}`)}
+              >
+                <View style={{ alignItems: 'flex-end' }}>
+                  {(item.diff === 0 && item.prev_price === null) ? (
+                    <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
+                      {t('market.newCard')}
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
+                        {typeof item.diff === 'number' ? 
+                          `${item.diff.toFixed(2)} €` : 
+                          '0.00 €'}
+                      </Text>
+                      {item.diff_percent !== 0 && (
+                        <Text style={{ color: '#e74c3c', fontSize: 11, marginLeft: 8 }}>
+                          {typeof item.diff_percent === 'number' ? 
+                            `${item.diff_percent.toFixed(2)}%` : 
+                            '0.00%'}
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              </CardListItem>
+            )}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            ListEmptyComponent={
+              isFiltering ? (
+                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                  {t('market.noFilterResults')}
+                </Text>
+              ) : null
+            }
+          />
+        </>
       )}
     </View>
   );
+  
   const WatchedRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
       {watchedLoading ? (
         <ActivityIndicator size="large" color={colors.primary} />
-      ) : watched.length === 0 ? (
+      ) : watched.length === 0 && !isFiltering ? (
         <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 32 }}>{t('market.noWatched')}</Text>
       ) : (
-        <FlatList
-          data={watched}
-          keyExtractor={item => item.card_id}
-          renderItem={({ item }) => (
-            <CardListItem 
-              card={item} 
-              colors={colors} 
-              onPress={() => router.push(`/screens/card/${item.card_id}`)}
-            />
+        <>
+          {isFiltering && (
+            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
+              <Text style={{ color: colors.text.primary, flex: 1 }}>
+                {t('market.filteredBy')}: {filterName}
+              </Text>
+              <TouchableOpacity onPress={clearFilter}>
+                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           )}
-          contentContainerStyle={{ paddingBottom: 120 }}
-        />
+          <FlatList
+            data={isFiltering ? filteredCards : watched}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <CardListItem 
+                card={item} 
+                colors={colors} 
+                onPress={() => router.push(`/screens/card/${item.card_id}`)}
+              />
+            )}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            ListEmptyComponent={
+              isFiltering ? (
+                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                  {t('market.noFilterResults')}
+                </Text>
+              ) : null
+            }
+          />
+        </>
       )}
     </View>
   );
@@ -363,69 +552,140 @@ export default function MarketScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <Text style={[styles.title, { color: colors.text.primary }]}>{t('navigation.market')}</Text>
-        <TouchableOpacity>
-          <Ionicons name="search-outline" size={24} color={colors.text.secondary} />
-        </TouchableOpacity>
       </View>
+      
+      {/* Champ de recherche */}
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
+        <Ionicons name="search-outline" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+        <TextInput
+          ref={searchInputRef}
+          style={[styles.searchInput, { color: colors.text.primary }]}
+          placeholder={t('market.searchPlaceholder') || "Rechercher une carte..."}
+          placeholderTextColor={colors.text.secondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+      
+      {/* Suggestions de recherche */}
+      {showSuggestions && searchResults.length > 0 ? (
+        <View style={[styles.suggestionsContainer, { backgroundColor: colors.surface }]}>
+          <FlatList
+            data={searchResults}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.suggestionItem}
+                onPress={() => handleCardSelect(item.card_name)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {item.image_small ? (
+                    <Image source={{ uri: item.image_small }} style={styles.suggestionImage} resizeMode="contain" />
+                  ) : (
+                    <View style={[styles.suggestionImagePlaceholder, { backgroundColor: colors.background }]} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text.primary, fontWeight: 'bold' }}>{item.card_name}</Text>
+                    {item.edition_name && (
+                      <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{item.edition_name}</Text>
+                    )}
+                  </View>
+                  {item.price_mid !== null && item.price_mid !== undefined ? (
+                    <Text style={{ color: colors.text.secondary, fontWeight: 'bold' }}>
+                      {parseFloat(item.price_mid).toFixed(2)} €
+                    </Text>
+                  ) : (
+                    <Text style={{ color: colors.text.secondary, fontStyle: 'italic', fontSize: 12 }}>
+                      {t('market.noPriceYet') || "Pas de prix"}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            )}
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
+      ) : showSuggestions && searchQuery.trim().length >= 2 ? (
+        <View style={[styles.suggestionsContainer, { backgroundColor: colors.surface }]}>
+          <Text style={{ color: colors.text.secondary, padding: 16, textAlign: 'center' }}>
+            {isSearching ? t('market.searching') || 'Recherche en cours...' : t('market.noResults') || 'Aucun résultat trouvé'}
+          </Text>
+        </View>
+      ) : null}
       
       {/* Graphique de tendance globale du marché */}
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 18, color: colors.text.primary, marginBottom: 8 }}>{t('market.globalTrend')}</Text>
-        {trendLoading ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <LineChart
-            data={{
-              labels: marketTrend.map(item => new Date(item.date).toLocaleDateString().slice(0, 5)),
-              datasets: [
-                {
-                  data: marketTrend.map(item => item.avg_price_mid ?? 0),
-                  color: () => colors.primary,
-                  strokeWidth: 2,
+      {!showSuggestions && (
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 18, color: colors.text.primary, marginBottom: 8 }}>{t('market.globalTrend')}</Text>
+          {trendLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <LineChart
+              data={{
+                labels: marketTrend.map(item => new Date(item.date).toLocaleDateString().slice(0, 5)),
+                datasets: [
+                  {
+                    data: marketTrend.map(item => item.avg_price_mid ?? 0),
+                    color: () => colors.primary,
+                    strokeWidth: 2,
+                  },
+                ],
+              }}
+              width={screenWidth}
+              height={160}
+              yAxisSuffix=" €"
+              chartConfig={{
+                backgroundColor: colors.background,
+                backgroundGradientFrom: colors.background,
+                backgroundGradientTo: colors.background,
+                decimalPlaces: 2,
+                color: (opacity = 1) => colors.primary,
+                labelColor: (opacity = 1) => colors.text.secondary,
+                propsForDots: {
+                  r: '3',
+                  strokeWidth: '2',
+                  stroke: colors.primary,
                 },
-              ],
-            }}
-            width={screenWidth}
-            height={160}
-            yAxisSuffix=" €"
-            chartConfig={{
-              backgroundColor: colors.background,
-              backgroundGradientFrom: colors.background,
-              backgroundGradientTo: colors.background,
-              decimalPlaces: 2,
-              color: (opacity = 1) => colors.primary,
-              labelColor: (opacity = 1) => colors.text.secondary,
-              propsForDots: {
-                r: '3',
-                strokeWidth: '2',
-                stroke: colors.primary,
-              },
-            }}
-            bezier
-            style={{
-              borderRadius: 12,
-              alignSelf: 'center',
-            }}
-          />
-        )}
-      </View>
+              }}
+              bezier
+              style={{
+                borderRadius: 12,
+                alignSelf: 'center',
+              }}
+            />
+          )}
+        </View>
+      )}
       
-      <TabView
-        navigationState={{ index, routes }}
-        renderScene={renderScene}
-        onIndexChange={setIndex}
-        initialLayout={{ width: screenWidth }}
-        renderTabBar={props => (
-          <TabBar
-            {...props}
-            indicatorStyle={{ backgroundColor: colors.primary }}
-            style={{ backgroundColor: colors.background }}
-            activeColor={colors.primary}
-            inactiveColor={colors.text.secondary}
-          />
-        )}
-        style={{ flex: 1 }}
-      />
+      {/* Contenu des onglets - masqué pendant la recherche */}
+      {!showSuggestions && (
+        <TabView
+          navigationState={{ index, routes }}
+          renderScene={renderScene}
+          onIndexChange={(newIndex) => {
+            setIndex(newIndex);
+            // Réinitialiser le filtre lors du changement d'onglet
+            if (isFiltering) {
+              clearFilter();
+            }
+          }}
+          initialLayout={{ width: screenWidth }}
+          renderTabBar={props => (
+            <TabBar
+              {...props}
+              indicatorStyle={{ backgroundColor: colors.primary }}
+              style={{ backgroundColor: colors.background }}
+              activeColor={colors.primary}
+              inactiveColor={colors.text.secondary}
+            />
+          )}
+          style={{ flex: 1 }}
+        />
+      )}
     </View>
   );
 }
@@ -440,11 +700,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 16,
+    paddingBottom: 10,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    marginTop: 0,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    fontSize: 16,
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: 110, // Position en dessous du champ de recherche
+    left: 16,
+    right: 16,
+    maxHeight: 300,
+    borderRadius: 8,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  suggestionItem: {
+    padding: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  suggestionImage: {
+    width: 30,
+    height: 42,
+    marginRight: 10,
+    borderRadius: 4,
+  },
+  suggestionImagePlaceholder: {
+    width: 30,
+    height: 42,
+    marginRight: 10,
+    borderRadius: 4,
+    opacity: 0.5,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   content: {
     flex: 1,

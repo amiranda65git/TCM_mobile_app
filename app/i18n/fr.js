@@ -58,7 +58,13 @@ export default {
     },
     noWatched: 'Aucune carte surveillée pour le moment.',
     globalTrend: 'Tendance globale du marché',
-    newCard: 'Nouvelle carte'
+    newCard: 'Nouvelle carte',
+    searchPlaceholder: 'Rechercher une carte...',
+    searching: 'Recherche en cours...',
+    noResults: 'Aucun résultat trouvé',
+    noPriceYet: 'Pas de prix',
+    filteredBy: 'Filtré par',
+    noFilterResults: 'Aucune carte ne correspond à ce filtre'
   },
   alerts: {
     title: 'Notifications',

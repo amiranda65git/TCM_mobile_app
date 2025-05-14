@@ -1488,6 +1488,78 @@ export const signInWithGoogle = async () => {
   }
 };
 
+// Fonction pour rechercher des cartes par nom
+export const searchCards = async (searchTerm: string, limit: number = 10) => {
+  try {
+    if (!searchTerm || searchTerm.trim() === '') {
+      return { data: [], error: null };
+    }
+
+    const { data, error } = await supabase
+      .from('official_cards')
+      .select(`
+        id,
+        name,
+        number,
+        rarity,
+        image_small,
+        edition_id,
+        editions:edition_id (
+          name
+        ),
+        market_prices!market_prices_card_id_fkey(
+          price_mid
+        )
+      `)
+      .ilike('name', `%${searchTerm}%`)
+      .order('name')
+      .limit(limit);
+
+    if (error) {
+      console.error('Erreur lors de la recherche de cartes:', error);
+      return { data: [], error };
+    }
+
+    // Transformer les données pour être plus facilement utilisables
+    const transformedData = data?.map(card => {
+      // Trouver le prix le plus récent
+      let priceMid = null;
+      
+      if (card.market_prices && Array.isArray(card.market_prices) && card.market_prices.length > 0) {
+        priceMid = card.market_prices[0].price_mid;
+      }
+      
+      // Extraire le nom de l'édition de manière sécurisée
+      let editionName = '';
+      if (card.editions) {
+        // Si editions est un tableau, prendre le premier élément
+        if (Array.isArray(card.editions) && card.editions.length > 0 && card.editions[0].name) {
+          editionName = card.editions[0].name;
+        } 
+        // Si editions est un objet, prendre sa propriété name
+        else if (typeof card.editions === 'object' && card.editions !== null && 'name' in card.editions) {
+          editionName = (card.editions as any).name;
+        }
+      }
+      
+      return {
+        card_id: card.id,
+        card_name: card.name,
+        number: card.number,
+        rarity: card.rarity,
+        image_small: card.image_small,
+        price_mid: priceMid,
+        edition_name: editionName
+      };
+    });
+
+    return { data: transformedData, error: null };
+  } catch (error) {
+    console.error('Erreur inattendue lors de la recherche de cartes:', error);
+    return { data: [], error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -1518,7 +1590,8 @@ const SupabaseService = {
   getTopGainers,
   getTopLosers,
   getWatchedCards,
-  signInWithGoogle
+  signInWithGoogle,
+  searchCards
 };
 
 export default SupabaseService; 

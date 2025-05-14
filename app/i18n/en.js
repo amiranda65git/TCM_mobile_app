@@ -58,7 +58,13 @@ export default {
     },
     noWatched: 'No watched cards at the moment.',
     globalTrend: 'Global market trend',
-    newCard: 'New card'
+    newCard: 'New card',
+    searchPlaceholder: 'Search for a card...',
+    searching: 'Searching...',
+    noResults: 'No results found',
+    noPriceYet: 'No price yet',
+    filteredBy: 'Filtered by',
+    noFilterResults: 'No cards match this filter'
   },
   alerts: {
     title: 'Notifications',
