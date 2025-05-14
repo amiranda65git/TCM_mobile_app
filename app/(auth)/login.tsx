@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Linking
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { signIn, signInWithGoogle, supabase, getUserProfile, createUserProfile } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,39 +26,74 @@ export default function Login() {
 
   // Écouter les événements d'authentification
   useEffect(() => {
+    console.log('Configuration des écouteurs d\'authentification et de deep linking');
+    
+    // Vérifier d'abord s'il y a une authentification en attente
+    const checkPendingAuth = async () => {
+      const pendingOAuth = await AsyncStorage.getItem('@auth_oauth_pending');
+      if (pendingOAuth === 'true') {
+        console.log('Authentification OAuth en attente détectée');
+        setIsGoogleLoading(true);
+      }
+    };
+    
+    checkPendingAuth();
+    
     // S'abonner aux changements d'état de l'authentification
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          console.log('Utilisateur connecté via OAuth');
+        console.log(`Événement d'authentification détecté: ${event}`);
+        
+        // Nettoyer le flag d'authentification en attente
+        await AsyncStorage.removeItem('@auth_oauth_pending');
+        
+        // Traiter à la fois SIGNED_IN et INITIAL_SESSION
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          console.log('Utilisateur connecté avec succès, ID:', session.user?.id);
           
-          // Vérifier si l'utilisateur a déjà un profil et préserver son username
-          if (session.user) {
-            try {
+          try {
+            // Désactiver le loader immédiatement pour éviter qu'il reste bloqué
+            setIsGoogleLoading(false);
+            
+            if (session.user) {
               const userId = session.user.id;
               const userEmail = session.user.email || '';
               
-              // Vérifier directement si un profil existe dans la table users
-              const { count, error: countError } = await supabase
-                .from('users')
-                .select('*', { count: 'exact' })
-                .eq('id', userId);
+              console.log(`Vérification du profil pour l'utilisateur ${userId} avec email ${userEmail}`);
               
-              // Créer un profil seulement si aucun n'existe (count === 0)
-              if (!countError && count === 0) {
+              // Vérifier si l'utilisateur a un profil
+              const { data: userProfile } = await getUserProfile(userId);
+              
+              // Si aucun profil n'existe, en créer un
+              if (!userProfile) {
                 console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
                 const defaultUsername = userEmail.split('@')[0] || 'User';
                 await createUserProfile(userId, defaultUsername, userEmail);
+                console.log('Profil utilisateur créé avec succès');
               } else {
                 console.log('Profil utilisateur existant trouvé');
               }
-            } catch (err) {
-              console.error('Erreur lors de la vérification du profil:', err);
+              
+              // Définir le flag de redirection
+              await AsyncStorage.setItem('@auth_redirect_needed', 'true');
+              
+              // Rediriger vers la page d'accueil
+              console.log('Redirection vers la page d\'accueil depuis onAuthStateChange');
+              router.replace('/(app)/home');
             }
+          } catch (err) {
+            console.error('Erreur lors du traitement de l\'authentification:', err);
+            setIsGoogleLoading(false);
+            Alert.alert(
+              "Erreur lors de la connexion", 
+              "Une erreur est survenue lors de la création de votre profil."
+            );
           }
-          
-          // Rediriger vers la page d'accueil
-          router.replace('/(app)/home');
+        } else if (event === 'SIGNED_OUT') {
+          console.log('Utilisateur déconnecté');
+          setIsGoogleLoading(false);
+        } else if (event === 'USER_UPDATED') {
+          console.log('Données utilisateur mises à jour');
         }
       }
     );
@@ -67,13 +103,75 @@ export default function Login() {
       const url = event.url;
       console.log('Deep link reçu:', url);
       
-      // Vérifier si le deep link est lié à l'authentification
-      if (url && url.includes('auth/callback')) {
+      // Vérifier si le deep link contient un code d'authentification
+      if (url && (url.includes('auth/callback') || url.includes('?code='))) {
         setIsGoogleLoading(true);
-        // Attendre un peu pour que Supabase traite le deep link
-        setTimeout(() => {
+        
+        // Configurer un timeout de sécurité
+        const securityTimeout = setTimeout(() => {
+          console.log('Timeout de sécurité déclenché, désactivation du loader');
           setIsGoogleLoading(false);
-        }, 2000);
+          AsyncStorage.removeItem('@auth_oauth_pending');
+        }, 15000); // 15 secondes maximum
+        
+        try {
+          console.log('Deep link d\'authentification détecté, traitement en cours...');
+          
+          // Extraire le code de l'URL
+          const code = url.split('code=')[1]?.split('&')[0];
+          if (!code) {
+            throw new Error('Code d\'authentification non trouvé dans le deep link');
+          }
+          
+          console.log('Code d\'authentification extrait, échange contre une session...');
+          
+          // IMPORTANT: Utiliser l'échange de code directement
+          const { data: sessionData, error: sessionError } = 
+            await supabase.auth.exchangeCodeForSession(code);
+          
+          // Nettoyer le timeout
+          clearTimeout(securityTimeout);
+          
+          if (sessionError) {
+            console.error('Erreur lors de l\'échange de code:', sessionError);
+            setIsGoogleLoading(false);
+            AsyncStorage.removeItem('@auth_oauth_pending');
+            Alert.alert(
+              "Erreur d'authentification", 
+              "Impossible de valider votre connexion. Veuillez réessayer."
+            );
+            return;
+          }
+          
+          if (sessionData.session) {
+            console.log('Session active obtenue, ID utilisateur:', sessionData.session.user.id);
+            
+            // La session sera traitée par l'écouteur onAuthStateChange
+            // Mais nous ajoutons un flag de redirection par sécurité
+            await AsyncStorage.setItem('@auth_redirect_needed', 'true');
+            
+            // L'écouteur onAuthStateChange va gérer la redirection
+            // Il n'est pas nécessaire de désactiver le loader ici car onAuthStateChange le fera
+          } else {
+            console.log('Pas de session active après échange du code, désactivation du loader');
+            setIsGoogleLoading(false);
+            AsyncStorage.removeItem('@auth_oauth_pending');
+            Alert.alert(
+              "Erreur d'authentification", 
+              "La connexion a échoué. Veuillez réessayer."
+            );
+          }
+        } catch (error) {
+          // Nettoyer le timeout en cas d'erreur
+          clearTimeout(securityTimeout);
+          console.error('Erreur lors du traitement du deeplink:', error);
+          setIsGoogleLoading(false);
+          AsyncStorage.removeItem('@auth_oauth_pending');
+          Alert.alert(
+            "Erreur d'authentification", 
+            "Une erreur est survenue lors de la connexion. Veuillez réessayer."
+          );
+        }
       }
     };
 
@@ -117,25 +215,51 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     try {
       setIsGoogleLoading(true);
+      console.log('Démarrage de l\'authentification Google');
+      
       const { data, error } = await signInWithGoogle();
       
       if (error) {
-        throw error;
+        console.error('Erreur lors de l\'initialisation de l\'authentification Google:', error);
+        setIsGoogleLoading(false);
+        Alert.alert(
+          "Erreur de connexion", 
+          "Impossible d'initialiser la connexion avec Google. Veuillez réessayer."
+        );
+        return;
       }
       
       if (data?.url) {
-        // Ouvrir l'URL d'authentification Google dans le navigateur
-        await Linking.openURL(data.url);
+        console.log('URL d\'authentification Google reçue, redirection vers:', data.url);
+        try {
+          await Linking.openURL(data.url);
+          // Ne pas désactiver le loader, car il sera géré par les écouteurs d'événements
+        } catch (linkingError) {
+          console.error('Erreur lors de l\'ouverture du lien d\'authentification:', linkingError);
+          setIsGoogleLoading(false);
+          AsyncStorage.removeItem('@auth_oauth_pending');
+          Alert.alert(
+            "Erreur de connexion", 
+            "Impossible d'ouvrir la page de connexion Google. Veuillez vérifier vos paramètres et réessayer."
+          );
+        }
       } else {
+        console.warn('Aucune URL d\'authentification reçue de Supabase');
         setIsGoogleLoading(false);
+        AsyncStorage.removeItem('@auth_oauth_pending');
+        Alert.alert(
+          "Erreur de connexion", 
+          "La plateforme d'authentification n'a pas fourni de lien de connexion. Veuillez réessayer ou contacter le support."
+        );
       }
     } catch (error: any) {
+      console.error("Erreur globale pendant l'authentification Google:", error);
       setIsGoogleLoading(false);
+      AsyncStorage.removeItem('@auth_oauth_pending');
       Alert.alert(
         "Erreur de connexion", 
-        "Erreur lors de la connexion avec Google. Veuillez réessayer."
+        `Erreur lors de la connexion avec Google: ${error.message || 'Erreur inconnue'}. Veuillez réessayer.`
       );
-      console.error("Erreur Google Login:", error);
     }
   };
 

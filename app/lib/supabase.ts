@@ -62,6 +62,13 @@ AppState.addEventListener('change', (state: string) => {
 // Fonction pour récupérer les données du profil utilisateur avec des champs personnalisables
 export const getUserProfile = async (userId: string, fields: string = 'username, avatar_url, email') => {
   try {
+    console.log(`[getUserProfile] Récupération du profil pour l'utilisateur ${userId} avec champs: ${fields}`);
+    
+    if (!userId) {
+      console.error('[getUserProfile] Erreur: userId est undefined ou null');
+      return { data: null, error: new Error('userId est requis') };
+    }
+    
     const { data, error } = await supabase
       .from('users')
       .select(fields)
@@ -69,13 +76,20 @@ export const getUserProfile = async (userId: string, fields: string = 'username,
       .single();
     
     if (error) {
-      console.error('Erreur lors de la récupération du profil utilisateur:', error);
+      console.error('[getUserProfile] Erreur lors de la récupération du profil utilisateur:', error);
+      
+      // Vérifier si le profil n'existe pas encore
+      if (error.code === 'PGRST116') {
+        console.log('[getUserProfile] Profil non trouvé, il devra être créé');
+      }
+      
       return { data: null, error };
     }
     
+    console.log('[getUserProfile] Données récupérées avec succès:', data);
     return { data, error: null };
   } catch (error) {
-    console.error('Erreur inattendue lors de la récupération du profil utilisateur:', error);
+    console.error('[getUserProfile] Erreur inattendue lors de la récupération du profil utilisateur:', error);
     return { data: null, error };
   }
 };
@@ -301,21 +315,18 @@ export const signIn = async (email: string, password: string) => {
     if (data?.user) {
       try {
         // Vérifier directement si un profil existe dans la table users
-        const { count, error: countError } = await supabase
-          .from('users')
-          .select('*', { count: 'exact' })
-          .eq('id', data.user.id);
+        const { data: existingProfile, error: profileError } = await getUserProfile(data.user.id);
         
-        // Créer un profil seulement si aucun n'existe (count === 0)
-        if (!countError && count === 0) {
-          console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
+        // Créer un profil seulement si aucun n'existe
+        if (!existingProfile) {
+          console.log('[signIn] Aucun profil utilisateur trouvé, création d\'un nouveau profil');
           const defaultUsername = email.split('@')[0] || 'User';
           await createUserProfile(data.user.id, defaultUsername, email);
         } else {
-          console.log('Profil utilisateur existant trouvé');
+          console.log('[signIn] Profil utilisateur existant trouvé');
         }
       } catch (err) {
-        console.error('Erreur lors de la vérification du profil:', err);
+        console.error('[signIn] Erreur lors de la vérification du profil:', err);
       }
     }
 
@@ -457,41 +468,67 @@ export const updateUsername = async (userId: string, newUsername: string) => {
 // Fonction pour créer un profil utilisateur
 export const createUserProfile = async (userId: string, username: string, email: string = '') => {
   try {
-    const { error } = await supabase
+    console.log(`[createUserProfile] Création du profil pour l'utilisateur ${userId} avec username ${username}`);
+    
+    if (!userId) {
+      console.error('[createUserProfile] Erreur: userId est undefined ou null');
+      return { success: false, error: new Error('userId est requis') };
+    }
+    
+    // Vérifier d'abord si un profil existe déjà
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id, username')
+      .eq('id', userId)
+      .single();
+      
+    if (!checkError && existingUser) {
+      console.log(`[createUserProfile] Un profil existe déjà pour l'utilisateur ${userId} avec username ${existingUser.username}`);
+      
+      // Si le profil existe mais n'a pas de username, on le met à jour
+      if (!existingUser.username && username) {
+        console.log(`[createUserProfile] Mise à jour du username existant pour ${userId}`);
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ 
+            username,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
+          
+        if (updateError) {
+          console.error('[createUserProfile] Erreur lors de la mise à jour du profil:', updateError);
+          return { success: false, error: updateError };
+        }
+        
+        console.log(`[createUserProfile] Profil mis à jour avec succès pour ${userId}`);
+        return { success: true, data: { ...existingUser, username } };
+      }
+      
+      return { success: true, data: existingUser };
+    }
+    
+    // Si le profil n'existe pas, on le crée
+    console.log(`[createUserProfile] Création d'un nouveau profil pour ${userId}`);
+    const { data, error } = await supabase
       .from('users')
       .insert([{ 
         id: userId, 
         username,
         email,
         created_at: new Date().toISOString()
-      }]);
+      }])
+      .select();
       
     if (error) {
-      console.error('Erreur lors de la création du profil:', error);
+      console.error('[createUserProfile] Erreur lors de la création du profil:', error);
       return { success: false, error };
     }
     
-    // Mettre à jour également les métadonnées utilisateur dans l'authentification Supabase
-    try {
-      // Utiliser l'API Supabase Auth pour mettre à jour les données utilisateur
-      const { error: updateAuthError } = await supabase.auth.updateUser({
-        data: { 
-          username: username  // Stocké dans les métadonnées utilisateur
-        }
-      });
-      
-      if (updateAuthError) {
-        console.error('Erreur lors de la mise à jour des métadonnées utilisateur:', updateAuthError);
-      } else {
-        console.log('Métadonnées utilisateur créées avec succès');
-      }
-    } catch (authError) {
-      console.error('Exception lors de la mise à jour des métadonnées utilisateur:', authError);
-    }
-    
-    return { success: true, error: null };
+    console.log(`[createUserProfile] Profil créé avec succès pour ${userId}`);
+    return { success: true, data: data?.[0] || { id: userId, username, email } };
   } catch (error) {
-    console.error('Erreur inattendue lors de la création du profil:', error);
+    console.error('[createUserProfile] Erreur inattendue lors de la création du profil:', error);
     return { success: false, error };
   }
 };
@@ -1420,23 +1457,33 @@ export const getWatchedCards = async (userId: string) => {
 // Fonction pour se connecter avec Google
 export const signInWithGoogle = async () => {
   try {
+    // Nettoyage des flags de session précédents
+    await AsyncStorage.removeItem('@auth_redirect_needed');
+    
     // Démarrage de l'authentification OAuth avec Google
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: Platform.OS === 'web' ? window.location.origin : undefined,
-        skipBrowserRedirect: true
+        skipBrowserRedirect: true,
+        queryParams: {
+          // Force le rafraîchissement de l'écran de consentement
+          prompt: 'select_account'
+        }
       }
     });
 
     if (error) {
-      console.error('Erreur lors de la connexion avec Google:', error);
+      console.error('[signInWithGoogle] Erreur lors de la connexion avec Google:', error);
       return { data: null, error };
     }
+    
+    // Stocker un indicateur que nous sommes en attente d'une redirection OAuth
+    await AsyncStorage.setItem('@auth_oauth_pending', 'true');
 
     return { data, error: null };
   } catch (error: any) {
-    console.error('Erreur inattendue lors de la connexion avec Google:', error);
+    console.error('[signInWithGoogle] Erreur inattendue lors de la connexion avec Google:', error);
     return { data: null, error };
   }
 };

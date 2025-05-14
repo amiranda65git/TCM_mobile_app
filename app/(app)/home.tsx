@@ -12,6 +12,7 @@ import {
   getUserCollectionTotalValue, 
   getUserWishlist, 
   getCollectionPriceVariation,
+  createUserProfile,
   supabase
 } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -83,6 +84,13 @@ export default function HomeScreen() {
       async function loadUserData() {
         if (user) {
           try {
+            console.log("Données de l'utilisateur depuis l'auth:", {
+              id: user.id,
+              email: user.email,
+              app_metadata: user.app_metadata,
+              user_metadata: user.user_metadata
+            });
+            
             // Vérifier si la langue a changé
             const languageChanged = await AsyncStorage.getItem('@language_changed');
             if (languageChanged === 'true') {
@@ -101,49 +109,60 @@ export default function HomeScreen() {
             
             console.log("Récupération du profil utilisateur pour ID:", user.id);
             
-            // Récupérer les données de l'utilisateur depuis la base de données en utilisant la fonction centralisée
-            const { data, error } = await getUserProfile(user.id, 'username, avatar_url');
+            // APPROCHE DIRECTE: Récupérer les données directement depuis la table users
+            const { data: directUserData, error: directError } = await supabase
+              .from('users')
+              .select('username, avatar_url, email')
+              .eq('id', user.id)
+              .single();
               
-            console.log("Données du profil reçues:", data);
-              
-            if (data && typeof data === 'object') {
-              const userData = data as Record<string, any>;
-              
-              if (userData.username) {
-                console.log("Username trouvé dans la base de données:", userData.username);
-                setUsername(userData.username);
-              } else {
-                // Utiliser l'email comme solution de secours uniquement si aucun username n'est trouvé
-                console.log("Aucun username trouvé, utilisation de l'email comme fallback");
-                const defaultUsername = user.email?.split('@')[0] || 'User';
-                setUsername(defaultUsername);
-              }
-              
-              if (userData.avatar_url) {
-                setAvatar(userData.avatar_url);
-                await AsyncStorage.setItem('@user_avatar', userData.avatar_url);
-              }
-            } else if (error) {
-              console.error("Erreur lors de la récupération des données utilisateur:", error);
-              
-              // Vérifier directement le contenu de la table users
-              console.log("Tentative de récupération directe depuis la table users");
-              const { data: directUserData, error: directError } = await supabase
-                .from('users')
-                .select('username, avatar_url')
-                .eq('id', user.id)
-                .single();
-                
-              if (!directError && directUserData && directUserData.username) {
+            console.log("Résultat de la requête directe:", { directUserData, directError });
+            
+            if (!directError && directUserData) {
+              if (directUserData.username) {
                 console.log("Username récupéré directement:", directUserData.username);
                 setUsername(directUserData.username);
-                if (directUserData.avatar_url) {
-                  setAvatar(directUserData.avatar_url);
-                }
               } else {
-                // Utiliser l'email comme solution de secours uniquement en cas d'erreur
-                console.log("Échec de récupération directe, utilisation de l'email comme fallback:", user.email);
+                console.log("Aucun username trouvé dans la requête directe, utilisation de l'email comme fallback");
                 const defaultUsername = user.email?.split('@')[0] || 'User';
+                setUsername(defaultUsername);
+                
+                // Si l'utilisateur n'a pas de username, créer un profil avec un username par défaut
+                console.log("Tentative de création du profil avec un username par défaut");
+                const { success, error: createError } = await createUserProfile(
+                  user.id, 
+                  defaultUsername, 
+                  user.email || ''
+                );
+                
+                if (createError) {
+                  console.error("Erreur lors de la création du profil utilisateur:", createError);
+                } else if (success) {
+                  console.log("Profil utilisateur créé avec succès avec username:", defaultUsername);
+                }
+              }
+              
+              if (directUserData.avatar_url) {
+                setAvatar(directUserData.avatar_url);
+                await AsyncStorage.setItem('@user_avatar', directUserData.avatar_url);
+              }
+            } else {
+              // Si la récupération directe échoue (par exemple, si le profil n'existe pas), le créer
+              console.log("Échec de la requête directe, création d'un nouveau profil utilisateur");
+              
+              const defaultUsername = user.email?.split('@')[0] || 'User';
+              console.log("Création d'un profil avec username par défaut:", defaultUsername);
+              
+              const { success, data: profileData, error: createError } = await createUserProfile(
+                user.id, 
+                defaultUsername, 
+                user.email || ''
+              );
+              
+              if (createError) {
+                console.error("Erreur lors de la création du profil utilisateur:", createError);
+              } else if (success) {
+                console.log("Profil utilisateur créé avec succès:", profileData);
                 setUsername(defaultUsername);
               }
             }
@@ -176,6 +195,8 @@ export default function HomeScreen() {
                 console.error("Erreur lors du calcul de la variation de prix:", priceVariationResult.error);
                 setValueVariation(0);
               }
+            } else {
+              console.error("Erreur lors de la récupération de la valeur de la collection:", valueError);
             }
 
             // Récupérer le nombre de notifications non lues
@@ -190,9 +211,17 @@ export default function HomeScreen() {
               setUnreadNotificationsCount(notificationsCount || 0);
             }
 
+            // Récupérer le nombre d'éléments dans la wishlist
+            const { data: wishlistData } = await getUserWishlist(user.id);
+            if (wishlistData) {
+              setWishlistCount(wishlistData.length);
+            }
+            
           } catch (error) {
             console.error("Erreur lors du chargement des données utilisateur:", error);
           }
+        } else {
+          console.warn("Tentative de chargement des données utilisateur sans utilisateur connecté");
         }
       }
       
@@ -205,14 +234,10 @@ export default function HomeScreen() {
     }, [user, refreshKey])
   );
 
+  // Suppression de l'effet pour la wishlist car il est maintenant inclus dans loadUserData
   useEffect(() => {
-    const fetchWishlistCount = async () => {
-      if (user) {
-        const { data } = await getUserWishlist(user.id);
-        setWishlistCount(data.length);
-      }
-    };
-    fetchWishlistCount();
+    // Le code ici est intentionnellement vide car l'effet pour la wishlist
+    // a été fusionné dans la fonction loadUserData ci-dessus
   }, [user]);
 
   // Load initial data on component mount
@@ -278,7 +303,7 @@ export default function HomeScreen() {
       </View>
       <View style={styles.valueContainer}>
         <Text style={[styles.value, { color: colors.text.primary }]}>
-          {hideValues ? "******" : formatCurrency(totalValue)}
+          {hideValues ? "******" : formatCurrency(totalValue || 0)}
         </Text>
         <View style={[styles.badge, { backgroundColor: colors.surface }]}>
           <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
@@ -288,11 +313,11 @@ export default function HomeScreen() {
         styles.percentage, 
         { color: getVariationColor(valueVariation) }
       ]}>
-        {hideValues ? "***" : formatVariation(valueVariation)}
+        {hideValues ? "***" : formatVariation(valueVariation || 0)}
       </Text>
       <View style={styles.cardsCount}>
         <Text style={[styles.cardsText, { color: colors.text.secondary }]}>
-          {cardsCount} {t('home.cards')}
+          {cardsCount || 0} {t('home.cards')}
         </Text>
       </View>
     </View>
@@ -372,14 +397,16 @@ export default function HomeScreen() {
               ) : (
                 <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.avatarInitial, { color: colors.text.primary }]}>
-                    {username ? username[0].toUpperCase() : 'U'}
+                    {username ? username[0].toUpperCase() : user?.email?.[0].toUpperCase() || 'U'}
                   </Text>
                 </View>
               )}
             </TouchableOpacity>
             <View>
               <Text style={[styles.greeting, { color: colors.text.secondary }]}>{t('home.greeting')},</Text>
-              <Text style={[styles.username, { color: colors.text.primary }]}>{username}</Text>
+              <Text style={[styles.username, { color: colors.text.primary }]}>
+                {username || user?.email?.split('@')[0] || t('home.user')}
+              </Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => router.push('../settings')}>
