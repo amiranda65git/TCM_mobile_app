@@ -64,7 +64,8 @@ export default {
     noResults: 'No results found',
     noPriceYet: 'No price yet',
     filteredBy: 'Filtered by',
-    noFilterResults: 'No cards match this filter'
+    noFilterResults: 'No cards match this filter',
+    typeToSearch: 'Type to search'
   },
   alerts: {
     title: 'Notifications',

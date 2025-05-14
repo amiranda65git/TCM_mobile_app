@@ -64,7 +64,8 @@ export default {
     noResults: 'Aucun résultat trouvé',
     noPriceYet: 'Pas de prix',
     filteredBy: 'Filtré par',
-    noFilterResults: 'Aucune carte ne correspond à ce filtre'
+    noFilterResults: 'Aucune carte ne correspond à ce filtre',
+    typeToSearch: 'Tapez pour rechercher'
   },
   alerts: {
     title: 'Notifications',

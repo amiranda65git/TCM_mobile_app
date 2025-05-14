@@ -115,6 +115,7 @@ export default function MarketScreen() {
   const [filteredCards, setFilteredCards] = useState<any[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterName, setFilterName] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -340,12 +341,13 @@ export default function MarketScreen() {
       ) : (
         <>
           {isFiltering && (
-            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
-              <Text style={{ color: colors.text.primary, flex: 1 }}>
+            <View style={[styles.filterBar, { backgroundColor: colors.primary, marginHorizontal: 16, marginBottom: 10 }]}>
+              <Ionicons name="funnel" size={18} color="white" style={{ marginRight: 6 }} />
+              <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter}>
-                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+                <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
           )}
@@ -380,12 +382,13 @@ export default function MarketScreen() {
       ) : (
         <>
           {isFiltering && (
-            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
-              <Text style={{ color: colors.text.primary, flex: 1 }}>
+            <View style={[styles.filterBar, { backgroundColor: colors.primary, marginHorizontal: 16, marginBottom: 10 }]}>
+              <Ionicons name="funnel" size={18} color="white" style={{ marginRight: 6 }} />
+              <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter}>
-                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+                <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
           )}
@@ -443,12 +446,13 @@ export default function MarketScreen() {
       ) : (
         <>
           {isFiltering && (
-            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
-              <Text style={{ color: colors.text.primary, flex: 1 }}>
+            <View style={[styles.filterBar, { backgroundColor: colors.primary, marginHorizontal: 16, marginBottom: 10 }]}>
+              <Ionicons name="funnel" size={18} color="white" style={{ marginRight: 6 }} />
+              <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter}>
-                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+                <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
           )}
@@ -508,12 +512,13 @@ export default function MarketScreen() {
       ) : (
         <>
           {isFiltering && (
-            <View style={[styles.filterBar, { backgroundColor: colors.surface }]}>
-              <Text style={{ color: colors.text.primary, flex: 1 }}>
+            <View style={[styles.filterBar, { backgroundColor: colors.primary, marginHorizontal: 16, marginBottom: 10 }]}>
+              <Ionicons name="funnel" size={18} color="white" style={{ marginRight: 6 }} />
+              <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter}>
-                <Ionicons name="close-circle" size={24} color={colors.primary} />
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+                <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
           )}
@@ -568,7 +573,14 @@ export default function MarketScreen() {
           clearButtonMode="while-editing"
           autoCapitalize="none"
           autoCorrect={false}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
         />
+        {!searchQuery && !searchFocused && (
+          <Text style={{ color: colors.text.secondary, fontSize: 12, fontStyle: 'italic', marginLeft: 4 }}>
+            {t('market.typeToSearch')}
+          </Text>
+        )}
       </View>
       
       {/* Suggestions de recherche */}
@@ -668,10 +680,8 @@ export default function MarketScreen() {
           renderScene={renderScene}
           onIndexChange={(newIndex) => {
             setIndex(newIndex);
-            // Réinitialiser le filtre lors du changement d'onglet
-            if (isFiltering) {
-              clearFilter();
-            }
+            // Ne pas réinitialiser le filtre lors du changement d'onglet
+            // pour permettre à l'utilisateur de comparer les données entre onglets
           }}
           initialLayout={{ width: screenWidth }}
           renderTabBar={props => (
@@ -759,6 +769,15 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     marginBottom: 8,
+  },
+  clearFilterButton: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 4,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
