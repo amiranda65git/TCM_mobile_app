@@ -44,9 +44,9 @@ export default {
   },
   market: {
     empty: 'Market under construction',
-    emptyText: 'This feature will be available soon. Come back later to buy and sell cards.',
+    emptyText: 'This feature will be available soon. Check back later to buy and sell cards.',
     buyCard: 'Buy a card',
-    cardsForSale: 'Community cards for sale',
+    cardsForSale: 'Cards for sale by the community',
     noCardsForSale: 'No cards for sale at the moment',
     unknownSeller: 'Unknown seller',
     buyOnGamezest: 'Buy on GameZest.ch',
@@ -54,11 +54,30 @@ export default {
       all: 'All cards',
       gainers: 'Top gainers',
       losers: 'Top losers',
-      watched: 'Watched cards'
+      watched: 'My watched cards'
     },
-    noWatched: 'No watched cards yet.',
+    noWatched: 'No watched cards at the moment.',
     globalTrend: 'Global market trend',
     newCard: 'New card'
+  },
+  alerts: {
+    title: 'Notifications',
+    noNotifications: 'No notifications at the moment',
+    markAsRead: 'Mark as read',
+    markAllAsRead: 'Mark all as read',
+    wishlistItemSale: 'Wishlist card for sale',
+    wishlistItemSaleDesc: 'The card {{cardName}} from your wishlist is now for sale',
+    priceAlert: 'Price alert',
+    priceAlertDesc: 'The price of {{cardName}} has changed by {{percent}}%',
+    deleteAll: 'Delete all notifications',
+    confirmDeleteAll: 'Are you sure you want to delete all your notifications?',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    card: 'card',
+    cards: 'cards',
+    priceIncreased: 'Price increased',
+    priceDecreased: 'Price decreased',
+    unreadOnly: 'Unread only'
   },
   scan: {
     scanCard: 'Scan a card',
@@ -103,6 +122,7 @@ export default {
     chooseLanguage: 'Choose language',
     french: 'French',
     english: 'English',
+    account: 'Account',
     logout: 'Logout',
     deleteAccount: 'Delete account',
     version: 'Version',

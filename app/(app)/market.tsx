@@ -238,6 +238,7 @@ export default function MarketScreen() {
               onPress={() => router.push(`/screens/card/${item.card_id}`)}
             />
           )}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
     </View>
@@ -280,6 +281,7 @@ export default function MarketScreen() {
               </View>
             </CardListItem>
           )}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
     </View>
@@ -322,6 +324,7 @@ export default function MarketScreen() {
               </View>
             </CardListItem>
           )}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
     </View>
@@ -343,6 +346,7 @@ export default function MarketScreen() {
               onPress={() => router.push(`/screens/card/${item.card_id}`)}
             />
           )}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
     </View>
@@ -416,7 +420,6 @@ export default function MarketScreen() {
             {...props}
             indicatorStyle={{ backgroundColor: colors.primary }}
             style={{ backgroundColor: colors.background }}
-            labelStyle={{ color: colors.text.primary, fontWeight: 'bold' }}
             activeColor={colors.primary}
             inactiveColor={colors.text.secondary}
           />
@@ -463,5 +466,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  bottomPadding: {
+    height: 100,
   },
 }); 

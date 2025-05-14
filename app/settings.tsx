@@ -611,6 +611,7 @@ export default function Settings() {
       <View style={dynamicStyles.iconContainer}>
         <Ionicons name={icon as any} size={22} color={iconColor || colors.text.primary} />
       </View>
+      
       <Text style={[
         dynamicStyles.menuItemText,
         text === t('settings.logout') && dynamicStyles.logoutText,
@@ -618,7 +619,10 @@ export default function Settings() {
       ]}>
         {text}
       </Text>
-      {rightComponent || (
+      
+      {rightComponent ? (
+        rightComponent
+      ) : (
         <View style={dynamicStyles.chevronContainer}>
           <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
         </View>
@@ -685,7 +689,7 @@ export default function Settings() {
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={dynamicStyles.title}>{t('settings.title')}</Text>
-        <View style={{ width: 44 }} /> {/* Pour l'équilibre du header */}
+        <View style={{ width: 44 }} />
       </View>
       
       <ScrollView style={dynamicStyles.content} showsVerticalScrollIndicator={false}>
@@ -702,13 +706,15 @@ export default function Settings() {
             
             <View style={dynamicStyles.userDetails}>
               <Text style={dynamicStyles.username}>{username}</Text>
-              <Text style={dynamicStyles.email}>{user?.email}</Text>
+              <Text style={dynamicStyles.email}>{user?.email || ''}</Text>
             </View>
             
             {uploadingAvatar ? (
               <ActivityIndicator color={colors.primary} />
             ) : (
-              <Ionicons name="camera-outline" size={24} color={colors.text.secondary} />
+              <View>
+                <Ionicons name="camera-outline" size={24} color={colors.text.secondary} />
+              </View>
             )}
           </TouchableOpacity>
           

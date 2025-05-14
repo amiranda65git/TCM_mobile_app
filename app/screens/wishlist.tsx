@@ -242,19 +242,21 @@ export default function WishlistScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={styles.cardsGrid} contentContainerStyle={{ paddingBottom: 40 }}>
-          {filteredCards.map(card => (
-            <WishlistCard
-              key={card.id}
-              card={card}
-              colors={colors}
-              t={t}
-              router={router}
-              onBuyPress={handleBuy}
-              onRemovePress={handleRemove}
-            />
-          ))}
-        </ScrollView>
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.cardsGrid} contentContainerStyle={{ paddingBottom: 40 }}>
+            {filteredCards.map(card => (
+              <WishlistCard
+                key={card.id}
+                card={card}
+                colors={colors}
+                t={t}
+                router={router}
+                onBuyPress={handleBuy}
+                onRemovePress={handleRemove}
+              />
+            ))}
+          </ScrollView>
+        </View>
       )}
     </View>
   );

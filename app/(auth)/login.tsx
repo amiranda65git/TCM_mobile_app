@@ -13,7 +13,7 @@ import {
   Linking
 } from 'react-native';
 import { router } from 'expo-router';
-import { signIn, signInWithGoogle, supabase } from '../lib/supabase';
+import { signIn, signInWithGoogle, supabase, getUserProfile, createUserProfile } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function Login() {
@@ -27,9 +27,35 @@ export default function Login() {
   useEffect(() => {
     // S'abonner aux changements d'état de l'authentification
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (event === 'SIGNED_IN' && session) {
           console.log('Utilisateur connecté via OAuth');
+          
+          // Vérifier si l'utilisateur a déjà un profil et préserver son username
+          if (session.user) {
+            try {
+              const userId = session.user.id;
+              const userEmail = session.user.email || '';
+              
+              // Vérifier directement si un profil existe dans la table users
+              const { count, error: countError } = await supabase
+                .from('users')
+                .select('*', { count: 'exact' })
+                .eq('id', userId);
+              
+              // Créer un profil seulement si aucun n'existe (count === 0)
+              if (!countError && count === 0) {
+                console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
+                const defaultUsername = userEmail.split('@')[0] || 'User';
+                await createUserProfile(userId, defaultUsername, userEmail);
+              } else {
+                console.log('Profil utilisateur existant trouvé');
+              }
+            } catch (err) {
+              console.error('Erreur lors de la vérification du profil:', err);
+            }
+          }
+          
           // Rediriger vers la page d'accueil
           router.replace('/(app)/home');
         }

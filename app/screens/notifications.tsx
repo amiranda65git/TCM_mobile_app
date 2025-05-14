@@ -1,360 +1,269 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  Platform,
+  RefreshControl
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../lib/auth';
+import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-
-interface Notification {
-  id: string;
-  type: string;
-  message: string;
-  card_id: string | null;
-  created_at: string;
-  is_read: boolean;
-  card?: {
-    name: string;
-    image_small: string;
-  };
-}
+import { useAuth } from '../lib/auth';
+import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../lib/supabase';
 
 export default function NotificationsScreen() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const router = useRouter();
+  const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const router = useRouter();
+  const { user } = useAuth();
   
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   
-  useEffect(() => {
-    if (user) {
-      loadNotifications();
-    }
-  }, [user]);
-  
+  // Charger les notifications
   const loadNotifications = async () => {
     if (!user) return;
     
+    setLoading(true);
     try {
-      setLoading(true);
-      
-      // Récupérer les notifications pour l'utilisateur
-      const { data, error } = await supabase
-        .from('notifications')
-        .select(`
-          *,
-          card:card_id (
-            name,
-            image_small
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
+      const { data, error } = await getUserNotifications(user.id);
       if (error) throw error;
       
       setNotifications(data || []);
-      
-      // Marquer les notifications comme lues
-      const unreadIds = data
-        ?.filter(notification => !notification.is_read)
-        .map(notification => notification.id);
-      
-      if (unreadIds && unreadIds.length > 0) {
-        await supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .in('id', unreadIds);
-      }
     } catch (error) {
       console.error('Erreur lors du chargement des notifications:', error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
   
-  const handleRefresh = () => {
-    setRefreshing(true);
+  // Charger les notifications au démarrage
+  useEffect(() => {
     loadNotifications();
-  };
+  }, [user]);
   
-  const handleDeleteNotification = async (id: string) => {
+  // Marquer une notification comme lue
+  const handleNotificationPress = async (notification: any) => {
     try {
-      await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', id);
+      if (!notification.is_read) {
+        await markNotificationAsRead(notification.id);
+        
+        // Mettre à jour l'état local
+        setNotifications(prev => 
+          prev.map(n => 
+            n.id === notification.id ? { ...n, is_read: true } : n
+          )
+        );
+      }
       
-      // Mettre à jour l'état local
-      setNotifications(prev => prev.filter(notification => notification.id !== id));
+      // Naviguer en fonction du type de notification
+      if (notification.type === 'wishlist_item_sale') {
+        // Naviguer vers la carte en vente
+        router.push({
+          pathname: '/market',
+          params: { cardId: notification.card_id }
+        });
+      } else if (notification.type === 'price_alert') {
+        // Naviguer vers la carte avec l'alerte de prix
+        router.push({
+          pathname: '/market',
+          params: { cardId: notification.card_id }
+        });
+      }
     } catch (error) {
-      console.error('Erreur lors de la suppression de la notification:', error);
+      console.error('Erreur lors du traitement de la notification:', error);
     }
   };
   
-  const handleClearAll = async () => {
+  // Marquer toutes les notifications comme lues
+  const handleMarkAllAsRead = async () => {
     if (!user || notifications.length === 0) return;
     
     try {
-      await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', user.id);
+      await markAllNotificationsAsRead(user.id);
       
-      setNotifications([]);
+      // Mettre à jour l'état local
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (error) {
-      console.error('Erreur lors de la suppression de toutes les notifications:', error);
+      console.error('Erreur lors du marquage de toutes les notifications:', error);
     }
   };
   
-  const handleCardPress = (cardId: string | null) => {
-    if (cardId) {
-      router.push(`/screens/card/${cardId}`);
+  // Rendre un élément de notification
+  const renderNotificationItem = ({ item }: { item: any }) => {
+    // Déterminer l'icône et le texte en fonction du type de notification
+    let icon = 'notifications-outline';
+    let title = '';
+    let description = '';
+    
+    if (item.type === 'wishlist_item_sale') {
+      icon = 'cart-outline';
+      title = t('alerts.wishlistItemSale');
+      description = t('alerts.wishlistItemSaleDesc', { cardName: item.data?.card_name || 'Card' });
+    } else if (item.type === 'price_alert') {
+      const priceChange = item.data?.price_change || 0;
+      const isIncrease = priceChange > 0;
+      
+      icon = isIncrease ? 'trending-up-outline' : 'trending-down-outline';
+      title = t('alerts.priceAlert');
+      description = t('alerts.priceAlertDesc', { 
+        cardName: item.data?.card_name || 'Card',
+        percent: Math.abs(priceChange).toFixed(2)
+      });
     }
-  };
-  
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'price_alert':
-        return <Ionicons name="trending-up" size={24} color="#3498db" />;
-      case 'wishlist_notification':
-        return <Ionicons name="heart" size={24} color="#e74c3c" />;
-      default:
-        return <Ionicons name="notifications" size={24} color="#f39c12" />;
-    }
-  };
-  
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      
-      // Si c'est aujourd'hui, afficher "il y a X heures/minutes"
-      if (date.toDateString() === now.toDateString()) {
-        const diffMs = now.getTime() - date.getTime();
-        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-        
-        if (diffHrs > 0) {
-          return `il y a ${diffHrs} heure${diffHrs > 1 ? 's' : ''}`;
-        } else if (diffMins > 0) {
-          return `il y a ${diffMins} minute${diffMins > 1 ? 's' : ''}`;
-        } else {
-          return 'à l\'instant';
-        }
-      }
-      
-      // Si c'est hier, afficher "Hier à HH:MM"
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      if (date.toDateString() === yesterday.toDateString()) {
-        return `Hier à ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-      }
-      
-      // Sinon, afficher la date formatée
-      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()} à ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-    } catch (error) {
-      return dateString;
-    }
-  };
-  
-  const renderNotificationItem = ({ item }: { item: Notification }) => (
-    <View style={[styles.notificationItem, { backgroundColor: colors.surface }]}>
-      <View style={styles.notificationIconContainer}>
-        {getNotificationIcon(item.type)}
-      </View>
-      
-      <View style={styles.notificationContent}>
-        <Text style={[styles.notificationMessage, { color: colors.text.primary }]}>
-          {item.message}
-        </Text>
-        
-        <Text style={[styles.notificationDate, { color: colors.text.secondary }]}>
-          {formatDate(item.created_at)}
-        </Text>
-        
-        {item.card_id && item.card && (
-          <TouchableOpacity 
-            style={[styles.cardPreview, { backgroundColor: colors.background }]}
-            onPress={() => handleCardPress(item.card_id)}
-          >
-            {item.card.image_small ? (
-              <Image 
-                source={{ uri: item.card.image_small }} 
-                style={styles.cardImage} 
-                resizeMode="contain" 
-              />
-            ) : (
-              <View style={styles.cardImagePlaceholder} />
-            )}
-            
-            <Text style={[styles.cardName, { color: colors.text.primary }]}>
-              {item.card.name}
-            </Text>
-            
-            <Ionicons name="chevron-forward" size={16} color={colors.text.secondary} />
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      <TouchableOpacity 
-        style={styles.deleteButton}
-        onPress={() => handleDeleteNotification(item.id)}
-      >
-        <Ionicons name="close" size={20} color={colors.text.secondary} />
-      </TouchableOpacity>
-    </View>
-  );
-  
-  if (loading && !refreshing) {
+    
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen 
-          options={{ 
-            title: t('notifications.title'),
-            headerShown: true
-          }}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text.secondary }]}>
-            {t('general.loading')}
+      <TouchableOpacity
+        style={[
+          styles.notificationItem,
+          { backgroundColor: item.is_read ? colors.background : colors.surface },
+          { borderBottomColor: colors.border }
+        ]}
+        onPress={() => handleNotificationPress(item)}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
+          <Ionicons name={icon as any} size={24} color={colors.text.primary} />
+        </View>
+        <View style={styles.contentContainer}>
+          <Text style={[styles.title, { color: colors.text.primary }]}>{title}</Text>
+          <Text style={[styles.description, { color: colors.text.secondary }]}>{description}</Text>
+          <Text style={[styles.date, { color: colors.text.secondary }]}>
+            {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
-      </View>
+        {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: colors.secondary }]} />}
+      </TouchableOpacity>
     );
-  }
+  };
+  
+  // Vérifier s'il y a des notifications non lues
+  const hasUnreadNotifications = notifications.some(n => !n.is_read);
   
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen 
-        options={{ 
-          title: t('notifications.title'),
-          headerShown: true,
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 16 }}>
-              <Ionicons name="chevron-back" size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            notifications.length > 0 ? (
-              <TouchableOpacity onPress={handleClearAll} style={styles.clearAllButton}>
-                <Text style={{ color: colors.primary }}>{t('notifications.clearAll')}</Text>
-              </TouchableOpacity>
-            ) : null
-          )
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={{
+          title: t('alerts.title'),
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTintColor: colors.text.primary,
+          headerShadowVisible: false,
         }}
       />
       
-      <FlatList
-        data={notifications}
-        renderItem={renderNotificationItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+      {notifications.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="notifications-off-outline" size={64} color={colors.text.secondary} />
+          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
+            {t('alerts.noNotifications')}
+          </Text>
+        </View>
+      ) : (
+        <>
+          {hasUnreadNotifications && (
+            <TouchableOpacity 
+              style={[styles.markAllButton, { backgroundColor: colors.surface }]}
+              onPress={handleMarkAllAsRead}
+            >
+              <Ionicons name="checkmark-done-outline" size={20} color={colors.text.primary} />
+              <Text style={[styles.markAllText, { color: colors.text.primary }]}>
+                {t('alerts.markAllAsRead')}
+              </Text>
+            </TouchableOpacity>
+          )}
+          
+          <FlatList
+            data={notifications}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderNotificationItem}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={loading}
+                onRefresh={loadNotifications}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
           />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="notifications-off-outline" size={64} color={colors.text.secondary} />
-            <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-              {t('notifications.empty')}
-            </Text>
-          </View>
-        }
-      />
-    </View>
+        </>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
+    paddingTop: Platform.OS === 'android' ? 25 : 0,
   },
   listContainer: {
-    padding: 16,
-    paddingBottom: 100,
+    flexGrow: 1,
   },
   notificationItem: {
     flexDirection: 'row',
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  notificationIconContainer: {
-    marginRight: 12,
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationMessage: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  notificationDate: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  cardPreview: {
-    flexDirection: 'row',
+    borderBottomWidth: 1,
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 8,
   },
-  cardImage: {
-    width: 30,
-    height: 42,
-    borderRadius: 4,
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
-  cardImagePlaceholder: {
-    width: 30,
-    height: 42,
-    borderRadius: 4,
-    backgroundColor: '#ddd',
-  },
-  cardName: {
+  contentContainer: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
   },
-  deleteButton: {
-    padding: 4,
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  description: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  date: {
+    fontSize: 12,
+  },
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 100,
+    padding: 20,
   },
   emptyText: {
     fontSize: 16,
-    marginTop: 16,
     textAlign: 'center',
+    marginTop: 16,
   },
-  clearAllButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  markAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    margin: 10,
+    borderRadius: 8,
+  },
+  markAllText: {
+    marginLeft: 8,
+    fontWeight: '500',
   },
 }); 

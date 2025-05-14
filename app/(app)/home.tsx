@@ -4,7 +4,16 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../lib/auth';
-import { getUserProfile, getUserEditionsCount, getUserCardsCount, getUserAvatar, getUserCollectionTotalValue, getUserWishlist, getCollectionPriceVariation } from '../lib/supabase';
+import { 
+  getUserProfile, 
+  getUserEditionsCount, 
+  getUserCardsCount, 
+  getUserAvatar, 
+  getUserCollectionTotalValue, 
+  getUserWishlist, 
+  getCollectionPriceVariation,
+  supabase
+} from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +27,7 @@ export default function HomeScreen() {
   const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const [username, setUsername] = useState(user?.email?.split('@')[0] || 'User');
+  const [username, setUsername] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [hideValues, setHideValues] = useState(false);
@@ -29,6 +38,7 @@ export default function HomeScreen() {
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -73,16 +83,6 @@ export default function HomeScreen() {
       async function loadUserData() {
         if (user) {
           try {
-            // Vérifier si le username a été mis à jour
-         /*   const usernameUpdated = await AsyncStorage.getItem('@username_updated');
-            if (usernameUpdated === 'true') {
-              // Réinitialiser le flag
-              await AsyncStorage.removeItem('@username_updated');
-              console.log('Username has been updated, refreshing data...');
-              // Force un rafraîchissement en incrémentant la clé
-              setRefreshKey(prev => prev + 1);
-            }
-          */ 
             // Vérifier si la langue a changé
             const languageChanged = await AsyncStorage.getItem('@language_changed');
             if (languageChanged === 'true') {
@@ -99,15 +99,24 @@ export default function HomeScreen() {
               setAvatar(localAvatar);
             }
             
+            console.log("Récupération du profil utilisateur pour ID:", user.id);
+            
             // Récupérer les données de l'utilisateur depuis la base de données en utilisant la fonction centralisée
             const { data, error } = await getUserProfile(user.id, 'username, avatar_url');
+              
+            console.log("Données du profil reçues:", data);
               
             if (data && typeof data === 'object') {
               const userData = data as Record<string, any>;
               
-              if (userData.username && userData.username !== username) {
-                console.log('Username updated:', userData.username);
+              if (userData.username) {
+                console.log("Username trouvé dans la base de données:", userData.username);
                 setUsername(userData.username);
+              } else {
+                // Utiliser l'email comme solution de secours uniquement si aucun username n'est trouvé
+                console.log("Aucun username trouvé, utilisation de l'email comme fallback");
+                const defaultUsername = user.email?.split('@')[0] || 'User';
+                setUsername(defaultUsername);
               }
               
               if (userData.avatar_url) {
@@ -116,6 +125,27 @@ export default function HomeScreen() {
               }
             } else if (error) {
               console.error("Erreur lors de la récupération des données utilisateur:", error);
+              
+              // Vérifier directement le contenu de la table users
+              console.log("Tentative de récupération directe depuis la table users");
+              const { data: directUserData, error: directError } = await supabase
+                .from('users')
+                .select('username, avatar_url')
+                .eq('id', user.id)
+                .single();
+                
+              if (!directError && directUserData && directUserData.username) {
+                console.log("Username récupéré directement:", directUserData.username);
+                setUsername(directUserData.username);
+                if (directUserData.avatar_url) {
+                  setAvatar(directUserData.avatar_url);
+                }
+              } else {
+                // Utiliser l'email comme solution de secours uniquement en cas d'erreur
+                console.log("Échec de récupération directe, utilisation de l'email comme fallback:", user.email);
+                const defaultUsername = user.email?.split('@')[0] || 'User';
+                setUsername(defaultUsername);
+              }
             }
 
             // Récupérer le nombre d'éditions en utilisant la fonction centralisée
@@ -148,6 +178,18 @@ export default function HomeScreen() {
               }
             }
 
+            // Récupérer le nombre de notifications non lues
+            const { count: notificationsCount, error: notificationsError } = 
+              await supabase
+                .from('notifications')
+                .select('*', { count: 'exact' })
+                .eq('user_id', user.id)
+                .eq('is_read', false);
+            
+            if (!notificationsError) {
+              setUnreadNotificationsCount(notificationsCount || 0);
+            }
+
           } catch (error) {
             console.error("Erreur lors du chargement des données utilisateur:", error);
           }
@@ -160,7 +202,7 @@ export default function HomeScreen() {
       return () => {
         console.log('Home screen is unfocused');
       };
-    }, [user, refreshKey, username])
+    }, [user, refreshKey])
   );
 
   useEffect(() => {
@@ -178,6 +220,36 @@ export default function HomeScreen() {
     // Le code existant reste ici comme sauvegarde, mais l'effet useFocusEffect ci-dessus
     // prendra le relais pour les rafraîchissements lors des navigations
   }, []);
+
+  // Ajouter une vérification supplémentaire pour s'assurer que le bon username est toujours affiché
+  useEffect(() => {
+    if (user && username) {
+      // Comparer le username actuellement affiché avec celui stocké dans la base de données
+      // Cette vérification est nécessaire car il peut y avoir un décalage entre les données
+      // d'authentification et les données du profil utilisateur
+      const verifyUsername = async () => {
+        try {
+          // Vérifier directement dans la table des utilisateurs
+          const { data, error } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', user.id)
+            .single();
+            
+          // Si un username différent est trouvé dans la base, utiliser celui-ci
+          if (!error && data && data.username && data.username !== username) {
+            console.log(`Correction du username: "${username}" remplacé par "${data.username}"`);
+            setUsername(data.username);
+          }
+        } catch (err) {
+          console.error('Erreur lors de la vérification du username:', err);
+        }
+      };
+      
+      // Exécuter la vérification
+      verifyUsername();
+    }
+  }, [user, username]);
 
   // Format pour afficher une valeur monétaire
   const formatCurrency = (value: number) => {
@@ -236,14 +308,20 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const ListItem = ({ icon, title, count, onPress }: any) => (
+  const ListItem = ({ icon, title, count, onPress, showBadge = false }: any) => (
     <TouchableOpacity style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={onPress}>
       <View style={styles.listItemLeft}>
         {icon}
         <Text style={[styles.listItemTitle, { color: colors.text.primary }]}>{title}</Text>
       </View>
       <View style={styles.listItemRight}>
-        <Text style={[styles.listItemCount, { color: colors.text.secondary }]}>{count}</Text>
+        {showBadge && count > 0 ? (
+          <View style={[styles.notificationBadge, { backgroundColor: colors.secondary }]}>
+            <Text style={styles.notificationBadgeText}>{count}</Text>
+          </View>
+        ) : (
+          <Text style={[styles.listItemCount, { color: colors.text.secondary }]}>{count}</Text>
+        )}
         <Ionicons name="chevron-forward" size={24} color={colors.text.secondary} />
       </View>
     </TouchableOpacity>
@@ -340,8 +418,9 @@ export default function HomeScreen() {
         <ListItem
           icon={<Ionicons name="notifications" size={24} color={colors.secondary} />}
           title={t('home.alerts')}
-          count={`0 ${t('home.alerts')}`}
-          onPress={() => router.push('../alerts')}
+          count={`${unreadNotificationsCount} ${t('home.alerts')}`}
+          showBadge={true}
+          onPress={() => router.push('/screens/notifications')}
         />
         <ListItem
           icon={<Ionicons name="swap-horizontal" size={24} color={colors.secondary} />}
@@ -555,5 +634,18 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 40,  // Augmentation de l'espace en bas pour éviter que la barre de navigation ne cache le contenu
+  },
+  notificationBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  notificationBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 }); 

@@ -60,6 +60,25 @@ export default {
     globalTrend: 'Tendance globale du marché',
     newCard: 'Nouvelle carte'
   },
+  alerts: {
+    title: 'Notifications',
+    noNotifications: 'Aucune notification pour le moment',
+    markAsRead: 'Marquer comme lu',
+    markAllAsRead: 'Tout marquer comme lu',
+    wishlistItemSale: 'Carte wishlist en vente',
+    wishlistItemSaleDesc: 'La carte {{cardName}} de votre wishlist est maintenant en vente',
+    priceAlert: 'Alerte de prix',
+    priceAlertDesc: 'Le prix de {{cardName}} a changé de {{percent}}%',
+    deleteAll: 'Supprimer toutes les notifications',
+    confirmDeleteAll: 'Êtes-vous sûr de vouloir supprimer toutes vos notifications ?',
+    cancel: 'Annuler',
+    confirm: 'Confirmer',
+    card: 'carte',
+    cards: 'cartes',
+    priceIncreased: 'Le prix a augmenté',
+    priceDecreased: 'Le prix a diminué',
+    unreadOnly: 'Non lues uniquement'
+  },
   scan: {
     scanCard: 'Scanner une carte',
     error: 'Erreur',
@@ -103,6 +122,7 @@ export default {
     chooseLanguage: 'Choisir la langue',
     french: 'Français',
     english: 'Anglais',
+    account: 'Compte',
     logout: 'Se déconnecter',
     deleteAccount: 'Supprimer le compte',
     version: 'Version',

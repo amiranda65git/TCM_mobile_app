@@ -24,6 +24,17 @@ interface OfficialCard {
   editions: Edition;
 }
 
+// Type pour les notifications
+interface Notification {
+  id: string;
+  user_id: string;
+  type: 'wishlist_item_sale' | 'price_alert';
+  card_id: string;
+  is_read: boolean;
+  created_at: string;
+  data: any;
+}
+
 // Configuration de Supabase
 const supabaseUrl = 'https://dzbdoptsnbonimwunwva.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YmRvcHRzbmJvbmltd3Vud3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2MzM2MTMsImV4cCI6MjA2MDIwOTYxM30.QueqgFdiYEtHubCvQRUHd0mbFuvJJIaIhFa6CAqqI6U';
@@ -285,6 +296,28 @@ export const signIn = async (email: string, password: string) => {
     
     // Initialiser le bucket avatar lors de la connexion
     await initAvatarBucket();
+    
+    // Vérifier si l'utilisateur a déjà un profil
+    if (data?.user) {
+      try {
+        // Vérifier directement si un profil existe dans la table users
+        const { count, error: countError } = await supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .eq('id', data.user.id);
+        
+        // Créer un profil seulement si aucun n'existe (count === 0)
+        if (!countError && count === 0) {
+          console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
+          const defaultUsername = email.split('@')[0] || 'User';
+          await createUserProfile(data.user.id, defaultUsername, email);
+        } else {
+          console.log('Profil utilisateur existant trouvé');
+        }
+      } catch (err) {
+        console.error('Erreur lors de la vérification du profil:', err);
+      }
+    }
 
     return { data, error: null };
   } catch (error: any) {
@@ -394,6 +427,26 @@ export const updateUsername = async (userId: string, newUsername: string) => {
       }
     }
     
+    // Mettre à jour le display name dans l'authentification Supabase également
+    try {
+      // Utiliser l'API Supabase Auth pour mettre à jour les données utilisateur
+      const { error: updateAuthError } = await supabase.auth.updateUser({
+        data: { 
+          username: newUsername  // Stocké dans les métadonnées utilisateur
+        }
+      });
+      
+      if (updateAuthError) {
+        console.error('Erreur lors de la mise à jour des métadonnées utilisateur:', updateAuthError);
+        // On continue même en cas d'erreur ici, car la mise à jour de la table users est plus importante
+      } else {
+        console.log('Métadonnées utilisateur mises à jour avec succès');
+      }
+    } catch (authError) {
+      console.error('Exception lors de la mise à jour des métadonnées utilisateur:', authError);
+      // On continue même en cas d'erreur
+    }
+    
     return { success: true, error: null };
   } catch (error) {
     console.error('Erreur lors de la sauvegarde du pseudo:', error);
@@ -416,6 +469,24 @@ export const createUserProfile = async (userId: string, username: string, email:
     if (error) {
       console.error('Erreur lors de la création du profil:', error);
       return { success: false, error };
+    }
+    
+    // Mettre à jour également les métadonnées utilisateur dans l'authentification Supabase
+    try {
+      // Utiliser l'API Supabase Auth pour mettre à jour les données utilisateur
+      const { error: updateAuthError } = await supabase.auth.updateUser({
+        data: { 
+          username: username  // Stocké dans les métadonnées utilisateur
+        }
+      });
+      
+      if (updateAuthError) {
+        console.error('Erreur lors de la mise à jour des métadonnées utilisateur:', updateAuthError);
+      } else {
+        console.log('Métadonnées utilisateur créées avec succès');
+      }
+    } catch (authError) {
+      console.error('Exception lors de la mise à jour des métadonnées utilisateur:', authError);
     }
     
     return { success: true, error: null };
@@ -1152,7 +1223,6 @@ export const getTopGainers = async () => {
     return { data: [], error };
   }
 };
-
 // Fonction pour récupérer les cartes ayant la plus forte baisse sur les 2 dernières dates
 export const getTopLosers = async () => {
   try {
