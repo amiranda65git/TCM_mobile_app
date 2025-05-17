@@ -25,6 +25,7 @@ interface CardInfo {
   market_price_mid?: number | null;
   market_price_high?: number | null;
   has_wishlist: boolean;
+  condition?: string;
 }
 
 interface EditionDetail {
@@ -219,19 +220,19 @@ const SwipeableCard = ({ card, colors, t, router, onSellPress, onPriceAlertPress
             size={24} 
             color={card.owned ? colors.secondary : colors.text.secondary} 
           />
-          {card.has_wishlist && !card.owned && (
-            <Ionicons name="star" size={18} color="#FFD700" style={{ marginTop: 2 }} />
-          )}
-          {card.owned && card.is_for_sale && (
-            <Text style={[styles.forSaleBadge, { color: colors.secondary, borderColor: colors.secondary }]}>
-              {t('card.forSale')}
-            </Text>
-          )}
-          {card.owned && card.has_price_alert && (
-            <Text style={[styles.alertBadge, { color: '#3498db', borderColor: '#3498db' }]}>
-              <Ionicons name="notifications" size={10} color="#3498db" /> {t('card.alert')}
-            </Text>
-          )}
+            {card.has_wishlist && !card.owned && (
+              <Ionicons name="star" size={18} color="#FFD700" style={{ marginTop: 2 }} />
+            )}
+            {card.owned && card.is_for_sale && (
+              <Text style={[styles.forSaleBadge, { color: colors.secondary, borderColor: colors.secondary }]}>
+                {t('card.forSale')}
+              </Text>
+            )}
+            {card.owned && card.has_price_alert && (
+              <Text style={[styles.alertBadge, { color: '#3498db', borderColor: '#3498db' }]}>
+                <Ionicons name="notifications" size={10} color="#3498db" /> {t('card.alert')}
+              </Text>
+            )}
         </View>
       </TouchableOpacity>
     </Swipeable>
@@ -254,6 +255,20 @@ export default function EditionDetail() {
   const [sellModalVisible, setSellModalVisible] = useState(false);
   const [selectedCard, setSelectedCard] = useState<CardInfo | null>(null);
   const [sellingPrice, setSellingPrice] = useState('');
+  const [selectedCondition, setSelectedCondition] = useState('');
+  
+  // État pour le filtre des cartes possédées
+  const [showOnlyOwned, setShowOnlyOwned] = useState(false);
+
+  // Les conditions disponibles pour les cartes avec leurs couleurs
+  const CONDITION_COLORS = {
+    'Near Mint': '#4CAF50',   // Vert pour Near Mint
+    'Excellent': '#2196F3',   // Bleu pour Excellent
+    'Good': '#FFC107',        // Jaune pour Good
+    'Played': '#FF5722'       // Orange pour Played
+  };
+  
+  const CONDITIONS = Object.keys(CONDITION_COLORS);
 
   useEffect(() => {
     loadEditionDetails();
@@ -328,6 +343,10 @@ export default function EditionDetail() {
     }
     
     setSellingPrice(initialPrice);
+    
+    // Définir la condition actuelle ou "Near Mint" par défaut
+    setSelectedCondition(card.condition || 'Near Mint');
+    
     setSellModalVisible(true);
   };
 
@@ -402,7 +421,8 @@ export default function EditionDetail() {
         .from('user_cards')
         .update({
           price: price,
-          is_for_sale: true
+          is_for_sale: true,
+          condition: selectedCondition
         })
         .eq('user_id', user.id)
         .eq('card_id', selectedCard.id);
@@ -465,6 +485,9 @@ export default function EditionDetail() {
     }
   };
 
+  // Filtrer les cartes selon l'état de showOnlyOwned
+  const filteredCards = editionDetail?.cards.filter(card => !showOnlyOwned || card.owned) || [];
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -519,6 +542,16 @@ export default function EditionDetail() {
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
           {editionDetail.name}
         </Text>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => setShowOnlyOwned(!showOnlyOwned)}
+        >
+          <MaterialIcons 
+            name={showOnlyOwned ? "catching-pokemon" : "catching-pokemon"} 
+            size={24} 
+            color={showOnlyOwned ? colors.secondary : colors.text.primary} 
+          />
+        </TouchableOpacity>
       </View>
       
       <ScrollView 
@@ -567,12 +600,21 @@ export default function EditionDetail() {
           </View>
         </View>
         
-        <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>
-          {t('edition.allCards')}
-        </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>
+            {t('edition.allCards')}
+          </Text>
+          {showOnlyOwned && (
+            <View style={[styles.filterBadge, { backgroundColor: colors.secondary }]}>
+              <Text style={styles.filterBadgeText}>
+                {t('edition.onlyOwned')}
+              </Text>
+            </View>
+          )}
+        </View>
         
         <View style={styles.cardsGrid}>
-          {editionDetail.cards.map(card => (
+          {filteredCards.map(card => (
             <SwipeableCard 
               key={card.id} 
               card={card} 
@@ -640,6 +682,38 @@ export default function EditionDetail() {
                       {t('card.currentPrice')}: {selectedCard.price?.toFixed(2)} €
                     </Text>
                     
+                    {/* Sélecteur de condition pour les cartes déjà en vente */}
+                    <View style={styles.conditionContainer}>
+                      <Text style={[styles.conditionLabel, { color: colors.text.primary }]}>
+                        {t('card.condition')}:
+                      </Text>
+                      <View style={styles.conditionSelector}>
+                        {CONDITIONS.map((condition) => (
+                          <TouchableOpacity
+                            key={condition}
+                            style={[
+                              styles.conditionButton,
+                              selectedCondition === condition && { 
+                                backgroundColor: CONDITION_COLORS[condition] + '30',
+                                borderColor: CONDITION_COLORS[condition] 
+                              },
+                              { borderColor: colors.border }
+                            ]}
+                            onPress={() => setSelectedCondition(condition)}
+                          >
+                            <Text 
+                              style={[
+                                styles.conditionButtonText, 
+                                { color: selectedCondition === condition ? CONDITION_COLORS[condition] : colors.text.secondary }
+                              ]}
+                            >
+                              {t(`card.conditions.${condition.toLowerCase().replace(' ', '')}`)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    
                     <View style={styles.sellButtonsRow}>
                       <TouchableOpacity 
                         style={[styles.cancelButton, { borderColor: colors.error }]}
@@ -666,6 +740,38 @@ export default function EditionDetail() {
                   </View>
                 ) : (
                   <View>
+                    {/* Sélecteur de condition pour les nouvelles ventes */}
+                    <View style={styles.conditionContainer}>
+                      <Text style={[styles.conditionLabel, { color: colors.text.primary }]}>
+                        {t('card.selectCondition')}:
+                      </Text>
+                      <View style={styles.conditionSelector}>
+                        {CONDITIONS.map((condition) => (
+                          <TouchableOpacity
+                            key={condition}
+                            style={[
+                              styles.conditionButton,
+                              selectedCondition === condition && { 
+                                backgroundColor: CONDITION_COLORS[condition] + '30',
+                                borderColor: CONDITION_COLORS[condition] 
+                              },
+                              { borderColor: colors.border }
+                            ]}
+                            onPress={() => setSelectedCondition(condition)}
+                          >
+                            <Text 
+                              style={[
+                                styles.conditionButtonText, 
+                                { color: selectedCondition === condition ? CONDITION_COLORS[condition] : colors.text.secondary }
+                              ]}
+                            >
+                              {t(`card.conditions.${condition.toLowerCase().replace(' ', '')}`)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    
                     <View style={styles.sellingPriceContainer}>
                       <Text style={[styles.sellingPriceLabel, { color: colors.text.primary }]}>
                         {t('card.sellingPrice')}
@@ -781,10 +887,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginVertical: 16,
+  },
+  filterBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 10,
+  },
+  filterBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   cardsGrid: {
     width: '100%',
@@ -831,6 +952,36 @@ const styles = StyleSheet.create({
   cardOwnership: {
     marginLeft: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    width: 60,
+  },
+  badgesContainer: {
+    alignItems: 'center',
+    marginTop: 4,
+    minHeight: 28,
+  },
+  iconBadge: {
+    marginTop: 2,
+  },
+  forSaleBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    borderWidth: 1,
+    padding: 2,
+    paddingHorizontal: 4,
+    borderRadius: 4,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  alertBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    borderWidth: 1,
+    padding: 2,
+    paddingHorizontal: 4,
+    borderRadius: 4,
+    marginTop: 4,
+    textAlign: 'center',
   },
   customHeader: {
     flexDirection: 'row',
@@ -851,10 +1002,9 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
-  headerRight: {
-    width: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  filterButton: {
+    padding: 8,
+    borderRadius: 20,
   },
   swipeActionContainer: {
     height: 80,
@@ -884,7 +1034,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 18,
   },
-  // Styles pour le modal de vente
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -970,26 +1119,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  forSaleBadge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    borderWidth: 1,
-    padding: 2,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  alertBadge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    borderWidth: 1,
-    padding: 2,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-    marginTop: 4,
-    textAlign: 'center',
-  },
+
   alreadyForSaleContainer: {
     marginBottom: 30,
     alignItems: 'center',
@@ -1017,13 +1147,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButtonText: {
-    fontSize: 16,
     fontWeight: 'bold',
   },
   updateButton: {
     padding: 10,
     borderRadius: 10,
     width: '48%',
+    alignItems: 'center',
+  },
+  conditionContainer: {
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  conditionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 10,
+  },
+  conditionSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    flexWrap: 'wrap',
+  },
+  conditionButton: {
+    padding: 10,
+    borderWidth: 2,
+    borderRadius: 10,
+    width: '48%',
+    alignItems: 'center',
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  conditionButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  infoContainer: {
+    flex: 1,
     alignItems: 'center',
   },
 }); 

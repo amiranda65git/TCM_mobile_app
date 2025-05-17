@@ -796,21 +796,71 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
 // Fonction pour calculer la valeur totale de la collection d'un utilisateur
 export const getUserCollectionTotalValue = async (userId: string) => {
   try {
-    const { data, error } = await supabase
+    // 1. Récupérer les cartes de l'utilisateur avec leurs IDs
+    const { data: userCards, error: userCardsError } = await supabase
       .from('user_cards')
       .select(`
         id,
+        card_id,
         price
       `)
       .eq('user_id', userId);
     
-    if (error) {
-      console.error("Erreur lors du calcul de la valeur totale de la collection:", error);
-      return { totalValue: 0, error };
+    if (userCardsError) {
+      console.error("Erreur lors du calcul de la valeur totale de la collection:", userCardsError);
+      return { totalValue: 0, error: userCardsError };
     }
     
-    // Calculer la valeur totale
-    const totalValue = data?.reduce((total, card) => total + (card.price || 0), 0) || 0;
+    if (!userCards || userCards.length === 0) {
+      return { totalValue: 0, error: null };
+    }
+    
+    // Extraire les IDs des cartes
+    const cardIds = userCards.map(card => card.card_id);
+    
+    // 2. Récupérer les prix du marché pour les cartes sans prix manuel
+    const { data: marketPrices, error: marketPricesError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid')
+      .in('card_id', cardIds)
+      .order('date', { ascending: false });
+      
+    if (marketPricesError) {
+      console.error("Erreur lors de la récupération des prix du marché:", marketPricesError);
+      // Continuer avec les prix définis manuellement uniquement
+    }
+    
+    // Créer une map des prix du marché les plus récents
+    const marketPriceMap = new Map();
+    if (marketPrices) {
+      // Pour chaque carte, ne garder que le prix le plus récent
+      const seenCardIds = new Set();
+      marketPrices.forEach(price => {
+        if (!seenCardIds.has(price.card_id) && price.price_mid !== null) {
+          marketPriceMap.set(price.card_id, price.price_mid);
+          seenCardIds.add(price.card_id);
+        }
+      });
+    }
+    
+    // 3. Calculer la valeur totale en utilisant le prix manuel s'il existe, sinon le prix du marché
+    let totalValue = 0;
+    
+    userCards.forEach(card => {
+      if (card.price !== null && card.price !== undefined) {
+        // Utiliser le prix manuel s'il est défini
+        totalValue += card.price;
+      } else {
+        // Sinon, utiliser le prix du marché s'il est disponible
+        const marketPrice = marketPriceMap.get(card.card_id);
+        if (marketPrice !== undefined) {
+          totalValue += marketPrice;
+        }
+        // Si aucun prix n'est disponible, la valeur est 0
+      }
+    });
+    
+    console.log(`Valeur totale calculée: ${totalValue} € pour ${userCards.length} cartes`);
     
     return { totalValue, error: null };
   } catch (error) {
@@ -1002,54 +1052,61 @@ export const getMarketPricesForCard = async (cardId: string) => {
 // Fonction pour récupérer les cartes en vente pour une carte officielle
 export const getCardsForSale = async (cardId: string) => {
   try {
+    // Récupérer les cartes en vente
     const { data, error } = await supabase
-      .from('user_cards')
-      .select(`
-        id, 
-        user_id, 
-        card_id, 
-        condition, 
-        price, 
-        is_for_sale, 
-        created_at,
-        users:user_id (
-          username, 
-          avatar_url
-        )
-      `)
-      .eq('card_id', cardId)
-      .eq('is_for_sale', true)
-      .order('price', { ascending: true });
+  .from('user_cards')
+  .select(`
+    id, 
+    user_id, 
+    card_id, 
+    condition, 
+    price, 
+    is_for_sale, 
+    created_at,
+    users (
+      username, 
+      avatar_url
+    )
+  `)
+  .eq('card_id', cardId)
+  .eq('is_for_sale', true)
+  .order('price', { ascending: true });
     
     if (error) {
       console.error("Erreur lors de la récupération des cartes en vente:", error);
       return { data: null, error };
     }
     
-    // Transformer la structure des données
-    const formattedData = data?.map(card => {
-      // Vérifier si users est un objet ou un tableau et extraire les données en conséquence
-      let userInfo: UserInfo;
-      if (Array.isArray(card.users)) {
-        userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
-      } else {
-        userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
-      }
-      
-      return {
-        id: card.id,
-        user_id: card.user_id,
-        card_id: card.card_id,
-        condition: card.condition,
-        price: card.price,
-        is_for_sale: card.is_for_sale,
-        created_at: card.created_at,
-        user: {
-          username: userInfo.username || '',
-          avatar_url: userInfo.avatar_url || ''
-        }
-      };
-    }) || [];
+// Transformer la structure des données
+const formattedData = data?.map(card => {
+  // Vérifier si users est un objet ou un tableau et extraire les données en conséquence
+  let userInfo: UserInfo;
+  if (Array.isArray(card.users)) {
+    userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
+  } else {
+    userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
+  }
+  
+  return {
+    id: card.id,
+    user_id: card.user_id,
+    card_id: card.card_id,
+    condition: card.condition,
+    price: card.price,
+    is_for_sale: card.is_for_sale,
+    created_at: card.created_at,
+    user: {
+      username: userInfo.username || '',
+      avatar_url: userInfo.avatar_url || ''
+    }
+  };
+}) || [];
+    // Si aucune carte n'est trouvée
+    if (!data || data.length === 0) {
+      return { data: [], error: null };
+    }
+    
+    
     
     return { data: formattedData, error: null };
   } catch (error) {

@@ -11,6 +11,7 @@ export default {
     viewAll: 'Voir tout',
     currentValue: 'Valeur actuelle',
     cards: 'Cartes',
+    card: 'Carte',
     inventory: 'Inventaire',
     createFolder: 'Créer un dossier',
     decks: 'Decks',
@@ -32,7 +33,8 @@ export default {
     notFound: 'Édition non trouvée',
     value: 'Valeur totale',
     cardsOwned: 'Cartes possédées',
-    allCards: 'Toutes les cartes'
+    allCards: 'Toutes les cartes',
+    onlyOwned: 'Uniquement possédées'
   },
   wishlist: {
     empty: 'Liste de souhaits vide',
@@ -48,7 +50,7 @@ export default {
     buyCard: 'Acheter une carte',
     cardsForSale: 'Cartes en vente par la communauté',
     noCardsForSale: 'Aucune carte en vente actuellement',
-    unknownSeller: 'Vendeur inconnu',
+    unknownSeller: 'Nom du vendeur indisponible',
     buyOnGamezest: 'Acheter sur GameZest.ch',
     tabs: {
       all: 'Toutes les cartes',
@@ -229,6 +231,13 @@ export default {
     rarity: 'Rareté',
     edition: 'Édition',
     condition: 'État',
+    selectCondition: 'Sélectionner l\'état',
+    conditions: {
+      nearmint: 'Quasi Neuf',
+      excellent: 'Excellent',
+      good: 'Bon',
+      played: 'Joué'
+    },
     prices: 'Prix du marché',
     lowPrice: 'Prix bas',
     midPrice: 'Prix moyen',

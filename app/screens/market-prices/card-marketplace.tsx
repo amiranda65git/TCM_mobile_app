@@ -349,7 +349,7 @@ export default function CardMarketplace() {
                 ) : (
                   <View style={[styles.sellerAvatarPlaceholder, { backgroundColor: colors.border }]}>
                     <Text style={[styles.sellerInitials, { color: colors.text.secondary }]}>
-                      {item.user?.username?.slice(0, 1).toUpperCase() || '?'}
+                      {item.user?.username ? item.user.username.slice(0, 1).toUpperCase() : '?'}
                     </Text>
                   </View>
                 )}
