@@ -67,7 +67,14 @@ export default {
     noPriceYet: 'No price yet',
     filteredBy: 'Filtered by',
     noFilterResults: 'No cards match this filter',
-    typeToSearch: 'Type to search'
+    typeToSearch: 'Type to search',
+    refuseOfferAlertMessage: "We will inform the member that you have refused their offer. They will be able to make you a new offer.",
+    acceptOfferAlertTitle: "Accept offer",
+    acceptOfferAlertMessage: "By accepting, you agree to share your email with the interested member.",
+    acceptOfferSuccess: "Emails sent to both buyer and seller.",
+    acceptOfferError: "Error sending emails.",
+    notificationOfferAccepted: "Your offer for the card {{card}} has been accepted! You can contact the seller at the provided address.",
+    notificationOfferRefused: "Your offer for the card {{card}} has been refused.",
   },
   alerts: {
     title: 'Notifications',
@@ -212,7 +219,8 @@ export default {
     common: 'Common',
     skip: 'Skip',
     next: 'Next',
-    getStarted: 'Get Started'
+    getStarted: 'Get Started',
+    all: 'All'
   },
   card: {
     buy: 'Buy',
@@ -268,5 +276,23 @@ export default {
     wishlistInterest: 'Wishlist interest',
     yesterday: 'yesterday',
     today: 'today',
+  },
+  trading: {
+    title: 'Trading',
+    buy: 'Buy',
+    sell: 'Sell',
+    no_cards_to_buy: 'No cards available for purchase at this time.',
+    filters: {
+      title: 'Filters and Sorting',
+      cardName: 'Card Name',
+      cardNamePlaceholder: 'Search for a card...',
+      editionName: 'Edition Name',
+      editionNamePlaceholder: 'Search for an edition...',
+      sortBy: 'Sort by',
+      sortName: 'Name',
+      sortPrice: 'Price',
+      reset: 'Reset',
+      apply: 'Apply'
+    }
   },
 }; 

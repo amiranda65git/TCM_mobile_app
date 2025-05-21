@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   Platform,
-  RefreshControl
+  RefreshControl,
+  Animated
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { useAuth } from '../lib/auth';
-import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../lib/supabase';
+import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, archiveNotification } from '../lib/supabase';
+import { Swipeable } from 'react-native-gesture-handler';
 
 export default function NotificationsScreen() {
   const { t } = useTranslation();
@@ -36,7 +38,7 @@ export default function NotificationsScreen() {
       const { data, error } = await getUserNotifications(user.id);
       if (error) throw error;
       
-      setNotifications(data || []);
+      setNotifications((data || []).filter((n: any) => !n.archived));
     } catch (error) {
       console.error('Erreur lors du chargement des notifications:', error);
     } finally {
@@ -63,19 +65,19 @@ export default function NotificationsScreen() {
         );
       }
       
-      // Naviguer en fonction du type de notification
+      // Navigation selon le type de notification
       if (notification.type === 'wishlist_item_sale') {
-        // Naviguer vers la carte en vente
-        router.push({
-          pathname: '/market',
-          params: { cardId: notification.card_id }
-        });
+        router.push({ pathname: '/market', params: { cardId: notification.card_id } });
       } else if (notification.type === 'price_alert') {
-        // Naviguer vers la carte avec l'alerte de prix
-        router.push({
-          pathname: '/market',
-          params: { cardId: notification.card_id }
-        });
+        router.push({ pathname: '/market', params: { cardId: notification.card_id } });
+      } else if (notification.type === 'New_Offer_notification') {
+        // Aller vers la page card-sell-details pour la carte concernée uniquement si user_card_id est présent
+        if (notification.user_card_id) {
+          router.push(`/screens/market-prices/card-sell-details?id=${notification.user_card_id}`);
+        } else {
+          // Optionnel : afficher une alerte ou ne rien faire
+          // alert('Impossible d'ouvrir le détail de la vente : identifiant manquant.');
+        }
       }
     } catch (error) {
       console.error('Erreur lors du traitement de la notification:', error);
@@ -96,50 +98,58 @@ export default function NotificationsScreen() {
     }
   };
   
-  // Rendre un élément de notification
-  const renderNotificationItem = ({ item }: { item: any }) => {
-    // Déterminer l'icône et le texte en fonction du type de notification
-    let icon = 'notifications-outline';
-    let title = '';
-    let description = '';
-    
-    if (item.type === 'wishlist_item_sale') {
-      icon = 'cart-outline';
-      title = t('alerts.wishlistItemSale');
-      description = t('alerts.wishlistItemSaleDesc', { cardName: item.data?.card_name || 'Card' });
-    } else if (item.type === 'price_alert') {
-      const priceChange = item.data?.price_change || 0;
-      const isIncrease = priceChange > 0;
-      
-      icon = isIncrease ? 'trending-up-outline' : 'trending-down-outline';
-      title = t('alerts.priceAlert');
-      description = t('alerts.priceAlertDesc', { 
-        cardName: item.data?.card_name || 'Card',
-        percent: Math.abs(priceChange).toFixed(2)
-      });
-    }
-    
+  const renderRightActions = (progress: any, dragX: any, onArchive: () => void) => {
     return (
       <TouchableOpacity
-        style={[
-          styles.notificationItem,
-          { backgroundColor: item.is_read ? colors.background : colors.surface },
-          { borderBottomColor: colors.border }
-        ]}
-        onPress={() => handleNotificationPress(item)}
+        style={{
+          backgroundColor: 'red',
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+          flex: 1,
+          paddingRight: 24,
+        }}
+        onPress={onArchive}
       >
-        <View style={[styles.iconContainer, { backgroundColor: colors.primary }]}>
-          <Ionicons name={icon as any} size={24} color={colors.text.primary} />
-        </View>
-        <View style={styles.contentContainer}>
-          <Text style={[styles.title, { color: colors.text.primary }]}>{title}</Text>
-          <Text style={[styles.description, { color: colors.text.secondary }]}>{description}</Text>
-          <Text style={[styles.date, { color: colors.text.secondary }]}>
-            {new Date(item.created_at).toLocaleDateString()}
-          </Text>
-        </View>
-        {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: colors.secondary }]} />}
+        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Archive</Text>
       </TouchableOpacity>
+    );
+  };
+  
+  const renderNotificationItem = ({ item }: { item: any }) => {
+    const fontWeight = item.is_read ? 'normal' : 'bold';
+    // Générer dynamiquement le message selon le type
+    let message = item.message;
+    if (item.type === 'OfferAccepted') {
+      message = t('market.notificationOfferAccepted', { card: item.data?.card || '' });
+    } else if (item.type === 'OfferRefused') {
+      message = t('market.notificationOfferRefused', { card: item.data?.card || '' });
+    }
+    return (
+      <Swipeable
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, async () => {
+          await archiveNotification(item.id);
+          setNotifications(prev => prev.filter(n => n.id !== item.id));
+        })}
+      >
+        <TouchableOpacity
+          style={[
+            styles.notificationItem,
+            { backgroundColor: item.is_read ? colors.background : colors.surface },
+            { borderBottomColor: colors.border }
+          ]}
+          onPress={() => handleNotificationPress(item)}
+        >
+          <View style={styles.contentContainer}>
+            <Text style={[styles.date, { color: colors.text.secondary }]}>
+              {new Date(item.created_at).toLocaleDateString()}
+            </Text>
+            <Text style={[styles.description, { color: colors.text.primary, fontWeight, marginTop: 2 }]}>
+              {message}
+            </Text>
+          </View>
+          {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: colors.secondary }]} />}
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
   

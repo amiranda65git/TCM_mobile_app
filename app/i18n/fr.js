@@ -67,7 +67,14 @@ export default {
     noPriceYet: 'Pas de prix',
     filteredBy: 'Filtré par',
     noFilterResults: 'Aucune carte ne correspond à ce filtre',
-    typeToSearch: 'Tapez pour rechercher'
+    typeToSearch: 'Tapez pour rechercher',
+    refuseOfferAlertMessage: "Nous allons informer le membre que vous refusez son offre. Il pourra vous proposer une nouvelle offre.",
+    acceptOfferAlertTitle: "Accepter l'offre",
+    acceptOfferAlertMessage: "En acceptant l'offre vous acceptez de communiquer votre email au membre intéressé par votre carte.",
+    acceptOfferSuccess: "Les emails ont été envoyés à l'acheteur et au vendeur.",
+    acceptOfferError: "Erreur lors de l'envoi des emails.",
+    notificationOfferAccepted: "Votre offre pour la carte {{card}} a été acceptée ! Vous pouvez contacter le vendeur à l'adresse indiquée.",
+    notificationOfferRefused: "Votre offre pour la carte {{card}} a été refusée.",
   },
   alerts: {
     title: 'Notifications',
@@ -212,7 +219,8 @@ export default {
     common: 'Commun',
     skip: 'Passer',
     next: 'Suivant',
-    getStarted: 'Commencer'
+    getStarted: 'Commencer',
+    all: 'Tous'
   },
   card: {
     buy: 'Acheter',
@@ -268,5 +276,23 @@ export default {
     wishlistInterest: 'Intérêt wishlist',
     yesterday: 'hier',
     today: 'aujourd\'hui',
+  },
+  trading: {
+    title: 'Trading',
+    buy: 'Achat',
+    sell: 'Vente',
+    no_cards_to_buy: 'Aucune carte à acheter actuellement.',
+    filters: {
+      title: 'Filtres et tri',
+      cardName: 'Nom de la carte',
+      cardNamePlaceholder: 'Rechercher une carte...',
+      editionName: 'Nom de l\'édition',
+      editionNamePlaceholder: 'Rechercher une édition...',
+      sortBy: 'Trier par',
+      sortName: 'Nom',
+      sortPrice: 'Prix',
+      reset: 'Réinitialiser',
+      apply: 'Appliquer'
+    }
   },
 }; 

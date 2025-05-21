@@ -793,6 +793,163 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
   }
 };
 
+// Fonction pour récupérer toutes les cartes que l'utilisateur vend avec le prix de vente et le prix du marché
+export const getUserCardsForSale = async (userId: string) => {
+  try {
+    // 1. Récupérer toutes les cartes en vente de l'utilisateur
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        card_id,
+        price,
+        condition,
+        official_cards:card_id (
+          id,
+          name,
+          image_small,
+          edition_id,
+          editions:edition_id (name)
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_for_sale', true);
+
+    if (error) {
+      console.error('Erreur lors de la récupération des cartes en vente de l\'utilisateur:', error);
+      return { data: [], error };
+    }
+
+    // 2. Récupérer les prix du marché pour ces cartes
+    const cardIds = data.map(card => card.card_id);
+    let marketPrices: Array<{ card_id: string; price_mid: number; date: string }> = [];
+    
+    if (cardIds.length > 0) {
+      const { data: pricesData, error: pricesError } = await supabase
+        .from('market_prices')
+        .select('card_id, price_mid, date')
+        .in('card_id', cardIds)
+        .order('date', { ascending: false });
+        
+      if (pricesError) {
+        console.error('Erreur lors de la récupération des prix du marché:', pricesError);
+      } else {
+        marketPrices = pricesData || [];
+      }
+    }
+
+    // 3. Transformer les données en associant les prix du marché
+    const formatted = data?.map((item: any) => {
+      // Trouver le prix mid le plus récent pour cette carte
+      let marketPriceMid = null;
+      const cardPrices = marketPrices.filter(price => price.card_id === item.card_id);
+      
+      if (cardPrices.length > 0) {
+        // Trier par date décroissante et prendre le premier
+        const sorted = [...cardPrices].sort((a, b) => 
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        marketPriceMid = sorted[0]?.price_mid ?? null;
+      }
+      
+      return {
+        user_card_id: item.id,
+        card_id: item.official_cards?.id,
+        card_name: item.official_cards?.name,
+        image_small: item.official_cards?.image_small,
+        edition_name: item.official_cards?.editions?.name,
+        price: item.price,
+        condition: item.condition,
+        market_price_mid: marketPriceMid,
+      };
+    }) || [];
+
+    return { data: formatted, error: null };
+  } catch (error) {
+    console.error('Erreur inattendue dans getUserCardsForSale:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour récupérer toutes les cartes en vente par d'autres utilisateurs
+export const getCardsForSaleFromOthers = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        card_id,
+        price,
+        condition,
+        user_id,
+        official_cards:card_id (
+          id,
+          name,
+          image_small,
+          edition_id,
+          editions:edition_id (name)
+        )
+      `)
+      .eq('is_for_sale', true)
+      .neq('user_id', userId);
+
+    if (error) {
+      console.error('Erreur lors de la récupération des cartes en vente par d\'autres utilisateurs:', error);
+      return { data: [], error };
+    }
+
+    // 2. Récupérer les prix du marché pour ces cartes
+    const cardIds = data.map(card => card.card_id);
+    let marketPrices: Array<{ card_id: string; price_mid: number; date: string }> = [];
+    
+    if (cardIds.length > 0) {
+      const { data: pricesData, error: pricesError } = await supabase
+        .from('market_prices')
+        .select('card_id, price_mid, date')
+        .in('card_id', cardIds)
+        .order('date', { ascending: false });
+        
+      if (pricesError) {
+        console.error('Erreur lors de la récupération des prix du marché:', pricesError);
+      } else {
+        marketPrices = pricesData || [];
+      }
+    }
+
+    // 3. Transformer les données en associant les prix du marché
+    const formatted = data?.map((item: any) => {
+      // Trouver le prix mid le plus récent pour cette carte
+      let marketPriceMid = null;
+      const cardPrices = marketPrices.filter(price => price.card_id === item.card_id);
+      
+      if (cardPrices.length > 0) {
+        // Trier par date décroissante et prendre le premier
+        const sorted = [...cardPrices].sort((a, b) => 
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        marketPriceMid = sorted[0]?.price_mid ?? null;
+      }
+      
+      return {
+        user_card_id: item.id,
+        card_id: item.official_cards?.id,
+        card_name: item.official_cards?.name,
+        image_small: item.official_cards?.image_small,
+        edition_name: item.official_cards?.editions?.name,
+        price: item.price,
+        condition: item.condition,
+        market_price_mid: marketPriceMid,
+        seller_id: item.user_id,
+      };
+    }) || [];
+
+    return { data: formatted, error: null };
+  } catch (error) {
+    console.error('Erreur inattendue dans getCardsForSaleFromOthers:', error);
+    return { data: [], error };
+  }
+};
+
 // Fonction pour calculer la valeur totale de la collection d'un utilisateur
 export const getUserCollectionTotalValue = async (userId: string) => {
   try {
@@ -1052,65 +1209,92 @@ export const getMarketPricesForCard = async (cardId: string) => {
 // Fonction pour récupérer les cartes en vente pour une carte officielle
 export const getCardsForSale = async (cardId: string) => {
   try {
-    // Récupérer les cartes en vente
+    console.log(`[getCardsForSale] Début de récupération des cartes pour cardId: ${cardId}`);
+    
+    // Récupérer les cartes en vente avec jointure publique sur users
     const { data, error } = await supabase
-  .from('user_cards')
-  .select(`
-    id, 
-    user_id, 
-    card_id, 
-    condition, 
-    price, 
-    is_for_sale, 
-    created_at,
-    users (
-      username, 
-      avatar_url
-    )
-  `)
-  .eq('card_id', cardId)
-  .eq('is_for_sale', true)
-  .order('price', { ascending: true });
+      .from('user_cards')
+      .select(`
+        id, 
+        user_id, 
+        card_id, 
+        condition, 
+        price, 
+        is_for_sale, 
+        created_at,
+        users!user_cards_user_id_fkey (
+          username, 
+          avatar_url
+        )
+      `)
+      .eq('card_id', cardId)
+      .eq('is_for_sale', true)
+      .order('price', { ascending: true });
     
     if (error) {
-      console.error("Erreur lors de la récupération des cartes en vente:", error);
+      console.error("[getCardsForSale] Erreur lors de la récupération des cartes en vente:", error);
       return { data: null, error };
     }
     
-// Transformer la structure des données
-const formattedData = data?.map(card => {
-  // Vérifier si users est un objet ou un tableau et extraire les données en conséquence
-  let userInfo: UserInfo;
-  if (Array.isArray(card.users)) {
-    userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
-  } else {
-    userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
-  }
-  
-  return {
-    id: card.id,
-    user_id: card.user_id,
-    card_id: card.card_id,
-    condition: card.condition,
-    price: card.price,
-    is_for_sale: card.is_for_sale,
-    created_at: card.created_at,
-    user: {
-      username: userInfo.username || '',
-      avatar_url: userInfo.avatar_url || ''
+    console.log(`[getCardsForSale] Nombre de cartes récupérées: ${data?.length || 0}`);
+    // Afficher les données brutes pour les 2 premières cartes (si disponibles)
+    if (data && data.length > 0) {
+      console.log("[getCardsForSale] Première carte, données brutes:", JSON.stringify(data[0], null, 2));
+      console.log("[getCardsForSale] Première carte, users:", JSON.stringify(data[0].users, null, 2));
+      
+      if (data.length > 1) {
+        console.log("[getCardsForSale] Deuxième carte, users:", JSON.stringify(data[1].users, null, 2));
+      }
     }
-  };
-}) || [];
+    
+    // Transformer la structure des données
+    const formattedData = data?.map(card => {
+      // Vérifier si users est un objet ou un tableau et extraire les données en conséquence
+      console.log(`[getCardsForSale] Traitement de carte id: ${card.id}, user_id: ${card.user_id}, 
+                   type de users: ${typeof card.users}, 
+                   users est null?: ${card.users === null}, 
+                   users est Array?: ${Array.isArray(card.users)}`);
+      
+      let userInfo: UserInfo;
+      if (Array.isArray(card.users)) {
+        userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
+        console.log("[getCardsForSale] userInfo depuis tableau:", JSON.stringify(userInfo, null, 2));
+      } else if (card.users && typeof card.users === 'object') {
+        userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
+        console.log("[getCardsForSale] userInfo depuis objet:", JSON.stringify(userInfo, null, 2));
+      } else {
+        userInfo = { username: '', avatar_url: '' };
+        console.log("[getCardsForSale] userInfo par défaut car users est null ou undefined");
+      }
+      
+      const result = {
+        id: card.id,
+        user_id: card.user_id,
+        card_id: card.card_id,
+        condition: card.condition,
+        price: card.price,
+        is_for_sale: card.is_for_sale,
+        created_at: card.created_at,
+        user: {
+          username: userInfo.username || '',
+          avatar_url: userInfo.avatar_url || ''
+        }
+      };
+      
+      console.log(`[getCardsForSale] Carte formatée: id=${result.id}, username=${result.user.username}`);
+      
+      return result;
+    }) || [];
+    
     // Si aucune carte n'est trouvée
     if (!data || data.length === 0) {
+      console.log("[getCardsForSale] Aucune carte trouvée");
       return { data: [], error: null };
     }
     
-    
-    
     return { data: formattedData, error: null };
   } catch (error) {
-    console.error("Erreur inattendue lors de la récupération des cartes en vente:", error);
+    console.error("[getCardsForSale] Erreur inattendue lors de la récupération des cartes en vente:", error);
     return { data: null, error };
   }
 };
@@ -1495,7 +1679,6 @@ export const getWatchedCards = async (userId: string) => {
         number: card.number,
         rarity: card.rarity,
         image_small: card.image_small,
-        image_large: card.image_large,
         price_low: latestPrice?.price_low,
         price_mid: latestPrice?.price_mid,
         price_high: latestPrice?.price_high,
@@ -1617,6 +1800,169 @@ export const searchCards = async (searchTerm: string, limit: number = 10) => {
   }
 };
 
+// Fonction pour enregistrer une offre d'achat
+export const createOffer = async ({ buyer_id, seller_id, user_card_id, proposed_price, message = '' }: {
+  buyer_id: string,
+  seller_id: string,
+  user_card_id: string,
+  proposed_price: number,
+  message?: string
+}) => {
+  try {
+    const { data, error } = await supabase
+      .from('offers')
+      .insert([
+        {
+          buyer_id,
+          seller_id,
+          user_card_id,
+          proposed_price,
+          message,
+          status: 'pending',
+        }
+      ])
+      .select()
+      .single();
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la création de l\'offre:', error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour créer une notification pour le vendeur
+export const createOfferNotification = async ({ seller_id, card_id, user_card_id, card_name, type = 'offer' }: {
+  seller_id: string,
+  card_id: string,
+  user_card_id?: string,
+  card_name: string,
+  type?: string
+}) => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert([
+        {
+          user_id: seller_id,
+          type,
+          card_id,
+          user_card_id,
+          is_read: false,
+          data: { card: card_name },
+        }
+      ]);
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la création de la notification d\'offre:', error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour récupérer toutes les notifications d'un utilisateur
+export const getUserNotifications = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la récupération des notifications:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour archiver une notification
+export const archiveNotification = async (notificationId: string) => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ archived: true })
+      .eq('id', notificationId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Erreur lors de l\'archivage de la notification:', error);
+    return { success: false, error };
+  }
+};
+
+// Fonction pour marquer toutes les notifications comme lues
+export const markAllNotificationsAsRead = async (userId: string) => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('archived', false);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Erreur lors du marquage de toutes les notifications comme lues:', error);
+    return { success: false, error };
+  }
+};
+
+// Fonction pour marquer une notification comme lue
+export const markNotificationAsRead = async (notificationId: string) => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Erreur lors du marquage de la notification comme lue:', error);
+    return { success: false, error };
+  }
+};
+
+// Fonction pour refuser une offre
+export const refuseOffer = async (offerId: string) => {
+  try {
+    const { error } = await supabase
+      .from('offers')
+      .update({ status: 'cancel' })
+      .eq('id', offerId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('Erreur lors du refus de l\'offre:', error);
+    return { success: false, error };
+  }
+};
+
+// Fonction pour notifier l'acheteur du refus de son offre
+export const createRefuseOfferNotification = async ({ buyer_id, user_card_id, card_name }: {
+  buyer_id: string,
+  user_card_id: string,
+  card_name: string,
+}) => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert([
+        {
+          user_id: buyer_id,
+          type: 'OfferRefused',
+          user_card_id,
+          is_read: false,
+          data: { card: card_name },
+        }
+      ]);
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la notification de refus d\'offre:', error);
+    return { data: null, error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -1648,7 +1994,15 @@ const SupabaseService = {
   getTopLosers,
   getWatchedCards,
   signInWithGoogle,
-  searchCards
+  searchCards,
+  createOffer,
+  createOfferNotification,
+  getUserNotifications,
+  archiveNotification,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  refuseOffer,
+  createRefuseOfferNotification
 };
 
 export default SupabaseService; 
