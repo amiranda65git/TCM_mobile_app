@@ -10,7 +10,6 @@ import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchCards } from '../lib/supabase';
-import { LineChart } from 'react-native-chart-kit';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/auth';
@@ -86,8 +85,6 @@ export default function MarketScreen() {
   const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
-  const [trendLoading, setTrendLoading] = useState(true);
-  const [marketTrend, setMarketTrend] = useState<{ date: string; avg_price_mid: number }[]>([]);
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: 'all', title: TAB_TITLES[0] },
@@ -116,6 +113,7 @@ export default function MarketScreen() {
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [isLoadingFilteredCards, setIsLoadingFilteredCards] = useState(false);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -171,39 +169,14 @@ export default function MarketScreen() {
   );
 
   useEffect(() => {
-    const fetchMarketTrend = async () => {
-      setTrendLoading(true);
-      const { data, error } = await supabase
-        .from('global_market_trend')
-        .select('date, avg_price_mid')
-        .order('date', { ascending: true });
-      if (!error && data) {
-        setMarketTrend(data);
-      }
-      setTrendLoading(false);
-    };
-    fetchMarketTrend();
-  }, [refreshKey]);
-
-  useEffect(() => {
     if (index === 0) {
       setAllLoading(true);
       getTopCards().then(({ data }) => {
-        const cards = data || [];
-        setAllCards(cards);
-        
-        // Si un filtre est actif, appliquer le filtre aux cartes
-        if (isFiltering && filterName) {
-          const filtered = cards.filter(card => 
-            card.card_name.toLowerCase().includes(filterName.toLowerCase())
-          );
-          setFilteredCards(filtered);
-        }
-        
+        setAllCards(data || []);
         setAllLoading(false);
       });
     }
-  }, [index, refreshKey, isFiltering, filterName]);
+  }, [index, refreshKey]);
 
   useEffect(() => {
     if (index === 1) {
@@ -213,19 +186,10 @@ export default function MarketScreen() {
         // Utiliser la fonction de nettoyage avant de définir les données
         const cleanData = sanitizeNumericData(data || []);
         setGainers(cleanData);
-        
-        // Si un filtre est actif, appliquer le filtre aux cartes
-        if (isFiltering && filterName) {
-          const filtered = cleanData.filter(card => 
-            card.card_name.toLowerCase().includes(filterName.toLowerCase())
-          );
-          setFilteredCards(filtered);
-        }
-        
         setGainersLoading(false);
       });
     }
-  }, [index, refreshKey, isFiltering, filterName]);
+  }, [index, refreshKey]);
 
   useEffect(() => {
     if (index === 2) {
@@ -235,39 +199,20 @@ export default function MarketScreen() {
         // Utiliser la fonction de nettoyage avant de définir les données
         const cleanData = sanitizeNumericData(data || []);
         setLosers(cleanData);
-        
-        // Si un filtre est actif, appliquer le filtre aux cartes
-        if (isFiltering && filterName) {
-          const filtered = cleanData.filter(card => 
-            card.card_name.toLowerCase().includes(filterName.toLowerCase())
-          );
-          setFilteredCards(filtered);
-        }
-        
         setLosersLoading(false);
       });
     }
-  }, [index, refreshKey, isFiltering, filterName]);
+  }, [index, refreshKey]);
 
   useEffect(() => {
     if (index === 3 && user?.id) {
       setWatchedLoading(true);
       getWatchedCards(user.id).then(({ data }) => {
-        const watchedData = data || [];
-        setWatched(watchedData);
-        
-        // Si un filtre est actif, appliquer le filtre aux cartes
-        if (isFiltering && filterName) {
-          const filtered = watchedData.filter(card => 
-            card.card_name.toLowerCase().includes(filterName.toLowerCase())
-          );
-          setFilteredCards(filtered);
-        }
-        
+        setWatched(data || []);
         setWatchedLoading(false);
       });
     }
-  }, [index, refreshKey, user?.id, isFiltering, filterName]);
+  }, [index, refreshKey, user?.id]);
 
   // Nouvel effet pour la recherche
   useEffect(() => {
@@ -291,37 +236,30 @@ export default function MarketScreen() {
     return () => clearTimeout(delaySearch);
   }, [searchQuery]);
 
-  // Fonction qui filtre les cartes par nom au lieu d'ouvrir la page de détail
-  const handleCardSelect = (cardName: string) => {
+  // Fonction qui recherche toutes les cartes par nom dans la base de données
+  const handleCardSelect = async (cardName: string) => {
     setFilterName(cardName);
     setIsFiltering(true);
     setSearchQuery('');
     setShowSuggestions(false);
+    setIsLoadingFilteredCards(true);
     Keyboard.dismiss();
     
-    // Filtrer les cartes en fonction de l'onglet actif
-    let cardsToFilter;
-    switch (index) {
-      case 0:
-        cardsToFilter = allCards;
-        break;
-      case 1:
-        cardsToFilter = gainers;
-        break;
-      case 2:
-        cardsToFilter = losers;
-        break;
-      case 3:
-        cardsToFilter = watched;
-        break;
-      default:
-        cardsToFilter = allCards;
+    // Rechercher toutes les cartes avec ce nom dans la base de données
+    try {
+      const { data, error } = await searchCards(cardName, 1000); // Limite élevée pour récupérer toutes les cartes
+      if (!error && data) {
+        setFilteredCards(data);
+      } else {
+        console.error('Erreur lors de la recherche:', error);
+        setFilteredCards([]);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la recherche:', error);
+      setFilteredCards([]);
+    } finally {
+      setIsLoadingFilteredCards(false);
     }
-    
-    const filtered = cardsToFilter.filter(card => 
-      card.card_name.toLowerCase().includes(cardName.toLowerCase())
-    );
-    setFilteredCards(filtered);
   };
 
   // Fonction pour effacer le filtre
@@ -330,8 +268,6 @@ export default function MarketScreen() {
     setFilterName('');
     setFilteredCards([]);
   };
-
-  const screenWidth = Dimensions.get('window').width - 32;
 
   // Placeholders pour chaque onglet avec prise en compte du filtrage
   const AllCardsRoute = () => (
@@ -351,25 +287,29 @@ export default function MarketScreen() {
               </TouchableOpacity>
             </View>
           )}
-          <FlatList
-            data={isFiltering ? filteredCards : allCards}
-            keyExtractor={item => item.card_id}
-            renderItem={({ item }) => (
-              <CardListItem 
-                card={item} 
-                colors={colors} 
-                onPress={() => router.push(`/screens/card/${item.card_id}`)}
-              />
-            )}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            ListEmptyComponent={
-              isFiltering ? (
-                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                  {t('market.noFilterResults')}
-                </Text>
-              ) : null
-            }
-          />
+          {isLoadingFilteredCards ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={isFiltering ? filteredCards : allCards}
+              keyExtractor={item => item.card_id}
+              renderItem={({ item }) => (
+                <CardListItem 
+                  card={item} 
+                  colors={colors} 
+                  onPress={() => router.push(`/screens/card/${item.card_id}`)}
+                />
+              )}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              ListEmptyComponent={
+                isFiltering ? (
+                  <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                    {t('market.noFilterResults')}
+                  </Text>
+                ) : null
+              }
+            />
+          )}
         </>
       )}
     </View>
@@ -392,48 +332,52 @@ export default function MarketScreen() {
               </TouchableOpacity>
             </View>
           )}
-          <FlatList
-            data={isFiltering ? filteredCards : gainers}
-            keyExtractor={item => item.card_id}
-            renderItem={({ item }) => (
-              <CardListItem 
-                card={{ ...item, price_mid: item.last_price }} 
-                colors={colors} 
-                onPress={() => router.push(`/screens/card/${item.card_id}`)}
-              >
-                <View style={{ alignItems: 'flex-end' }}>
-                  {(item.diff === 0 && item.prev_price === null) ? (
-                    <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
-                      {t('market.newCard')}
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
-                        {typeof item.diff === 'number' ? 
-                          `${item.diff > 0 ? '+' : ''}${item.diff.toFixed(2)} €` : 
-                          '+0.00 €'}
+          {isLoadingFilteredCards ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={isFiltering ? filteredCards : gainers}
+              keyExtractor={item => item.card_id}
+              renderItem={({ item }) => (
+                <CardListItem 
+                  card={{ ...item, price_mid: item.last_price }} 
+                  colors={colors} 
+                  onPress={() => router.push(`/screens/card/${item.card_id}`)}
+                >
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {(item.diff === 0 && item.prev_price === null) ? (
+                      <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
+                        {t('market.newCard')}
                       </Text>
-                      {item.diff_percent !== 0 && (
-                        <Text style={{ color: '#2ecc71', fontSize: 11, marginLeft: 8 }}>
-                          {typeof item.diff_percent === 'number' ? 
-                            `${item.diff_percent > 0 ? '+' : ''}${item.diff_percent.toFixed(2)}%` : 
-                            '+0.00%'}
+                    ) : (
+                      <>
+                        <Text style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
+                          {typeof item.diff === 'number' ? 
+                            `${item.diff > 0 ? '+' : ''}${item.diff.toFixed(2)} €` : 
+                            '+0.00 €'}
                         </Text>
-                      )}
-                    </>
-                  )}
-                </View>
-              </CardListItem>
-            )}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            ListEmptyComponent={
-              isFiltering ? (
-                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                  {t('market.noFilterResults')}
-                </Text>
-              ) : null
-            }
-          />
+                        {item.diff_percent !== 0 && (
+                          <Text style={{ color: '#2ecc71', fontSize: 11, marginLeft: 8 }}>
+                            {typeof item.diff_percent === 'number' ? 
+                              `${item.diff_percent > 0 ? '+' : ''}${item.diff_percent.toFixed(2)}%` : 
+                              '+0.00%'}
+                          </Text>
+                        )}
+                      </>
+                    )}
+                  </View>
+                </CardListItem>
+              )}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              ListEmptyComponent={
+                isFiltering ? (
+                  <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                    {t('market.noFilterResults')}
+                  </Text>
+                ) : null
+              }
+            />
+          )}
         </>
       )}
     </View>
@@ -456,48 +400,52 @@ export default function MarketScreen() {
               </TouchableOpacity>
             </View>
           )}
-          <FlatList
-            data={isFiltering ? filteredCards : losers}
-            keyExtractor={item => item.card_id}
-            renderItem={({ item }) => (
-              <CardListItem 
-                card={{ ...item, price_mid: item.last_price }} 
-                colors={colors} 
-                onPress={() => router.push(`/screens/card/${item.card_id}`)}
-              >
-                <View style={{ alignItems: 'flex-end' }}>
-                  {(item.diff === 0 && item.prev_price === null) ? (
-                    <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
-                      {t('market.newCard')}
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
-                        {typeof item.diff === 'number' ? 
-                          `${item.diff.toFixed(2)} €` : 
-                          '0.00 €'}
+          {isLoadingFilteredCards ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={isFiltering ? filteredCards : losers}
+              keyExtractor={item => item.card_id}
+              renderItem={({ item }) => (
+                <CardListItem 
+                  card={{ ...item, price_mid: item.last_price }} 
+                  colors={colors} 
+                  onPress={() => router.push(`/screens/card/${item.card_id}`)}
+                >
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {(item.diff === 0 && item.prev_price === null) ? (
+                      <Text style={{ color: colors.text.secondary, fontSize: 11, marginLeft: 8, fontStyle: 'italic' }}>
+                        {t('market.newCard')}
                       </Text>
-                      {item.diff_percent !== 0 && (
-                        <Text style={{ color: '#e74c3c', fontSize: 11, marginLeft: 8 }}>
-                          {typeof item.diff_percent === 'number' ? 
-                            `${item.diff_percent.toFixed(2)}%` : 
-                            '0.00%'}
+                    ) : (
+                      <>
+                        <Text style={{ color: '#e74c3c', fontWeight: 'bold', fontSize: 13, marginLeft: 8 }}>
+                          {typeof item.diff === 'number' ? 
+                            `${item.diff.toFixed(2)} €` : 
+                            '0.00 €'}
                         </Text>
-                      )}
-                    </>
-                  )}
-                </View>
-              </CardListItem>
-            )}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            ListEmptyComponent={
-              isFiltering ? (
-                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                  {t('market.noFilterResults')}
-                </Text>
-              ) : null
-            }
-          />
+                        {item.diff_percent !== 0 && (
+                          <Text style={{ color: '#e74c3c', fontSize: 11, marginLeft: 8 }}>
+                            {typeof item.diff_percent === 'number' ? 
+                              `${item.diff_percent.toFixed(2)}%` : 
+                              '0.00%'}
+                          </Text>
+                        )}
+                      </>
+                    )}
+                  </View>
+                </CardListItem>
+              )}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              ListEmptyComponent={
+                isFiltering ? (
+                  <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                    {t('market.noFilterResults')}
+                  </Text>
+                ) : null
+              }
+            />
+          )}
         </>
       )}
     </View>
@@ -522,25 +470,29 @@ export default function MarketScreen() {
               </TouchableOpacity>
             </View>
           )}
-          <FlatList
-            data={isFiltering ? filteredCards : watched}
-            keyExtractor={item => item.card_id}
-            renderItem={({ item }) => (
-              <CardListItem 
-                card={item} 
-                colors={colors} 
-                onPress={() => router.push(`/screens/card/${item.card_id}`)}
-              />
-            )}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            ListEmptyComponent={
-              isFiltering ? (
-                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                  {t('market.noFilterResults')}
-                </Text>
-              ) : null
-            }
-          />
+          {isLoadingFilteredCards ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={isFiltering ? filteredCards : watched}
+              keyExtractor={item => item.card_id}
+              renderItem={({ item }) => (
+                <CardListItem 
+                  card={item} 
+                  colors={colors} 
+                  onPress={() => router.push(`/screens/card/${item.card_id}`)}
+                />
+              )}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              ListEmptyComponent={
+                isFiltering ? (
+                  <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                    {t('market.noFilterResults')}
+                  </Text>
+                ) : null
+              }
+            />
+          )}
         </>
       )}
     </View>
@@ -629,50 +581,6 @@ export default function MarketScreen() {
         </View>
       ) : null}
       
-      {/* Graphique de tendance globale du marché */}
-      {!showSuggestions && (
-        <View style={{ padding: 16 }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 18, color: colors.text.primary, marginBottom: 8 }}>{t('market.globalTrend')}</Text>
-          {trendLoading ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <LineChart
-              data={{
-                labels: marketTrend.map(item => new Date(item.date).toLocaleDateString().slice(0, 5)),
-                datasets: [
-                  {
-                    data: marketTrend.map(item => item.avg_price_mid ?? 0),
-                    color: () => colors.primary,
-                    strokeWidth: 2,
-                  },
-                ],
-              }}
-              width={screenWidth}
-              height={160}
-              yAxisSuffix=" €"
-              chartConfig={{
-                backgroundColor: colors.background,
-                backgroundGradientFrom: colors.background,
-                backgroundGradientTo: colors.background,
-                decimalPlaces: 2,
-                color: (opacity = 1) => colors.primary,
-                labelColor: (opacity = 1) => colors.text.secondary,
-                propsForDots: {
-                  r: '3',
-                  strokeWidth: '2',
-                  stroke: colors.primary,
-                },
-              }}
-              bezier
-              style={{
-                borderRadius: 12,
-                alignSelf: 'center',
-              }}
-            />
-          )}
-        </View>
-      )}
-      
       {/* Contenu des onglets - masqué pendant la recherche */}
       {!showSuggestions && (
         <TabView
@@ -683,7 +591,6 @@ export default function MarketScreen() {
             // Ne pas réinitialiser le filtre lors du changement d'onglet
             // pour permettre à l'utilisateur de comparer les données entre onglets
           }}
-          initialLayout={{ width: screenWidth }}
           renderTabBar={props => (
             <TabBar
               {...props}

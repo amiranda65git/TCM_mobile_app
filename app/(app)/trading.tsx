@@ -417,7 +417,7 @@ export default function TradingScreen() {
       setTempSortCategory(currentSortCategory);
       setTempSortDirection(sortDirection);
     }
-  }, [filterModalVisible]);
+  }, [filterModalVisible, cardNameFilter, editionNameFilter, currentSortOption, currentSortCategory, sortDirection]);
 
   // Appliquer les filtres
   const applyFilters = () => {
@@ -459,7 +459,12 @@ export default function TradingScreen() {
       <TouchableOpacity 
         style={[
           styles.sortOptionItem,
-          isActive ? { backgroundColor: colors.primaryLight } : {}
+          { 
+            backgroundColor: isActive ? colors.background : 'transparent',
+            borderColor: isActive ? colors.primary : colors.border,
+            borderRadius: 8,
+            marginBottom: 8
+          }
         ]} 
         onPress={() => toggleSort(category)}
       >
@@ -467,7 +472,7 @@ export default function TradingScreen() {
           <MaterialIcons name={icon as any} size={20} color={isActive ? colors.primary : colors.text.secondary} />
           <Text style={[
             styles.sortOptionText, 
-            { color: isActive ? colors.primary : colors.text.primary }
+            { color: isActive ? colors.primary : colors.text.primary, marginLeft: 8 }
           ]}>
             {title}
           </Text>
@@ -481,15 +486,21 @@ export default function TradingScreen() {
 
   // Remplacement du FilterModal pour reprendre le look & feel de collection.tsx
   const FilterModal = () => {
-    const [localCardFilter, setLocalCardFilter] = useState(tempCardNameFilter);
-    const [localEditionFilter, setLocalEditionFilter] = useState(tempEditionNameFilter);
+    // Initialiser les valeurs locales seulement une fois quand la modale s'ouvre
+    const [localCardFilter, setLocalCardFilter] = useState('');
+    const [localEditionFilter, setLocalEditionFilter] = useState('');
+    const [isInitialized, setIsInitialized] = useState(false);
     
+    // Initialiser les valeurs seulement quand la modale s'ouvre pour la première fois
     useEffect(() => {
-      if (filterModalVisible) {
+      if (filterModalVisible && !isInitialized) {
         setLocalCardFilter(tempCardNameFilter);
         setLocalEditionFilter(tempEditionNameFilter);
+        setIsInitialized(true);
+      } else if (!filterModalVisible) {
+        setIsInitialized(false);
       }
-    }, [filterModalVisible]);
+    }, [filterModalVisible, tempCardNameFilter, tempEditionNameFilter, isInitialized]);
     
     const handleApply = () => {
       setCardNameFilter(localCardFilter);
@@ -524,7 +535,7 @@ export default function TradingScreen() {
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback>
-                <View style={styles.modalContent}> 
+                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}> 
                   <View style={styles.modalHeader}>
                     <Text style={[styles.modalTitle, { color: colors.text.primary }]}>{t('trading.filters.title')}</Text>
                     <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
@@ -623,20 +634,21 @@ export default function TradingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 40,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginRight: 20,
   },
   filterIconButton: {
-    paddingLeft: 20,
+    padding: 8,
   },
   tabView: {
     flex: 1,
@@ -664,9 +676,9 @@ const styles = StyleSheet.create({
   sortOptionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    justifyContent: 'space-between',
+    padding: 12,
     borderWidth: 1,
-    borderColor: 'transparent',
   },
   sortOptionContent: {
     flexDirection: 'row',
@@ -686,7 +698,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 30,
     maxHeight: '85%',
-    backgroundColor: 'white',
     paddingHorizontal: 20,
   },
   modalHeader: {
