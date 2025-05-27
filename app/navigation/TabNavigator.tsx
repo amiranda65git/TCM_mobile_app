@@ -148,8 +148,8 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   
   // Pour gérer l'état du scan
   const handleScanPress = () => {
-    // Utiliser router.push pour naviguer vers l'écran direct-scan
-    router.push('/direct-scan');
+    // Naviguer vers la route scan (ScanScreen)
+    router.push('/scan');
   };
   
   return (

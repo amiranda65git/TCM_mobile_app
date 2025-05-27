@@ -1,3 +1,3 @@
-import DirectScanScreen from '../screens/DirectScanScreen';
+import ScanScreen from '../screens/ScanScreen';
 
-export default DirectScanScreen; 
+export default ScanScreen; 

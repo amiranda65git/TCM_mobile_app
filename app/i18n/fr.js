@@ -116,7 +116,21 @@ export default {
     addToCollection: 'Ajouter à la collection',
     cancel: 'Annuler',
     goToCollection: 'Voir ma collection',
-    scanResults: 'Résultats de l\'analyse'
+    scanResults: 'Résultats de l\'analyse',
+    matchingCards: 'Cartes correspondantes',
+    noMatchingCards: 'Aucune carte correspondante trouvée',
+    cardDetails: 'Détails de la carte',
+    edition: 'Édition',
+    number: 'Numéro',
+    hp: 'PV',
+    rarity: 'Rareté',
+    success: 'Succès',
+    addedToCollection: 'Carte ajoutée à votre collection avec succès !',
+    addToCollectionError: 'Erreur lors de l\'ajout à la collection',
+    unexpectedError: 'Une erreur inattendue s\'est produite',
+    adding: 'Ajout en cours...',
+    scan: 'Scanner',
+    selectCondition: 'Sélectionnez l\'état de la carte'
   },
   settings: {
     title: 'Paramètres',
@@ -180,6 +194,7 @@ export default {
     continueWithApple: 'Continuer avec Apple',
     forgotPassword: 'Mot de passe oublié ?',
     createAccount: 'Créer un compte',
+    required: 'Vous devez être connecté pour effectuer cette action'
   },
   signup: {
     title: 'Créer un compte',
@@ -220,7 +235,9 @@ export default {
     skip: 'Passer',
     next: 'Suivant',
     getStarted: 'Commencer',
-    all: 'Tous'
+    all: 'Tous',
+    ok: 'OK',
+    error: 'Erreur'
   },
   card: {
     buy: 'Acheter',

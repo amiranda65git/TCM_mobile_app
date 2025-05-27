@@ -116,7 +116,21 @@ export default {
     addToCollection: 'Add to collection',
     cancel: 'Cancel',
     goToCollection: 'View my collection',
-    scanResults: 'Scan results'
+    scanResults: 'Scan results',
+    matchingCards: 'Matching cards',
+    noMatchingCards: 'No matching cards found',
+    cardDetails: 'Card details',
+    edition: 'Edition',
+    number: 'Number',
+    hp: 'HP',
+    rarity: 'Rarity',
+    success: 'Success',
+    addedToCollection: 'Card successfully added to your collection!',
+    addToCollectionError: 'Error adding to collection',
+    unexpectedError: 'An unexpected error occurred',
+    adding: 'Adding...',
+    scan: 'Scan',
+    selectCondition: 'Select card condition'
   },
   settings: {
     title: 'Settings',
@@ -180,6 +194,7 @@ export default {
     continueWithApple: 'Continue with Apple',
     forgotPassword: 'Forgot password?',
     createAccount: 'Create an account',
+    required: 'You must be logged in to perform this action'
   },
   signup: {
     title: 'Create an account',
@@ -220,7 +235,9 @@ export default {
     skip: 'Skip',
     next: 'Next',
     getStarted: 'Get Started',
-    all: 'All'
+    all: 'All',
+    ok: 'OK',
+    error: 'Error'
   },
   card: {
     buy: 'Buy',
