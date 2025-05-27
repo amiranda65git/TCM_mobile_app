@@ -1,3 +1,8 @@
+// ⚠️ Les variables SUPABASE_URL et SUPABASE_ANON_KEY doivent être définies dans le fichier .env à la racine du projet mobile.
+// Exemple :
+// SUPABASE_URL=https://xxxx.supabase.co
+// SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
 // Polyfills minimaux pour Supabase Auth dans React Native
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
@@ -7,6 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // Types pour les relations Supabase
 interface UserInfo {
@@ -36,8 +42,8 @@ interface Notification {
 }
 
 // Configuration de Supabase
-const supabaseUrl = 'https://dzbdoptsnbonimwunwva.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YmRvcHRzbmJvbmltd3Vud3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2MzM2MTMsImV4cCI6MjA2MDIwOTYxM30.QueqgFdiYEtHubCvQRUHd0mbFuvJJIaIhFa6CAqqI6U';
+const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL || '';
+const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || '';
 
 // Client Supabase optimisé pour l'authentification uniquement
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -1963,6 +1969,298 @@ export const createRefuseOfferNotification = async ({ buyer_id, user_card_id, ca
   }
 };
 
+// Fonction pour rechercher des cartes par détails (nom, HP, numéro)
+export const searchOfficialCardsByDetails = async (details: { pokemonName?: string | null, healthPoints?: string | null, cardNumber?: string | null }) => {
+  try {
+    console.log('Recherche de cartes avec détails:', JSON.stringify(details));
+    
+    // Si aucun critère de recherche, retourner un tableau vide
+    if (!details.pokemonName && !details.healthPoints && !details.cardNumber) {
+      return { data: [], error: null };
+    }
+    
+    let query = supabase
+      .from('official_cards')
+      .select(`
+        id,
+        name,
+        hp,
+        number,
+        supertype,
+        types,
+        rarity,
+        image_small,
+        image_large,
+        edition_id,
+        editions:edition_id (
+          name,
+          symbol_image
+        )
+      `);
+    
+    // Ajouter les filtres si disponibles
+    if (details.pokemonName) {
+      query = query.ilike('name', `%${details.pokemonName}%`);
+    }
+    
+    if (details.healthPoints) {
+      query = query.eq('hp', details.healthPoints);
+    }
+    
+    if (details.cardNumber) {
+      // Extraire juste le numéro de la carte sans le dénominateur
+      const numberParts = details.cardNumber.split('/');
+      if (numberParts.length > 0) {
+        let cardNumber = numberParts[0].trim();
+        
+        // Traitement pour retirer les zéros en début si c'est un nombre pur
+        // Mais garder les préfixes comme "SM", "XY", etc.
+        if (/^\d+$/.test(cardNumber)) {
+          // Si c'est uniquement des chiffres, retirer les zéros en début
+          cardNumber = parseInt(cardNumber, 10).toString();
+        } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
+          // Si c'est un format comme "SM098", garder le préfixe et retirer les zéros du nombre
+          const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
+          if (match) {
+            const prefix = match[1];
+            const number = parseInt(match[2], 10).toString();
+            cardNumber = prefix + number;
+          }
+        }
+        
+        // Log pour debug
+        console.log(`Numéro original: "${details.cardNumber}" -> Numéro traité: "${cardNumber}"`);
+        
+        // Essayer de trouver avec le numéro traité
+        query = query.eq('number', cardNumber);
+      }
+    }
+    
+    // Exécuter la requête
+    const { data, error } = await query.order('name');
+    
+    if (error) {
+      console.error('Erreur lors de la recherche de cartes par détails:', error);
+      return { data: [], error };
+    }
+    
+    console.log(`Résultats trouvés: ${data?.length || 0}`);
+    
+    // Transformer les données pour être plus facilement utilisables
+    const transformedData = data?.map(card => {
+      // Extraire le nom de l'édition de manière sécurisée
+      let editionName = '';
+      let editionSymbol = '';
+      
+      if (card.editions) {
+        // Si editions est un tableau, prendre le premier élément
+        if (Array.isArray(card.editions) && card.editions.length > 0) {
+          editionName = card.editions[0].name || '';
+          editionSymbol = card.editions[0].symbol_image || '';
+        } 
+        // Si editions est un objet, prendre ses propriétés
+        else if (typeof card.editions === 'object' && card.editions !== null) {
+          editionName = (card.editions as any).name || '';
+          editionSymbol = (card.editions as any).symbol_image || '';
+        }
+      }
+      
+      return {
+        id: card.id,
+        name: card.name,
+        hp: card.hp,
+        number: card.number,
+        supertype: card.supertype,
+        types: card.types,
+        rarity: card.rarity,
+        image_small: card.image_small,
+        image_large: card.image_large,
+        edition: {
+          name: editionName,
+          symbol: editionSymbol
+        }
+      };
+    }) || [];
+    
+    return { data: transformedData, error: null };
+  } catch (error) {
+    console.error('Erreur inattendue lors de la recherche de cartes par détails:', error);
+    return { data: [], error };
+  }
+};
+
+// Initialisation du bucket userimages (sera créé s'il n'existe pas)
+export const initUserImagesBucket = async () => {
+  try {
+    // Vérifier si le bucket existe
+    const { data: buckets, error: bucketsError } = await supabase
+      .storage
+      .listBuckets();
+    
+    if (bucketsError) {
+      console.error('Erreur lors de la vérification des buckets:', bucketsError);
+      return { error: bucketsError };
+    }
+    
+    const userimagesBucketExists = buckets?.some(bucket => bucket.name === 'userimages');
+    
+    // Si le bucket n'existe pas, le créer
+    if (!userimagesBucketExists) {
+      console.log('Création du bucket userimages...');
+      const { error: createError } = await supabase
+        .storage
+        .createBucket('userimages', {
+          public: true, // Rendre le bucket accessible publiquement
+        });
+      
+      if (createError) {
+        console.error('Erreur lors de la création du bucket userimages:', createError);
+        return { error: createError };
+      }
+      console.log('Bucket userimages créé avec succès');
+    } else {
+      console.log('Le bucket userimages existe déjà');
+      
+      // Mettre à jour les permissions pour être sûr
+      const { error: updateError } = await supabase
+        .storage
+        .updateBucket('userimages', {
+          public: true,
+        });
+      
+      if (updateError) {
+        console.error('Erreur lors de la mise à jour des permissions du bucket:', updateError);
+        return { error: updateError };
+      }
+    }
+    
+    return { error: null };
+  } catch (error) {
+    console.error('Erreur inattendue lors de l\'initialisation du bucket userimages:', error);
+    return { error };
+  }
+};
+
+// Fonction pour ajouter une carte à la collection de l'utilisateur
+export const addCardToCollection = async ({ 
+  userId, 
+  cardId, 
+  condition = 'excellent', 
+  imageBase64 = null 
+}: {
+  userId: string,
+  cardId: string,
+  condition?: string,
+  imageBase64?: string | null
+}) => {
+  try {
+    console.log(`[addCardToCollection] Ajout de la carte ${cardId} à la collection de l'utilisateur ${userId}`);
+    
+    // Initialiser le bucket userimages si besoin
+    await initUserImagesBucket();
+    
+    let imageUrl = null;
+    
+    // Si une image est fournie, l'enregistrer dans le bucket
+    if (imageBase64) {
+      console.log('[addCardToCollection] Image fournie, enregistrement dans le bucket userimages');
+      
+      // Générer un nom de fichier unique
+      const fileName = `${userId}_${cardId}_${Date.now()}.jpg`;
+      
+      // Supprimer le préfixe data:image/jpeg;base64, s'il existe
+      const base64Data = imageBase64.includes('base64,') 
+        ? imageBase64.split('base64,')[1]
+        : imageBase64;
+      
+      // Enregistrer l'image dans le bucket
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('userimages')
+        .upload(fileName, decode(base64Data), {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        console.error('[addCardToCollection] Erreur lors de l\'upload de l\'image:', uploadError);
+      } else {
+        // Récupérer l'URL publique de l'image
+        const { data: publicUrlData } = supabase
+          .storage
+          .from('userimages')
+          .getPublicUrl(fileName);
+        
+        imageUrl = publicUrlData?.publicUrl || null;
+        console.log(`[addCardToCollection] Image enregistrée avec succès: ${imageUrl}`);
+      }
+    }
+    
+    // Ajouter la carte à la collection de l'utilisateur
+    const { data, error } = await supabase
+      .from('user_cards')
+      .insert([{
+        user_id: userId,
+        card_id: cardId,
+        condition: condition,
+        is_for_sale: false,
+        created_at: new Date().toISOString()
+      }])
+      .select();
+    
+    if (error) {
+      console.error('[addCardToCollection] Erreur lors de l\'ajout de la carte à la collection:', error);
+      return { data: null, error };
+    }
+    
+    console.log(`[addCardToCollection] Carte ajoutée avec succès à la collection`);
+    return { data: data?.[0] || null, error: null };
+  } catch (error) {
+    console.error('[addCardToCollection] Erreur inattendue lors de l\'ajout de la carte à la collection:', error);
+    return { data: null, error };
+  }
+};
+
+// Helper function to decode base64
+function decode(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Fonction pour récupérer le nombre de cartes de l'utilisateur qui ont au moins une offre
+export const getUserCardsWithOffersCount = async (userId: string) => {
+  try {
+    // Récupérer les cartes en vente de l'utilisateur qui ont des offres
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        offers!offers_user_card_id_fkey(id)
+      `)
+      .eq('user_id', userId)
+      .eq('is_for_sale', true);
+
+    if (error) {
+      console.error('Erreur lors de la récupération des cartes avec offres:', error);
+      return { count: 0, error };
+    }
+
+    // Compter les cartes qui ont au moins une offre
+    const cardsWithOffers = data?.filter(card => 
+      card.offers && Array.isArray(card.offers) && card.offers.length > 0
+    ) || [];
+
+    return { count: cardsWithOffers.length, error: null };
+  } catch (error) {
+    console.error('Erreur inattendue lors de la récupération des cartes avec offres:', error);
+    return { count: 0, error };
+  }
+};
+
 // Export par défaut pour Expo Router
 const SupabaseService = {
   supabase,
@@ -2002,7 +2300,11 @@ const SupabaseService = {
   markAllNotificationsAsRead,
   markNotificationAsRead,
   refuseOffer,
-  createRefuseOfferNotification
+  createRefuseOfferNotification,
+  searchOfficialCardsByDetails,
+  initUserImagesBucket,
+  addCardToCollection,
+  getUserCardsWithOffersCount
 };
 
 export default SupabaseService; 

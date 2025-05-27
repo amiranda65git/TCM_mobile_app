@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons, Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import { getUserCardsForSale, getCardsForSaleFromOthers } from '../lib/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 
 // Enum pour les options de tri
@@ -309,7 +309,15 @@ interface TradingRoute extends Route {
 export default function TradingScreen() {
   const colors = useThemeColors();
   const { t } = useTranslation();
-  const [index, setIndex] = useState(0);
+  const { tab } = useLocalSearchParams();
+  
+  // Déterminer l'index initial basé sur le paramètre tab
+  const getInitialIndex = () => {
+    if (tab === 'sell') return 1;
+    return 0; // 'buy' par défaut
+  };
+  
+  const [index, setIndex] = useState(getInitialIndex());
   const [routes] = useState<TradingRoute[]>([
     { key: 'buy', title: t('trading.buy') },
     { key: 'sell', title: t('trading.sell') },

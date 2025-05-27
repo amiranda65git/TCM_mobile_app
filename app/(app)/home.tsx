@@ -13,6 +13,7 @@ import {
   getUserWishlist, 
   getCollectionPriceVariation,
   createUserProfile,
+  getUserCardsWithOffersCount,
   supabase
 } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,6 +41,7 @@ export default function HomeScreen() {
   const [wishlistCount, setWishlistCount] = useState(0);
   const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [cardsWithOffersCount, setCardsWithOffersCount] = useState(0);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -79,18 +81,11 @@ export default function HomeScreen() {
   // Charge les données utilisateur à chaque fois que l'écran est focalisé
   useFocusEffect(
     useCallback(() => {
-      console.log('Home screen is focused, refreshing user data...');
+      
       
       async function loadUserData() {
         if (user) {
           try {
-            console.log("Données de l'utilisateur depuis l'auth:", {
-              id: user.id,
-              email: user.email,
-              app_metadata: user.app_metadata,
-              user_metadata: user.user_metadata
-            });
-            
             // Vérifier si la langue a changé
             const languageChanged = await AsyncStorage.getItem('@language_changed');
             if (languageChanged === 'true') {
@@ -106,9 +101,7 @@ export default function HomeScreen() {
             if (localAvatar) {
               setAvatar(localAvatar);
             }
-            
-            console.log("Récupération du profil utilisateur pour ID:", user.id);
-            
+                        
             // APPROCHE DIRECTE: Récupérer les données directement depuis la table users
             const { data: directUserData, error: directError } = await supabase
               .from('users')
@@ -116,11 +109,9 @@ export default function HomeScreen() {
               .eq('id', user.id)
               .single();
               
-            console.log("Résultat de la requête directe:", { directUserData, directError });
             
             if (!directError && directUserData) {
               if (directUserData.username) {
-                console.log("Username récupéré directement:", directUserData.username);
                 setUsername(directUserData.username);
               } else {
                 console.log("Aucun username trouvé dans la requête directe, utilisation de l'email comme fallback");
@@ -162,7 +153,6 @@ export default function HomeScreen() {
               if (createError) {
                 console.error("Erreur lors de la création du profil utilisateur:", createError);
               } else if (success) {
-                console.log("Profil utilisateur créé avec succès:", profileData);
                 setUsername(defaultUsername);
               }
             }
@@ -216,6 +206,10 @@ export default function HomeScreen() {
             if (wishlistData) {
               setWishlistCount(wishlistData.length);
             }
+
+            // Récupérer le nombre de cartes avec des offres
+            const { count: offersCount } = await getUserCardsWithOffersCount(user.id);
+            setCardsWithOffersCount(offersCount);
             
           } catch (error) {
             console.error("Erreur lors du chargement des données utilisateur:", error);
@@ -352,25 +346,25 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const NewsSection = () => (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.news')}</Text>
-      </View>
-      <TouchableOpacity 
-        style={styles.bannerContainer}
-        onPress={() => Linking.openURL('https://www.gamezest.ch/fr/')}
-      >
-        <View style={[styles.bannerBackground, { backgroundColor: colors.primary }]}>
-          <MaterialCommunityIcons name="cards" size={48} color={colors.text.primary} style={styles.bannerIcon} />
-        </View>
-        <View style={styles.bannerOverlay}>
-          <Text style={[styles.bannerText, { color: colors.text.primary }]}>Découvrez les dernières cartes Pokémon</Text>
-          <Text style={[styles.bannerSubText, { color: colors.text.secondary }]}>Visitez GameZest.ch</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+  // const NewsSection = () => (
+  //   <View style={styles.section}>
+  //     <View style={styles.sectionHeader}>
+  //       <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.news')}</Text>
+  //     </View>
+  //     <TouchableOpacity 
+  //       style={styles.bannerContainer}
+  //       onPress={() => Linking.openURL('https://www.gamezest.ch/fr/')}
+  //     >
+  //       <View style={[styles.bannerBackground, { backgroundColor: colors.primary }]}>
+  //         <MaterialCommunityIcons name="cards" size={48} color={colors.text.primary} style={styles.bannerIcon} />
+  //       </View>
+  //       <View style={styles.bannerOverlay}>
+  //         <Text style={[styles.bannerText, { color: colors.text.primary }]}>Découvrez les dernières cartes Pokémon</Text>
+  //         <Text style={[styles.bannerSubText, { color: colors.text.secondary }]}>Visitez GameZest.ch</Text>
+  //       </View>
+  //     </TouchableOpacity>
+  //   </View>
+  // );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -452,8 +446,8 @@ export default function HomeScreen() {
         <ListItem
           icon={<Ionicons name="swap-horizontal" size={24} color={colors.secondary} />}
           title={t('home.tradelist')}
-          count={`0 ${t('home.cards')}`}
-          onPress={() => router.push('../tradelist')}
+          count={`${cardsWithOffersCount} ${t('home.cards')}`}
+          onPress={() => router.push('/trading?tab=sell')}
         />
         <ListItem
           icon={<Ionicons name="cash" size={24} color={colors.secondary} />}
@@ -462,7 +456,7 @@ export default function HomeScreen() {
           onPress={() => router.push('../sold')}
         />
 
-        <NewsSection />
+        {/* <NewsSection /> */}
         
         {/* Espace en bas pour éviter que le contenu soit caché par la navigation */}
         <View style={styles.footer} />
@@ -660,7 +654,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   footer: {
-    height: 40,  // Augmentation de l'espace en bas pour éviter que la barre de navigation ne cache le contenu
+    height: 80,  // Augmentation de l'espace en bas pour éviter que la barre de navigation ne cache le contenu
   },
   notificationBadge: {
     width: 20,
