@@ -84,8 +84,8 @@ export default {
         projectId: "7d5f34e5-d848-4bad-9017-ad267d254f70"
       },
       SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
-      SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      API_OPENAI: process.env.EXPO_PUBLIC_API_OPENAI,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+      API_OPENAI: process.env.API_OPENAI_KEY,
       OPENAI_MODEL: process.env.EXPO_PUBLIC_OPENAI_MODEL
     },
      newArchEnabled: true
