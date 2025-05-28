@@ -14,6 +14,7 @@ import {
   getCollectionPriceVariation,
   createUserProfile,
   getUserCardsWithOffersCount,
+  getUserSoldCardsCount,
   supabase
 } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,6 +43,7 @@ export default function HomeScreen() {
   const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [cardsWithOffersCount, setCardsWithOffersCount] = useState(0);
+  const [soldCardsCount, setSoldCardsCount] = useState(0);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -210,6 +212,10 @@ export default function HomeScreen() {
             // Récupérer le nombre de cartes avec des offres
             const { count: offersCount } = await getUserCardsWithOffersCount(user.id);
             setCardsWithOffersCount(offersCount);
+
+            // Récupérer le nombre de cartes vendues
+            const { count: soldCount } = await getUserSoldCardsCount(user.id);
+            setSoldCardsCount(soldCount);
             
           } catch (error) {
             console.error("Erreur lors du chargement des données utilisateur:", error);
@@ -452,8 +458,8 @@ export default function HomeScreen() {
         <ListItem
           icon={<Ionicons name="cash" size={24} color={colors.secondary} />}
           title={t('home.sold')}
-          count={`0 ${t('home.cards')}`}
-          onPress={() => router.push('../sold')}
+          count={`${soldCardsCount} ${t('home.cards')}`}
+          onPress={() => router.push('/screens/sold')}
         />
 
         {/* <NewsSection /> */}

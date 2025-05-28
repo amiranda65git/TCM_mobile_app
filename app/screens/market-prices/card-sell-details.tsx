@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, ActivityIndicator, SafeAreaView, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, Image, FlatList, ActivityIndicator, SafeAreaView, Alert, Animated, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { supabase, getOfficialCardDetails, getMarketPricesForCard, refuseOffer, createRefuseOfferNotification } from '../../lib/supabase';
+import { supabase, getOfficialCardDetails, getMarketPricesForCard, refuseOffer, createRefuseOfferNotification, markCardAsSold } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -19,6 +19,7 @@ export default function CardSellDetails() {
   const [officialCard, setOfficialCard] = useState<any>(null);
   const [marketPrices, setMarketPrices] = useState<any>(null);
   const [offers, setOffers] = useState<any[]>([]);
+  const [isCardSold, setIsCardSold] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -31,33 +32,75 @@ export default function CardSellDetails() {
       // 1. Récupérer la carte de l'utilisateur (user_cards)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
-        .select('id, card_id, price, condition, official_cards(id, name, number, rarity, image_small, image_large)')
+        .select('id, card_id, price, condition, is_sold, official_cards(id, name, number, rarity, image_small, image_large)')
         .eq('id', id)
         .single();
       if (userCardError) throw userCardError;
       setUserCard(userCardData);
+      setIsCardSold(userCardData.is_sold || false);
+      
       // 2. Récupérer les infos officielles de la carte
       const cardId = userCardData.card_id;
       const { data: cardData, error: cardError } = await getOfficialCardDetails(cardId);
       if (cardError) throw cardError;
       setOfficialCard(cardData);
+      
       // 3. Prix du marché
       const { data: priceData, error: priceError } = await getMarketPricesForCard(cardId);
       if (priceError) throw priceError;
       setMarketPrices(priceData);
-      // 4. Offres reçues
-      const { data: offersData, error: offersError } = await supabase
-        .from('offers')
-        .select('id, buyer_id, proposed_price, created_at, users:buyer_id(username, avatar_url)')
-        .eq('user_card_id', id)
-        .order('created_at', { ascending: false });
-      if (offersError) throw offersError;
-      setOffers(offersData || []);
-    } catch (e) {
-      console.error('Erreur chargement détails vente:', e);
+      
+      // 4. Récupérer les offres pour cette carte (seulement si pas vendue)
+      if (!userCardData.is_sold) {
+        const { data: offersData, error: offersError } = await supabase
+          .from('offers')
+          .select(`
+            id, buyer_id, proposed_price, message, created_at, status,
+            users:buyer_id(username, email)
+          `)
+          .eq('user_card_id', id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        
+        if (offersError) throw offersError;
+        setOffers(offersData || []);
+      } else {
+        setOffers([]);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMarkAsSold = () => {
+    Alert.alert(
+      t('market.markAsSoldConfirmTitle'),
+      t('market.markAsSoldConfirmMessage'),
+      [
+        { text: t('alerts.cancel'), style: 'cancel' },
+        { 
+          text: 'OK', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              const { error } = await markCardAsSold(Array.isArray(id) ? id[0] : id);
+              if (error) {
+                Alert.alert(t('general.error'), t('market.markAsSoldError'));
+              } else {
+                setIsCardSold(true);
+                setOffers([]); // Vider les offres
+                // Recharger les données pour mettre à jour l'état
+                await loadData();
+              }
+            } catch (error) {
+              Alert.alert(t('general.error'), t('market.markAsSoldError'));
+            }
+          }
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -97,23 +140,39 @@ export default function CardSellDetails() {
         </View>
       </View>
       {/* Prix du marché */}
-      <View style={[styles.marketPriceContainer, { backgroundColor: colors.surface }]}> 
-        <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('card.prices')}</Text>
-        <View style={styles.priceRow}>
-          <View style={styles.priceColumn}>
-            <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>{t('card.lowPrice')}</Text>
-            <Text style={[styles.priceValue, { color: colors.text.primary }]}>{marketPrices?.price_low?.toFixed(2) || '-'} €</Text>
-          </View>
-          <View style={[styles.priceColumn, styles.midPriceColumn]}>
-            <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>{t('card.midPrice')}</Text>
-            <Text style={[styles.priceValue, styles.midPriceValue, { color: 'white' }]}>{marketPrices?.price_mid?.toFixed(2) || '-'} €</Text>
-          </View>
-          <View style={styles.priceColumn}>
-            <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>{t('card.highPrice')}</Text>
-            <Text style={[styles.priceValue, { color: colors.text.primary }]}>{marketPrices?.price_high?.toFixed(2) || '-'} €</Text>
+      {marketPrices && (
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>
+            Prix du marché
+          </Text>
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
+              Prix bas: {marketPrices.price_low ? `${marketPrices.price_low}€` : 'N/A'}
+            </Text>
+            <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
+              Prix moyen: {marketPrices.price_mid ? `${marketPrices.price_mid}€` : 'N/A'}
+            </Text>
+            <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
+              Prix haut: {marketPrices.price_high ? `${marketPrices.price_high}€` : 'N/A'}
+            </Text>
           </View>
         </View>
-      </View>
+      )}
+
+      {/* Bouton Marquer comme vendue */}
+      <TouchableOpacity
+        style={[
+          styles.soldButton, 
+          { backgroundColor: isCardSold ? '#6c757d' : '#dc3545' }
+        ]}
+        onPress={isCardSold ? undefined : handleMarkAsSold}
+        disabled={isCardSold}
+      >
+        <Text style={styles.soldButtonText}>
+          {isCardSold ? t('market.sold', 'Vendu') : t('market.markAsSold')}
+        </Text>
+      </TouchableOpacity>
+
       {/* Liste des offres reçues */}
       <View style={{ marginHorizontal: 16, marginTop: 12 }}>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text.primary, marginBottom: 10, letterSpacing: 0.5 }}>{t('market.receivedOffers', 'Offres reçues')}</Text>
@@ -291,4 +350,23 @@ const styles = StyleSheet.create({
   offersContainer: { padding: 16, borderRadius: 12, margin: 16, marginTop: 0 },
   offerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee' },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ccc' },
+  section: { 
+    padding: 16, 
+    borderRadius: 12, 
+    margin: 16, 
+    marginTop: 0 
+  },
+  soldButton: { 
+    padding: 16, 
+    borderRadius: 12, 
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginVertical: 8
+  },
+  soldButtonText: { 
+    color: 'white', 
+    fontSize: 16, 
+    fontWeight: 'bold' 
+  },
 }); 

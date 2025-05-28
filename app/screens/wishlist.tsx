@@ -5,7 +5,7 @@ import { Colors } from '../constants/Colors';
 import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, Stack } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
@@ -31,7 +31,7 @@ const WishlistCard = ({ card, colors, t, router, onBuyPress, onRemovePress }: an
     const opacity = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.5, 1, 1], extrapolate: 'clamp' });
     const trans = dragX.interpolate({ inputRange: [0, 20, 50, 100], outputRange: [-10, 0, 0, 1], extrapolate: 'clamp' });
     return (
-      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#2ecc71', transform: [{ translateX: trans }, { scale }], opacity }]}> 
+      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#2ecc71', transform: [{ translateX: trans }, { scale }], opacity }]}>
         <View style={styles.swipeAction}>
           <Ionicons name="cart-outline" size={28} color="white" />
           <Text style={styles.actionText}>{t('card.buy')}</Text>
@@ -44,7 +44,7 @@ const WishlistCard = ({ card, colors, t, router, onBuyPress, onRemovePress }: an
     const opacity = progress.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.5, 1, 1], extrapolate: 'clamp' });
     const trans = dragX.interpolate({ inputRange: [-100, -50, -20, 0], outputRange: [1, 0, 0, -10], extrapolate: 'clamp' });
     return (
-      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#e74c3c', transform: [{ translateX: trans }, { scale }], opacity }]}> 
+      <Animated.View style={[styles.swipeActionContainer, { backgroundColor: '#e74c3c', transform: [{ translateX: trans }, { scale }], opacity }]}>
         <View style={styles.swipeAction}>
           <Ionicons name="star" size={28} color="white" />
           <Text style={styles.actionText}>{t('wishlist.removeCard')}</Text>
@@ -112,9 +112,9 @@ export default function WishlistScreen() {
         setRefreshKey(prev => prev + 1);
       }
     });
-    
+
     setLanguageListener(listener);
-    
+
     return () => {
       // Supprimer l'écouteur lors du démontage du composant
       if (languageListener) {
@@ -129,10 +129,10 @@ export default function WishlistScreen() {
       console.log('Changement de thème détecté dans WishlistScreen');
       setRefreshKey(prev => prev + 1);
     });
-    
+
     return () => {
       if (themeListener) {
-        EventRegister.removeEventListener(themeListener  as string);
+        EventRegister.removeEventListener(themeListener as string);
       }
     };
   }, []);
@@ -150,7 +150,7 @@ export default function WishlistScreen() {
           setRefreshKey(prev => prev + 1);
         }
       }
-      
+
       checkLanguageChange();
     }, [])
   );
@@ -206,58 +206,73 @@ export default function WishlistScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <Text style={[styles.title, { color: colors.text.primary }]}>{t('home.wishlist')}</Text>
-        <TouchableOpacity>
+      <Stack.Screen
+        options={{
+          headerShown: false,
+        }}
+      />
+
+      {/* Header avec thème de l'application */}
+      <View style={[styles.headerCustom, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
+          {t('home.wishlist')}
+        </Text>
+        <TouchableOpacity style={styles.optionsButton}>
           <Ionicons name="options-outline" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
-      
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text.primary }]}
-          placeholder={t('wishlist.search') || 'Rechercher une carte'}
-          placeholderTextColor={colors.text.secondary}
-          value={search}
-          onChangeText={setSearch}
-        />
+
+      {/* Contenu */}
+      <View style={[styles.content, { backgroundColor: colors.background }]}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text.primary }]}
+            placeholder={t('wishlist.search') || 'Rechercher une carte'}
+            placeholderTextColor={colors.text.secondary}
+            value={search}
+            onChangeText={setSearch}
+          />
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : filteredCards.length === 0 ? (
+          <View style={styles.emptyWishlist}>
+            <Ionicons name="star-outline" size={80} color={colors.text.secondary} />
+            <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('wishlist.empty')}</Text>
+            <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
+              {t('wishlist.emptyText')}
+            </Text>
+
+            <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]}>
+              <Ionicons name="add" size={24} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <ScrollView style={styles.cardsGrid} contentContainerStyle={{ paddingBottom: 40 }}>
+              {filteredCards.map(card => (
+                <WishlistCard
+                  key={card.id}
+                  card={card}
+                  colors={colors}
+                  t={t}
+                  router={router}
+                  onBuyPress={handleBuy}
+                  onRemovePress={handleRemove}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
-      
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : filteredCards.length === 0 ? (
-        <View style={styles.emptyWishlist}>
-          <Ionicons name="star-outline" size={80} color={colors.text.secondary} />
-          <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>{t('wishlist.empty')}</Text>
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-            {t('wishlist.emptyText')}
-          </Text>
-          
-          <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]}>
-            <Ionicons name="add" size={24} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={{ flex: 1 }}>
-          <ScrollView style={styles.cardsGrid} contentContainerStyle={{ paddingBottom: 40 }}>
-            {filteredCards.map(card => (
-              <WishlistCard
-                key={card.id}
-                card={card}
-                colors={colors}
-                t={t}
-                router={router}
-                onBuyPress={handleBuy}
-                onRemovePress={handleRemove}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      )}
     </View>
   );
 }
@@ -266,19 +281,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  headerCustom: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
-  title: {
-    fontSize: 28,
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
   },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F0F0', borderRadius: 8, marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 12, height: 40 },
+  optionsButton: {
+    padding: 8,
+  },
+  content: {
+    flex: 1,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+    height: 40
+  },
   searchInput: { flex: 1, fontSize: 16 },
   cardsGrid: { flex: 1, paddingHorizontal: 16 },
   cardItem: { flexDirection: 'row', borderRadius: 8, padding: 12, marginBottom: 8, alignItems: 'center', height: 80 },

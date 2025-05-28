@@ -5,12 +5,10 @@ import {
   StyleSheet, 
   FlatList, 
   TouchableOpacity, 
-  SafeAreaView, 
-  Platform,
   RefreshControl,
   Animated
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
@@ -157,63 +155,92 @@ export default function NotificationsScreen() {
   const hasUnreadNotifications = notifications.some(n => !n.is_read);
   
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
-          title: t('alerts.title'),
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-          headerTintColor: colors.text.primary,
-          headerShadowVisible: false,
+          headerShown: false,
         }}
       />
       
-      {notifications.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="notifications-off-outline" size={64} color={colors.text.secondary} />
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-            {t('alerts.noNotifications')}
-          </Text>
-        </View>
-      ) : (
-        <>
-          {hasUnreadNotifications && (
-            <TouchableOpacity 
-              style={[styles.markAllButton, { backgroundColor: colors.surface }]}
-              onPress={handleMarkAllAsRead}
-            >
-              <Ionicons name="checkmark-done-outline" size={20} color={colors.text.primary} />
-              <Text style={[styles.markAllText, { color: colors.text.primary }]}>
-                {t('alerts.markAllAsRead')}
-              </Text>
-            </TouchableOpacity>
-          )}
-          
-          <FlatList
-            data={notifications}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderNotificationItem}
-            contentContainerStyle={styles.listContainer}
-            refreshControl={
-              <RefreshControl
-                refreshing={loading}
-                onRefresh={loadNotifications}
-                colors={[colors.primary]}
-                tintColor={colors.primary}
-              />
-            }
-          />
-        </>
-      )}
-    </SafeAreaView>
+      {/* Header avec thème de l'application */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
+          {t('alerts.title')}
+        </Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      {/* Contenu */}
+      <View style={[styles.content, { backgroundColor: colors.background }]}>
+        {notifications.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="notifications-off-outline" size={64} color={colors.text.secondary} />
+            <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
+              {t('alerts.noNotifications')}
+            </Text>
+          </View>
+        ) : (
+          <>
+            {hasUnreadNotifications && (
+              <TouchableOpacity 
+                style={[styles.markAllButton, { backgroundColor: colors.surface }]}
+                onPress={handleMarkAllAsRead}
+              >
+                <Ionicons name="checkmark-done-outline" size={20} color={colors.text.primary} />
+                <Text style={[styles.markAllText, { color: colors.text.primary }]}>
+                  {t('alerts.markAllAsRead')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            
+            <FlatList
+              data={notifications}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderNotificationItem}
+              contentContainerStyle={styles.listContainer}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={loadNotifications}
+                  colors={[colors.primary]}
+                  tintColor={colors.primary}
+                />
+              }
+            />
+          </>
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 25 : 0,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  placeholder: {
+    width: 40,
+  },
+  content: {
+    flex: 1,
   },
   listContainer: {
     flexGrow: 1,

@@ -75,6 +75,12 @@ export default {
     acceptOfferError: "Erreur lors de l'envoi des emails.",
     notificationOfferAccepted: "Votre offre pour la carte {{card}} a été acceptée ! Vous pouvez contacter le vendeur à l'adresse indiquée.",
     notificationOfferRefused: "Votre offre pour la carte {{card}} a été refusée.",
+    markAsSold: "Marquer comme vendue",
+    markAsSoldConfirmTitle: "Marquer la carte comme vendue",
+    markAsSoldConfirmMessage: "Êtes-vous sûr de vouloir marquer cette carte comme vendue ? Elle ne sera plus visible dans votre collection.",
+    cardMarkedAsSold: "Carte marquée comme vendue avec succès",
+    markAsSoldError: "Erreur lors du marquage de la carte comme vendue",
+    sold: "Vendu",
   },
   alerts: {
     title: 'Notifications',
@@ -311,5 +317,9 @@ export default {
       reset: 'Réinitialiser',
       apply: 'Appliquer'
     }
+  },
+  sold: {
+    noCards: "Aucune carte vendue pour le moment",
+    soldOn: "Vendu le",
   },
 }; 

@@ -117,7 +117,8 @@ export const getUserEditionsCount = async (userId: string) => {
           edition_id
         )
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
 
     if (error) {
       console.error("Erreur lors de la récupération des éditions:", error);
@@ -146,7 +147,8 @@ export const getUserCardsCount = async (userId: string) => {
     const { count, error } = await supabase
       .from('user_cards')
       .select('*', { count: 'exact' })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
 
     if (error) {
       // Vérifier si l'erreur est due à une table inexistante
@@ -561,7 +563,8 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
           image_large
         )
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
 
     if (error) {
       console.error("Erreur lors de la récupération des cartes de l'utilisateur:", error);
@@ -676,7 +679,8 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
     const { data: userCardsData, error: userCardsError } = await supabase
       .from('user_cards')
       .select('card_id, price, is_for_sale')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
     
     if (userCardsError) {
       console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
@@ -802,7 +806,7 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
 // Fonction pour récupérer toutes les cartes que l'utilisateur vend avec le prix de vente et le prix du marché
 export const getUserCardsForSale = async (userId: string) => {
   try {
-    // 1. Récupérer toutes les cartes en vente de l'utilisateur
+    // 1. Récupérer toutes les cartes en vente de l'utilisateur (non vendues)
     const { data, error } = await supabase
       .from('user_cards')
       .select(`
@@ -819,7 +823,8 @@ export const getUserCardsForSale = async (userId: string) => {
         )
       `)
       .eq('user_id', userId)
-      .eq('is_for_sale', true);
+      .eq('is_for_sale', true)
+      .eq('is_sold', false); // Exclure les cartes vendues
 
     if (error) {
       console.error('Erreur lors de la récupération des cartes en vente de l\'utilisateur:', error);
@@ -967,7 +972,8 @@ export const getUserCollectionTotalValue = async (userId: string) => {
         card_id,
         price
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
     
     if (userCardsError) {
       console.error("Erreur lors du calcul de la valeur totale de la collection:", userCardsError);
@@ -1041,7 +1047,8 @@ export const getCollectionPriceVariation = async (userId: string) => {
       .select(`
         card_id
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('is_sold', false); // Exclure les cartes vendues
     
     if (userCardsError) {
       console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
@@ -2242,7 +2249,8 @@ export const getUserCardsWithOffersCount = async (userId: string) => {
         offers!offers_user_card_id_fkey(id)
       `)
       .eq('user_id', userId)
-      .eq('is_for_sale', true);
+      .eq('is_for_sale', true)
+      .eq('is_sold', false); // Exclure les cartes vendues
 
     if (error) {
       console.error('Erreur lors de la récupération des cartes avec offres:', error);
@@ -2258,6 +2266,121 @@ export const getUserCardsWithOffersCount = async (userId: string) => {
   } catch (error) {
     console.error('Erreur inattendue lors de la récupération des cartes avec offres:', error);
     return { count: 0, error };
+  }
+};
+
+// Fonction pour marquer une carte comme vendue
+export const markCardAsSold = async (userCardId: string) => {
+  try {
+    console.log(`[markCardAsSold] Marquage de la carte ${userCardId} comme vendue`);
+    
+    // 1. Marquer la carte comme vendue
+    const { data, error } = await supabase
+      .from('user_cards')
+      .update({ 
+        is_sold: true,
+        is_for_sale: false, // Retirer de la vente
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userCardId)
+      .select();
+    
+    if (error) {
+      console.error('[markCardAsSold] Erreur lors du marquage de la carte comme vendue:', error);
+      return { data: null, error };
+    }
+    
+    // 2. Annuler toutes les offres liées à cette carte
+    const { error: offersError } = await supabase
+      .from('offers')
+      .update({ 
+        status: 'cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_card_id', userCardId)
+      .eq('status', 'pending'); // Seulement les offres en attente
+    
+    if (offersError) {
+      console.error('[markCardAsSold] Erreur lors de l\'annulation des offres:', offersError);
+      // On continue même en cas d'erreur sur les offres
+    } else {
+      console.log(`[markCardAsSold] Offres annulées pour la carte ${userCardId}`);
+    }
+    
+    console.log(`[markCardAsSold] Carte marquée comme vendue avec succès`);
+    return { data: data?.[0] || null, error: null };
+  } catch (error) {
+    console.error('[markCardAsSold] Erreur inattendue lors du marquage de la carte comme vendue:', error);
+    return { data: null, error };
+  }
+};
+
+// Fonction pour récupérer le nombre de cartes vendues de l'utilisateur
+export const getUserSoldCardsCount = async (userId: string) => {
+  try {
+    const { count, error } = await supabase
+      .from('user_cards')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .eq('is_sold', true);
+
+    if (error) {
+      console.error("Erreur lors de la récupération du nombre de cartes vendues:", error);
+      return { count: 0, error };
+    }
+
+    return { count: count || 0, error: null };
+  } catch (error) {
+    console.error("Erreur lors de la récupération du nombre de cartes vendues:", error);
+    return { count: 0, error };
+  }
+};
+
+// Fonction pour récupérer toutes les cartes vendues de l'utilisateur
+export const getUserSoldCards = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        card_id,
+        price,
+        condition,
+        created_at,
+        updated_at,
+        official_cards:card_id (
+          id,
+          name,
+          image_small,
+          edition_id,
+          editions:edition_id (name)
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_sold', true)
+      .order('updated_at', { ascending: false }); // Trier par date de vente (updated_at)
+
+    if (error) {
+      console.error("Erreur lors de la récupération des cartes vendues:", error);
+      return { data: null, error };
+    }
+
+    // Formater les données pour correspondre au format attendu
+    const formattedData = data?.map((card: any) => ({
+      user_card_id: card.id,
+      card_id: card.card_id,
+      card_name: card.official_cards?.name || 'Carte inconnue',
+      edition_name: card.official_cards?.editions?.name || null,
+      image_small: card.official_cards?.image_small || null,
+      price: card.price,
+      condition: card.condition,
+      sold_date: card.updated_at
+    })) || [];
+
+    return { data: formattedData, error: null };
+  } catch (error) {
+    console.error("Erreur lors de la récupération des cartes vendues:", error);
+    return { data: null, error };
   }
 };
 
@@ -2304,7 +2427,8 @@ const SupabaseService = {
   searchOfficialCardsByDetails,
   initUserImagesBucket,
   addCardToCollection,
-  getUserCardsWithOffersCount
+  getUserCardsWithOffersCount,
+  markCardAsSold
 };
 
 export default SupabaseService; 

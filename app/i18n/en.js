@@ -75,6 +75,12 @@ export default {
     acceptOfferError: "Error sending emails.",
     notificationOfferAccepted: "Your offer for the card {{card}} has been accepted! You can contact the seller at the provided address.",
     notificationOfferRefused: "Your offer for the card {{card}} has been refused.",
+    markAsSold: "Mark as sold",
+    markAsSoldConfirmTitle: "Mark card as sold",
+    markAsSoldConfirmMessage: "Are you sure you want to mark this card as sold? It will no longer be visible in your collection.",
+    cardMarkedAsSold: "Card successfully marked as sold",
+    markAsSoldError: "Error marking card as sold",
+    sold: "Sold",
   },
   alerts: {
     title: 'Notifications',
@@ -311,5 +317,9 @@ export default {
       reset: 'Reset',
       apply: 'Apply'
     }
+  },
+  sold: {
+    noCards: "No cards sold yet",
+    soldOn: "Sold on",
   },
 }; 
