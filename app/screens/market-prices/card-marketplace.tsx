@@ -27,6 +27,7 @@ interface CardForSale {
   price: number;
   is_for_sale: boolean;
   created_at: string;
+  image_url?: string;
   user?: {
     username: string;
     avatar_url: string;
@@ -484,14 +485,39 @@ export default function CardMarketplace() {
             </View>
             
             <View style={styles.cardImageContainer}>
-              {officialCard.image_large ? (
-                <Image 
-                  source={{ uri: officialCard.image_large }} 
-                  style={styles.cardImage} 
-                  resizeMode="contain"
-                />
+              {item.image_url ? (
+                <>
+                  <Image 
+                    source={{ uri: item.image_url }} 
+                    style={styles.cardImage} 
+                    resizeMode="contain"
+                  />
+                  {/* Badge pour indiquer que c'est la vraie photo */}
+                  <View style={[
+                    styles.imageBadge, 
+                    { backgroundColor: colors.success }
+                  ]}>
+                    <Ionicons 
+                      name="camera" 
+                      size={12} 
+                      color="white" 
+                    />
+                    <Text style={styles.imageBadgeText}>
+                      {t('card.realPhoto')}
+                    </Text>
+                  </View>
+                </>
               ) : (
-                <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.border }]} />
+                <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.border }]}>
+                  <Ionicons 
+                    name="help-outline" 
+                    size={60} 
+                    color={colors.text.secondary} 
+                  />
+                  <Text style={[styles.placeholderText, { color: colors.text.secondary }]}>
+                    {t('card.noUserPhoto')}
+                  </Text>
+                </View>
               )}
             </View>
             
@@ -827,5 +853,35 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  imageBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  imageBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: 'white',
+    marginLeft: 4,
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 12,
+    textAlign: 'center',
   },
 }); 

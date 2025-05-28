@@ -93,16 +93,6 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
       });
       console.log('🔍 Client OpenAI initialisé');
 
-      // Test de connectivité basique à internet avant l'appel OpenAI
-      try {
-        console.log('🔍 Test de connectivité internet...');
-        const connectivityTest = await fetch('https://www.google.com');
-        console.log('🔍 Test de connectivité réussi:', connectivityTest.status);
-      } catch (connectError) {
-        console.error('🔴 Erreur de connectivité:', connectError);
-        throw new Error('Pas de connexion internet');
-      }
-
       console.log('🔍 Préparation requête à l\'API...');
       // Paramètres à envoyer (pour le debug)
       const requestParams = {

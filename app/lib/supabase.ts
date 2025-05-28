@@ -806,76 +806,17 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
 // Fonction pour récupérer toutes les cartes que l'utilisateur vend avec le prix de vente et le prix du marché
 export const getUserCardsForSale = async (userId: string) => {
   try {
-    // 1. Récupérer toutes les cartes en vente de l'utilisateur (non vendues)
-    const { data, error } = await supabase
-      .from('user_cards')
-      .select(`
-        id,
-        card_id,
-        price,
-        condition,
-        official_cards:card_id (
-          id,
-          name,
-          image_small,
-          edition_id,
-          editions:edition_id (name)
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('is_for_sale', true)
-      .eq('is_sold', false); // Exclure les cartes vendues
+    // Utiliser la fonction RPC optimisée
+    const { data, error } = await supabase.rpc('get_user_cards_for_sale', {
+      p_user_id: userId
+    });
 
     if (error) {
       console.error('Erreur lors de la récupération des cartes en vente de l\'utilisateur:', error);
       return { data: [], error };
     }
 
-    // 2. Récupérer les prix du marché pour ces cartes
-    const cardIds = data.map(card => card.card_id);
-    let marketPrices: Array<{ card_id: string; price_mid: number; date: string }> = [];
-    
-    if (cardIds.length > 0) {
-      const { data: pricesData, error: pricesError } = await supabase
-        .from('market_prices')
-        .select('card_id, price_mid, date')
-        .in('card_id', cardIds)
-        .order('date', { ascending: false });
-        
-      if (pricesError) {
-        console.error('Erreur lors de la récupération des prix du marché:', pricesError);
-      } else {
-        marketPrices = pricesData || [];
-      }
-    }
-
-    // 3. Transformer les données en associant les prix du marché
-    const formatted = data?.map((item: any) => {
-      // Trouver le prix mid le plus récent pour cette carte
-      let marketPriceMid = null;
-      const cardPrices = marketPrices.filter(price => price.card_id === item.card_id);
-      
-      if (cardPrices.length > 0) {
-        // Trier par date décroissante et prendre le premier
-        const sorted = [...cardPrices].sort((a, b) => 
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
-        marketPriceMid = sorted[0]?.price_mid ?? null;
-      }
-      
-      return {
-        user_card_id: item.id,
-        card_id: item.official_cards?.id,
-        card_name: item.official_cards?.name,
-        image_small: item.official_cards?.image_small,
-        edition_name: item.official_cards?.editions?.name,
-        price: item.price,
-        condition: item.condition,
-        market_price_mid: marketPriceMid,
-      };
-    }) || [];
-
-    return { data: formatted, error: null };
+    return { data: data || [], error: null };
   } catch (error) {
     console.error('Erreur inattendue dans getUserCardsForSale:', error);
     return { data: [], error };
@@ -1235,6 +1176,7 @@ export const getCardsForSale = async (cardId: string) => {
         price, 
         is_for_sale, 
         created_at,
+        image_url,
         users!user_cards_user_id_fkey (
           username, 
           avatar_url
@@ -1288,13 +1230,14 @@ export const getCardsForSale = async (cardId: string) => {
         price: card.price,
         is_for_sale: card.is_for_sale,
         created_at: card.created_at,
+        image_url: card.image_url,
         user: {
           username: userInfo.username || '',
           avatar_url: userInfo.avatar_url || ''
         }
       };
       
-      console.log(`[getCardsForSale] Carte formatée: id=${result.id}, username=${result.user.username}`);
+      console.log(`[getCardsForSale] Carte formatée: id=${result.id}, username=${result.user.username}, image_url=${result.image_url ? 'présente' : 'absente'}`);
       
       return result;
     }) || [];
@@ -2211,6 +2154,7 @@ export const addCardToCollection = async ({
         card_id: cardId,
         condition: condition,
         is_for_sale: false,
+        image_url: imageUrl, // Ajouter l'URL de l'image
         created_at: new Date().toISOString()
       }])
       .select();
