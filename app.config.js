@@ -89,5 +89,6 @@ export default {
       OPENAI_MODEL: process.env.EXPO_PUBLIC_OPENAI_MODEL
     },
      newArchEnabled: true
+     
   }
 };
