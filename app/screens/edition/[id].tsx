@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase, getEditionDetails, addOrRemoveFromWishlist } from '../../lib/supabase';
-import { Swipeable } from 'react-native-gesture-handler';
+import SwipeableCard from '../../components/SwipeableCard';
 import NotificationIcon from '../../components/NotificationIcon';
 
 interface CardInfo {
@@ -46,199 +46,6 @@ interface UserCard {
   price: number | null;
 }
 
-// Composant pour afficher une carte avec swipe
-const SwipeableCard = ({ card, colors, t, router, onSellPress, onPriceAlertPress, onWishlistPress }: 
-  { 
-    card: CardInfo, 
-    colors: any, 
-    t: any, 
-    router: any, 
-    onSellPress: (card: CardInfo) => void,
-    onPriceAlertPress: (card: CardInfo) => void,
-    onWishlistPress: (card: CardInfo) => void
-  }) => {
-  const renderLeftActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
-    // Faire apparaître l'action dès le début du swipe
-    const scale = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.8, 1, 1],
-      extrapolate: 'clamp',
-    });
-    
-    const opacity = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.5, 1, 1],
-      extrapolate: 'clamp',
-    });
-    
-    const trans = dragX.interpolate({
-      inputRange: [0, 20, 50, 100],
-      outputRange: [-10, 0, 0, 1],
-      extrapolate: 'clamp',
-    });
-    
-    // Action différente selon si la carte est possédée ou non
-    const backgroundColor = card.owned ? '#e74c3c' : '#2ecc71'; // Rouge pour vendre, Vert pour acheter
-    const actionText = card.owned ? t('card.sell') : t('card.buy');
-    const iconName = card.owned ? 'cash-outline' : 'cart-outline';
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.swipeActionContainer,
-          {
-            backgroundColor,
-            transform: [{ translateX: trans }, { scale }],
-            opacity,
-          }
-        ]}
-      >
-        <View style={styles.swipeAction}>
-          <Ionicons name={iconName} size={28} color="white" />
-          <Text style={styles.actionText}>{actionText}</Text>
-        </View>
-      </Animated.View>
-    );
-  };
-  
-  const renderRightActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
-    // Faire apparaître l'action dès le début du swipe
-    const scale = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.8, 1, 1],
-      extrapolate: 'clamp',
-    });
-    
-    const opacity = progress.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0.5, 1, 1],
-      extrapolate: 'clamp',
-    });
-    
-    const trans = dragX.interpolate({
-      inputRange: [-100, -50, -20, 0],
-      outputRange: [1, 0, 0, -10],
-      extrapolate: 'clamp',
-    });
-    
-    // Action différente selon si la carte est possédée ou non
-    const backgroundColor = card.owned ? '#3498db' : '#f1c40f'; // Bleu pour alerte, Jaune pour wishlist
-    const actionText = card.owned ? 
-      (card.has_price_alert ? t('card.removePriceAlert') : t('card.priceAlert')) : 
-      t('card.addToWishlist');
-    const iconName = card.owned ? 
-      (card.has_price_alert ? 'notifications' : 'notifications-outline') : 
-      'star-outline';
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.swipeActionContainer,
-          {
-            backgroundColor,
-            transform: [{ translateX: trans }, { scale }],
-            opacity,
-          }
-        ]}
-      >
-        <View style={styles.swipeAction}>
-          <Ionicons name={iconName} size={28} color="white" />
-          <Text style={styles.actionText}>{actionText}</Text>
-        </View>
-      </Animated.View>
-    );
-  };
-  
-  const handleSwipeableOpen = (direction: 'left' | 'right') => {
-    
-    if (direction === 'left') {
-      // Bouton Sell/Buy (à gauche)
-      if (card.owned) {
-        // Ouvrir le modal de vente
-        onSellPress(card);
-      } else {
-        // Rediriger vers la page de d'achat de la carte
-        router.push(`/screens/market-prices/card-marketplace?id=${card.id}`);
-      }
-    } else if (direction === 'right') {
-      // Bouton Alert/Wishlist (à droite)
-      if (card.owned) {
-        // Implémenter la fonctionnalité d'alerte de prix
-        onPriceAlertPress(card);
-      } else {
-        // Ajout à la wishlist
-        onWishlistPress(card);
-      }
-    }
-  };
-  
-  return (
-    <Swipeable
-      renderLeftActions={renderLeftActions}
-      renderRightActions={renderRightActions}
-      onSwipeableOpen={handleSwipeableOpen}
-      friction={1.5}
-      leftThreshold={30}
-      rightThreshold={30}
-      overshootLeft={false}
-      overshootRight={false}
-    >
-      <TouchableOpacity 
-        style={[styles.cardItem, { backgroundColor: colors.surface }]}
-        onPress={() => router.push(`/screens/card/${card.id}`)}
-      >
-        {card.image_small ? (
-          <Image 
-            source={{ uri: card.image_small }} 
-            style={styles.cardImage} 
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.surface }]} />
-        )}
-        
-        <View style={styles.cardDetails}>
-          <Text style={[styles.cardName, { color: colors.text.primary }]} numberOfLines={1}>
-            {card.name}
-          </Text>
-          <Text style={[styles.cardNumber, { color: colors.text.secondary }]}>
-            #{card.number}
-          </Text>
-          <Text style={[styles.cardRarity, { color: colors.text.secondary }]}>
-            {card.rarity || t('general.common')}
-          </Text>
-          {card.price && (
-            <Text style={[styles.cardPrice, { color: card.is_for_sale ? colors.secondary : colors.text.secondary }]}>
-              {card.price.toFixed(2)} € {card.is_for_sale && <Ionicons name="pricetag" size={12} color={colors.secondary} />}
-            </Text>
-          )}
-        </View>
-        
-        <View style={styles.cardOwnership}>
-          <MaterialIcons 
-            name={card.owned ? "catching-pokemon" : "radio-button-unchecked"} 
-            size={24} 
-            color={card.owned ? colors.secondary : colors.text.secondary} 
-          />
-            {card.has_wishlist && !card.owned && (
-              <Ionicons name="star" size={18} color="#FFD700" style={{ marginTop: 2 }} />
-            )}
-            {card.owned && card.is_for_sale && (
-              <Text style={[styles.forSaleBadge, { color: colors.secondary, borderColor: colors.secondary }]}>
-                {t('card.forSale')}
-              </Text>
-            )}
-            {card.owned && card.has_price_alert && (
-              <Text style={[styles.alertBadge, { color: '#3498db', borderColor: '#3498db' }]}>
-                <Ionicons name="notifications" size={10} color="#3498db" /> {t('card.alert')}
-              </Text>
-            )}
-        </View>
-      </TouchableOpacity>
-    </Swipeable>
-  );
-};
-
 export default function EditionDetail() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
@@ -261,11 +68,11 @@ export default function EditionDetail() {
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
-  const CONDITION_COLORS = {
-    'Near Mint': '#4CAF50',   // Vert pour Near Mint
-    'Excellent': '#2196F3',   // Bleu pour Excellent
-    'Good': '#FFC107',        // Jaune pour Good
-    'Played': '#FF5722'       // Orange pour Played
+  const CONDITION_COLORS: Record<string, string> = {
+    'Near Mint': '#4CAF50',
+    'Excellent': '#2196F3',
+    'Good': '#FF9800',
+    'Played': '#F44336'
   };
   
   const CONDITIONS = Object.keys(CONDITION_COLORS);
@@ -910,79 +717,6 @@ const styles = StyleSheet.create({
   cardsGrid: {
     width: '100%',
   },
-  cardItem: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: 'center',
-    height: 80,
-  },
-  cardImage: {
-    width: 40,
-    height: 56,
-    borderRadius: 4,
-  },
-  cardImagePlaceholder: {
-    width: 40,
-    height: 56,
-    borderRadius: 4,
-    opacity: 0.5,
-  },
-  cardDetails: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  cardName: {
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  cardNumber: {
-    fontSize: 12,
-  },
-  cardRarity: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  cardOwnership: {
-    marginLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 60,
-  },
-  badgesContainer: {
-    alignItems: 'center',
-    marginTop: 4,
-    minHeight: 28,
-  },
-  iconBadge: {
-    marginTop: 2,
-  },
-  forSaleBadge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    borderWidth: 1,
-    padding: 2,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  alertBadge: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    borderWidth: 1,
-    padding: 2,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-    marginTop: 4,
-    textAlign: 'center',
-  },
   customHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1005,34 +739,6 @@ const styles = StyleSheet.create({
   filterButton: {
     padding: 8,
     borderRadius: 20,
-  },
-  swipeActionContainer: {
-    height: 80,
-    width: 120,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  swipeAction: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-  },
-  actionText: {
-    color: 'white',
-    fontWeight: 'bold',
-    marginLeft: 8,
-    fontSize: 18,
   },
   modalOverlay: {
     flex: 1,
@@ -1119,7 +825,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-
   alreadyForSaleContainer: {
     marginBottom: 30,
     alignItems: 'center',

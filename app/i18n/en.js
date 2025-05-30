@@ -43,6 +43,7 @@ export default {
     removeCard: 'Remove from wishlist',
     addCardShort: 'Add',
     removeCardShort: 'Remove',
+    add: 'Wishlist'
   },
   market: {
     empty: 'Market under construction',
@@ -53,10 +54,10 @@ export default {
     unknownSeller: 'Seller name unavailable',
     buyOnGamezest: 'Buy on GameZest.ch',
     tabs: {
-      all: 'All cards',
-      gainers: 'Top gainers',
-      losers: 'Top losers',
-      watched: 'My watched cards'
+      all: 'All',
+      gainers: 'Gainers',
+      losers: 'Losers',
+      watched: 'Watched'
     },
     noWatched: 'No watched cards at the moment.',
     globalTrend: 'Global market trend',
@@ -136,7 +137,11 @@ export default {
     unexpectedError: 'An unexpected error occurred',
     adding: 'Adding...',
     scan: 'Scan',
-    selectCondition: 'Select card condition'
+    selectCondition: 'Select card condition',
+    searchManually: 'Search manually',
+    searchPlaceholder: 'Search for a card...',
+    searching: 'Searching...',
+    noResults: 'No results found'
   },
   settings: {
     title: 'Settings',
@@ -321,5 +326,50 @@ export default {
   sold: {
     noCards: "No cards sold yet",
     soldOn: "Sold on",
+  },
+  allCards: {
+    title: 'All my cards',
+    loading: 'Loading your cards...',
+    totalCards: 'Total cards',
+    estimatedValue: 'Estimated value',
+    noCards: 'No cards in your collection',
+    startScanning: 'Start scanning',
+    searchPlaceholder: 'Search for a card...',
+    card: 'card',
+    cards: 'cards',
+    noSearchResults: 'No cards found',
+    clearSearch: 'Clear search',
+  },
+  conditions: {
+    nearmint: 'Near Mint',
+    excellent: 'Excellent',
+    good: 'Good',
+    played: 'Played'
+  },
+  sell: {
+    sell: 'Sell',
+    sellCard: 'Sell card',
+    condition: 'Condition',
+    price: 'Price',
+    enterPrice: 'Enter price',
+    invalidPrice: 'Invalid price',
+    confirm: 'Confirm',
+    success: 'Success',
+    cardSold: 'Card sold successfully',
+    error: 'Error selling card'
+  },
+  priceAlert: {
+    alert: 'Alert',
+    success: 'Success',
+    created: 'Price alert created',
+    error: 'Error creating alert'
+  },
+  premium: {
+    title: 'Premium',
+    whyPay: 'Why do I have to pay?',
+    explanation1: 'TCMarket uses external services to process your card images and retrieve real-time market prices.',
+    explanation2: 'These services have a cost, and your subscription allows us to cover these fees while continuing to improve the application.',
+    explanation3: 'By becoming a Premium member, you support TCMarket\'s development and enjoy an optimal experience!',
+    subscribeButton: 'Subscribe for only $3 per month'
   },
 }; 

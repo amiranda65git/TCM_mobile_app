@@ -43,6 +43,7 @@ export default {
     removeCard: 'Retirer de la wishlist',
     addCardShort: 'Ajouter',
     removeCardShort: 'Retirer',
+    add: 'Favoris'
   },
   market: {
     empty: 'Marché en construction',
@@ -53,10 +54,10 @@ export default {
     unknownSeller: 'Nom du vendeur indisponible',
     buyOnGamezest: 'Acheter sur GameZest.ch',
     tabs: {
-      all: 'Toutes les cartes',
-      gainers: 'Meilleures hausses',
-      losers: 'Moins performantes',
-      watched: 'Mes cartes surveillées'
+      all: 'Toutes',
+      gainers: 'Hausses',
+      losers: 'Baisses',
+      watched: 'Surveillées'
     },
     noWatched: 'Aucune carte surveillée pour le moment.',
     globalTrend: 'Tendance globale du marché',
@@ -136,7 +137,11 @@ export default {
     unexpectedError: 'Une erreur inattendue s\'est produite',
     adding: 'Ajout en cours...',
     scan: 'Scanner',
-    selectCondition: 'Sélectionnez l\'état de la carte'
+    selectCondition: 'Sélectionnez l\'état de la carte',
+    searchManually: 'Rechercher manuellement',
+    searchPlaceholder: 'Rechercher une carte...',
+    searching: 'Recherche en cours...',
+    noResults: 'Aucun résultat trouvé'
   },
   settings: {
     title: 'Paramètres',
@@ -321,5 +326,50 @@ export default {
   sold: {
     noCards: "Aucune carte vendue pour le moment",
     soldOn: "Vendu le",
+  },
+  allCards: {
+    title: 'Toutes mes cartes',
+    loading: 'Chargement de vos cartes...',
+    totalCards: 'Cartes totales',
+    estimatedValue: 'Valeur estimée',
+    noCards: 'Aucune carte dans votre collection',
+    startScanning: 'Commencer à scanner',
+    searchPlaceholder: 'Rechercher une carte...',
+    card: 'carte',
+    cards: 'cartes',
+    noSearchResults: 'Aucune carte trouvée',
+    clearSearch: 'Effacer la recherche',
+  },
+  conditions: {
+    nearmint: 'Comme neuf',
+    excellent: 'Excellent',
+    good: 'Bon',
+    played: 'Usagé'
+  },
+  sell: {
+    sell: 'Vendre',
+    sellCard: 'Vendre la carte',
+    condition: 'État',
+    price: 'Prix',
+    enterPrice: 'Entrez le prix',
+    invalidPrice: 'Prix invalide',
+    confirm: 'Confirmer',
+    success: 'Succès',
+    cardSold: 'Carte vendue avec succès',
+    error: 'Erreur lors de la vente'
+  },
+  priceAlert: {
+    alert: 'Alerte',
+    success: 'Succès',
+    created: 'Alerte de prix créée',
+    error: 'Erreur lors de la création de l\'alerte'
+  },
+  premium: {
+    title: 'Premium',
+    whyPay: 'Pourquoi je dois payer ?',
+    explanation1: 'TCMarket fait appel à des services externes pour traiter vos images de cartes et récupérer les prix du marché en temps réel.',
+    explanation2: 'Ces services ont un coût, et votre abonnement nous permet de couvrir ces frais tout en continuant à améliorer l\'application.',
+    explanation3: 'En devenant membre Premium, vous soutenez le développement de TCMarket et bénéficiez d\'une expérience optimale !',
+    subscribeButton: 'Je m\'abonne pour seulement 3.- par mois'
   },
 }; 

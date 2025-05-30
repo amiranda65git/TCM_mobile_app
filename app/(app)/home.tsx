@@ -432,7 +432,7 @@ export default function HomeScreen() {
             title={t('home.cardsCategory')}
             icon={<MaterialCommunityIcons name="cards" size={24} color={colors.secondary} />}
             count={`${cardsCount} ${t('home.cards')}`}
-            onPress={() => router.push('/market')}
+            onPress={() => router.push('/screens/all-cards')}
           />
         </View>
 

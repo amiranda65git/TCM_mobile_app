@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions, Alert, Modal, TextInput } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
@@ -45,6 +45,21 @@ export default function CardDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [cardDetails, setCardDetails] = useState<CardDetails | null>(null);
   const [inWishlist, setInWishlist] = useState<boolean>(false);
+  
+  // États pour le modal de vente
+  const [showSellModal, setShowSellModal] = useState(false);
+  const [sellingPrice, setSellingPrice] = useState('');
+  const [selectedCondition, setSelectedCondition] = useState('');
+
+  // Les conditions disponibles pour les cartes avec leurs couleurs
+  const CONDITION_COLORS = {
+    'Near Mint': '#4CAF50',
+    'Excellent': '#2196F3',
+    'Good': '#FF9800',
+    'Played': '#F44336'
+  };
+  
+  const CONDITIONS = Object.keys(CONDITION_COLORS);
   
   useEffect(() => {
     if (id && user) {
@@ -134,7 +149,7 @@ export default function CardDetailScreen() {
         image_small: cardData.image_small,
         image_large: cardData.image_large,
         edition_id: cardData.edition_id,
-        edition_name: cardData.editions.name,
+        edition_name: Array.isArray(cardData.editions) ? cardData.editions[0]?.name || 'Unknown' : (cardData.editions as any).name || 'Unknown',
         prices: priceData,
         owned: userCardData && userCardData.length > 0,
         user_card_id: userCardData && userCardData.length > 0 ? userCardData[0].id : undefined,
@@ -155,7 +170,7 @@ export default function CardDetailScreen() {
   const checkWishlist = async () => {
     if (!user || !id) return;
     const { data: wishlist } = await getUserWishlist(user.id);
-    setInWishlist(wishlist.includes(id));
+    setInWishlist((wishlist as string[]).includes(Array.isArray(id) ? id[0] : id));
   };
   
   // Formatter les prix
@@ -183,16 +198,68 @@ export default function CardDetailScreen() {
   const handleSell = async () => {
     if (!cardDetails?.user_card_id) return;
     
+    if (cardDetails.is_for_sale) {
+      // Si la carte est déjà en vente, la retirer de la vente
+      try {
+        setLoading(true);
+        
+        const { error } = await supabase
+          .from('user_cards')
+          .update({ is_for_sale: false })
+          .eq('id', cardDetails.user_card_id);
+        
+        if (error) throw error;
+        
+        // Mettre à jour l'état local
+        setCardDetails({
+          ...cardDetails,
+          is_for_sale: false
+        });
+        
+        console.log('Carte retirée de la vente', cardDetails?.id);
+      } catch (error) {
+        console.error("Erreur lors du retrait de la vente:", error);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Ouvrir le modal pour mettre en vente
+      setSelectedCondition(cardDetails.condition || 'Near Mint');
+      
+      // Pré-remplir avec le prix du marché ou le prix actuel
+      let initialPrice = '';
+      if (cardDetails.prices.mid) {
+        initialPrice = cardDetails.prices.mid.toString();
+      } else if (cardDetails.price) {
+        initialPrice = cardDetails.price.toString();
+      }
+      
+      setSellingPrice(initialPrice);
+      setShowSellModal(true);
+    }
+  };
+  
+  // Confirmer la vente
+  const handleConfirmSell = async () => {
+    if (!cardDetails?.user_card_id) return;
+    
     try {
       setLoading(true);
       
-      // Si la carte est déjà en vente, on la retire de la vente
-      // Sinon, on la met en vente
-      const newForSaleStatus = !cardDetails.is_for_sale;
+      const price = parseFloat(sellingPrice);
+      
+      if (isNaN(price) || price <= 0) {
+        Alert.alert(t('general.error'), t('sell.invalidPrice'));
+        return;
+      }
       
       const { error } = await supabase
         .from('user_cards')
-        .update({ is_for_sale: newForSaleStatus })
+        .update({ 
+          is_for_sale: true,
+          price: price,
+          condition: selectedCondition
+        })
         .eq('id', cardDetails.user_card_id);
       
       if (error) throw error;
@@ -200,15 +267,25 @@ export default function CardDetailScreen() {
       // Mettre à jour l'état local
       setCardDetails({
         ...cardDetails,
-        is_for_sale: newForSaleStatus
+        is_for_sale: true,
+        price: price,
+        condition: selectedCondition
       });
       
-      console.log(newForSaleStatus ? 'Carte mise en vente' : 'Carte retirée de la vente', cardDetails?.id);
+      setShowSellModal(false);
+      console.log('Carte mise en vente', cardDetails?.id);
     } catch (error) {
       console.error("Erreur lors de la mise en vente de la carte:", error);
+      Alert.alert(t('general.error'), t('sell.error'));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Vérifier si le prix est valide
+  const isPriceValid = () => {
+    const price = parseFloat(sellingPrice);
+    return !isNaN(price) && price > 0;
   };
   
   // Action lorsqu'on clique sur Définir une alerte de prix
@@ -539,6 +616,120 @@ export default function CardDetailScreen() {
           )}
         </View>
       </ScrollView>
+      
+      {/* Modal de vente */}
+      <Modal
+        visible={showSellModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSellModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
+                {t('card.sellCard')}
+              </Text>
+              <TouchableOpacity onPress={() => setShowSellModal(false)}>
+                <Ionicons name="close" size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+            
+            {cardDetails && (
+              <View style={styles.sellContent}>
+                <Text style={[styles.cardSellName, { color: colors.text.primary }]}>
+                  {cardDetails.name}
+                </Text>
+                
+                <View style={styles.priceRangeContainer}>
+                  <View style={styles.priceColumn}>
+                    <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
+                      {t('card.lowPrice')}
+                    </Text>
+                    <Text style={[styles.priceValue, { color: colors.text.primary }]}>
+                      {formatPrice(cardDetails.prices.low)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.priceColumn}>
+                    <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
+                      {t('card.highPrice')}
+                    </Text>
+                    <Text style={[styles.priceValue, { color: colors.text.primary }]}>
+                      {formatPrice(cardDetails.prices.high)}
+                    </Text>
+                  </View>
+                </View>
+                
+                {/* Sélecteur de condition */}
+                <View style={styles.conditionContainer}>
+                  <Text style={[styles.conditionLabel, { color: colors.text.primary }]}>
+                    {t('card.selectCondition')}:
+                  </Text>
+                  <View style={styles.conditionSelector}>
+                    {CONDITIONS.map((condition) => (
+                      <TouchableOpacity
+                        key={condition}
+                        style={[
+                          styles.conditionButton,
+                          selectedCondition === condition && { 
+                            backgroundColor: (CONDITION_COLORS as any)[condition] + '30',
+                            borderColor: (CONDITION_COLORS as any)[condition] 
+                          },
+                          { borderColor: colors.border }
+                        ]}
+                        onPress={() => setSelectedCondition(condition)}
+                      >
+                        <Text 
+                          style={[
+                            styles.conditionButtonText, 
+                            { color: selectedCondition === condition ? (CONDITION_COLORS as any)[condition] : colors.text.secondary }
+                          ]}
+                        >
+                          {t(`card.conditions.${condition.toLowerCase().replace(' ', '')}`)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                
+                <View style={styles.sellingPriceContainer}>
+                  <Text style={[styles.sellingPriceLabel, { color: colors.text.primary }]}>
+                    {t('card.sellingPrice')}
+                  </Text>
+                  <View style={[styles.inputContainer, { borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.priceInput, { color: colors.text.primary }]}
+                      value={sellingPrice}
+                      onChangeText={setSellingPrice}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.text.secondary}
+                      keyboardType="decimal-pad"
+                      autoFocus={true}
+                      returnKeyType="done"
+                    />
+                    <Text style={[styles.currencyText, { color: colors.text.primary }]}>€</Text>
+                  </View>
+                </View>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.sellButton, 
+                    { 
+                      backgroundColor: isPriceValid() ? colors.secondary : colors.text.secondary,
+                      opacity: isPriceValid() ? 1 : 0.7 
+                    }
+                  ]}
+                  onPress={handleConfirmSell}
+                  disabled={!isPriceValid()}
+                >
+                  <Text style={styles.sellButtonText}>{t('card.sell')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -765,5 +956,92 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    padding: 20,
+    borderRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  sellContent: {
+    alignItems: 'center',
+  },
+  cardSellName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  priceRangeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  priceColumn: {
+    width: '48%',
+  },
+  conditionContainer: {
+    marginBottom: 16,
+  },
+  conditionLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  conditionSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  conditionButton: {
+    padding: 8,
+    borderWidth: 1,
+    borderRadius: 4,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  conditionButtonText: {
+    fontSize: 14,
+  },
+  sellingPriceContainer: {
+    marginBottom: 16,
+  },
+  sellingPriceLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 4,
+  },
+  priceInput: {
+    flex: 1,
+    padding: 8,
+  },
+  currencyText: {
+    fontSize: 14,
+  },
+  sellButton: {
+    padding: 12,
+    borderRadius: 8,
+  },
+  sellButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 }); 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -43,6 +43,57 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_RATIO = 1.4;
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
 const CARD_HEIGHT = CARD_WIDTH * CARD_RATIO;
+
+// Fonction pour normaliser les noms de Pokémon pour améliorer la correspondance
+const normalizePokemonName = (name: string): string[] => {
+  if (!name) return [];
+  
+  const normalizedName = name.trim();
+  const variants: string[] = [normalizedName];
+  
+  // Variations courantes des suffixes spéciaux
+  const suffixPatterns = [
+    // Variations de ex/EX
+    { pattern: /\s+ex$/i, variants: [' ex', '-EX', ' EX'] },
+    { pattern: /\s+EX$/i, variants: [' ex', '-EX', ' EX'] },
+    { pattern: /\s+Ex$/i, variants: [' ex', '-EX', ' EX'] },
+    
+    // Variations de GX
+    { pattern: /\s+gx$/i, variants: ['-GX', ' GX', ' gx'] },
+    { pattern: /\s+GX$/i, variants: ['-GX', ' GX', ' gx'] },
+    { pattern: /\s+Gx$/i, variants: ['-GX', ' GX', ' gx'] },
+    
+    // Variations de V/VMAX/VSTAR
+    { pattern: /\s+v$/i, variants: [' V', '-V', ' v'] },
+    { pattern: /\s+V$/i, variants: [' V', '-V', ' v'] },
+    { pattern: /\s+vmax$/i, variants: [' VMAX', ' VMax', ' vmax'] },
+    { pattern: /\s+VMAX$/i, variants: [' VMAX', ' VMax', ' vmax'] },
+    { pattern: /\s+vstar$/i, variants: [' VSTAR', ' VStar', ' vstar'] },
+    { pattern: /\s+VSTAR$/i, variants: [' VSTAR', ' VStar', ' vstar'] },
+  ];
+  
+  // Extraire le nom de base (sans suffixe)
+  const baseName = normalizedName.replace(/\s+(ex|EX|Ex|gx|GX|Gx|v|V|vmax|VMAX|VMax|vstar|VSTAR|VStar)$/i, '');
+  
+  // Si on a détecté un suffixe, créer toutes les variantes possibles
+  if (baseName !== normalizedName) {
+    // Ajouter les variations les plus courantes
+    variants.push(`${baseName} ex`);
+    variants.push(`${baseName}-EX`);
+    variants.push(`${baseName} EX`);
+    variants.push(`${baseName}-GX`);
+    variants.push(`${baseName} GX`);
+    variants.push(`${baseName} V`);
+    variants.push(`${baseName} VMAX`);
+    variants.push(`${baseName} VSTAR`);
+    
+    // Ajouter le nom de base seul aussi
+    variants.push(baseName);
+  }
+  
+  // Retirer les doublons et retourner
+  return [...new Set(variants)];
+};
 
 // Ajout dans la fonction d'appel à l'API OpenAI images-vision
 async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | null> {
@@ -190,6 +241,18 @@ export default function ScanScreen() {
   
   // Pour la simulation périodique de la détection
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // État pour l'alerte de succès
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // États pour la recherche avec autocomplétion
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
 
   // Récupérer la caméra arrière
   const device = useCameraDevice('back');
@@ -336,21 +399,98 @@ export default function ScanScreen() {
     setIsLoadingCards(true);
     try {
       console.log('Recherche de cartes correspondantes avec:', scanResult);
-      const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
-        pokemonName: scanResult.pokemonName,
-        healthPoints: scanResult.healthPoints,
-        cardNumber: scanResult.cardNumber
-      });
       
-      if (error) {
-        console.error('Erreur lors de la recherche de cartes:', error);
-        return;
+      let allCards: OfficialCard[] = [];
+      
+      // Si on a un nom de Pokémon, essayer différentes variantes
+      if (scanResult.pokemonName) {
+        const nameVariants = normalizePokemonName(scanResult.pokemonName);
+        console.log(`Tentative de recherche avec ${nameVariants.length} variantes:`, nameVariants);
+        
+        // Essayer chaque variante jusqu'à trouver des résultats
+        for (const nameVariant of nameVariants) {
+          console.log(`Recherche avec la variante: "${nameVariant}"`);
+          
+          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+            pokemonName: nameVariant,
+            healthPoints: scanResult.healthPoints,
+            cardNumber: scanResult.cardNumber
+          });
+          
+          if (!error && data && data.length > 0) {
+            console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}"`);
+            
+            // Ajouter les nouvelles cartes en évitant les doublons
+            const newCards = data.filter(newCard => 
+              !allCards.some(existingCard => existingCard.id === newCard.id)
+            );
+            allCards.push(...newCards);
+            
+            // Si on a trouvé suffisamment de cartes avec une variante exacte, on peut s'arrêter
+            if (data.length >= 3) {
+              break;
+            }
+          }
+        }
+        
+        // Si aucune variante n'a donné de résultat, essayer une recherche plus large (nom de base seulement)
+        if (allCards.length === 0) {
+          const baseName = scanResult.pokemonName.replace(/\s+(ex|EX|Ex|gx|GX|Gx|v|V|vmax|VMAX|VMax|vstar|VSTAR|VStar)$/i, '');
+          
+          if (baseName !== scanResult.pokemonName) {
+            console.log(`Recherche de secours avec le nom de base: "${baseName}"`);
+            
+            const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+              pokemonName: baseName,
+              healthPoints: scanResult.healthPoints,
+              cardNumber: scanResult.cardNumber
+            });
+            
+            if (!error && data) {
+              allCards = data;
+            }
+          }
+        }
+      } else {
+        // Pas de nom, recherche classique
+        const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+          pokemonName: scanResult.pokemonName,
+          healthPoints: scanResult.healthPoints,
+          cardNumber: scanResult.cardNumber
+        });
+        
+        if (!error && data) {
+          allCards = data;
+        }
       }
       
-      console.log(`${data.length} cartes trouvées`);
-      setMatchingCards(data);
+      console.log(`Total de ${allCards.length} cartes trouvées après toutes les recherches`);
+      
+      // Trier les résultats par pertinence si on a un nom original
+      if (scanResult.pokemonName && allCards.length > 1) {
+        const originalName = scanResult.pokemonName.toLowerCase();
+        allCards.sort((a, b) => {
+          const aExact = a.name.toLowerCase() === originalName;
+          const bExact = b.name.toLowerCase() === originalName;
+          
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          
+          // Prioriser les cartes qui contiennent le nom original
+          const aContains = a.name.toLowerCase().includes(originalName.replace(/\s+(ex|EX|gx|GX|v|V|vmax|VMAX|vstar|VSTAR)$/i, ''));
+          const bContains = b.name.toLowerCase().includes(originalName.replace(/\s+(ex|EX|gx|GX|v|V|vmax|VMAX|vstar|VSTAR)$/i, ''));
+          
+          if (aContains && !bContains) return -1;
+          if (!aContains && bContains) return 1;
+          
+          return a.name.localeCompare(b.name);
+        });
+      }
+      
+      setMatchingCards(allCards);
     } catch (error) {
       console.error('Erreur lors de la recherche de cartes:', error);
+      setMatchingCards([]);
     } finally {
       setIsLoadingCards(false);
     }
@@ -362,6 +502,12 @@ export default function ScanScreen() {
       // 1. Essayer avec OpenAI Vision
       const aiResult = await analyzeCardWithOpenAI(imagePath);
       if (aiResult && (aiResult.pokemonName || aiResult.cardNumber)) {
+        console.log('🔍 Nom détecté par OpenAI:', aiResult.pokemonName);
+        if (aiResult.pokemonName) {
+          const variants = normalizePokemonName(aiResult.pokemonName);
+          console.log('🔍 Variantes générées pour OpenAI:', variants);
+        }
+        
         setScanResult(aiResult);
         // Rechercher les cartes correspondantes
         await searchMatchingCards(aiResult);
@@ -382,6 +528,12 @@ export default function ScanScreen() {
             cardNumber: numberMatch ? numberMatch[0] : null,
             imageUri: imagePath,
           };
+          
+          // Test de la normalisation
+          console.log('🔍 Nom détecté par OCR:', nameMatch[1]);
+          const variants = normalizePokemonName(nameMatch[1]);
+          console.log('🔍 Variantes générées:', variants);
+          
           setScanResult(extractedResult);
           // Rechercher les cartes correspondantes
           await searchMatchingCards(extractedResult);
@@ -512,20 +664,20 @@ export default function ScanScreen() {
       // Fermer le modal
       setModalVisible(false);
       
-      // Notifier l'utilisateur du succès
-      Alert.alert(
-        t('scan.success'),
-        t('scan.addedToCollection'),
-        [
-          { 
-            text: t('general.ok'), 
-            onPress: () => {
-              // Rediriger vers la page card-marketplace avec l'ID de la carte
-              router.push(`/screens/market-prices/card-marketplace?id=${selectedCard.id}`);
-            }
-          }
-        ]
-      );
+      // Afficher l'alerte de succès
+      setSuccessMessage(t('scan.addedToCollection'));
+      setShowSuccessAlert(true);
+      
+      // Faire disparaître l'alerte après 3 secondes
+      setTimeout(() => {
+        setShowSuccessAlert(false);
+      }, 3000);
+      
+      // Rediriger automatiquement vers la page card-marketplace
+      setTimeout(() => {
+        router.push(`/screens/market-prices/card-marketplace?id=${selectedCard.id}`);
+      }, 1000);
+      
     } catch (error) {
       console.error('Erreur inattendue lors de l\'ajout à la collection:', error);
       Alert.alert(t('general.error'), t('scan.unexpectedError'));
@@ -566,6 +718,55 @@ export default function ScanScreen() {
     </TouchableOpacity>
   );
 
+  // Logique de recherche avec autocomplétion
+  useEffect(() => {
+    const delaySearch = setTimeout(async () => {
+      if (searchQuery.trim().length >= 2) {
+        setIsSearching(true);
+        const { data, error } = await SupabaseService.searchCards(searchQuery);
+        if (!error && data) {
+          setSearchResults(data);
+        } else {
+          setSearchResults([]);
+        }
+        setIsSearching(false);
+        setShowSuggestions(true);
+      } else {
+        setSearchResults([]);
+        setShowSuggestions(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(delaySearch);
+  }, [searchQuery]);
+
+  // Fonction pour sélectionner une carte depuis la recherche
+  const handleCardSelectFromSearch = async (card: any) => {
+    setShowSuggestions(false);
+    setSearchQuery('');
+    
+    // Créer un objet carte compatible avec le modal de sélection
+    const selectedCardData: OfficialCard = {
+      id: card.card_id,
+      name: card.card_name,
+      hp: '', // Pas d'HP dans les résultats de recherche
+      number: card.number || '',
+      image_small: card.image_small,
+      image_large: card.image_small, // Utiliser la même image
+      edition: {
+        name: card.edition_name || '',
+        symbol: ''
+      },
+      rarity: card.rarity || '',
+      types: [],
+      supertype: ''
+    };
+    
+    // Définir la carte sélectionnée et ouvrir le modal
+    setSelectedCard(selectedCardData);
+    setModalVisible(true);
+  };
+
   if (!device || !hasPermission) {
     return (
       <View style={[styles.centeredContainer, { backgroundColor: colors.background }]}>
@@ -585,14 +786,31 @@ export default function ScanScreen() {
         <View style={styles.placeholder} />
       </View>
 
+      {/* Alerte de succès */}
+      {showSuccessAlert && (
+        <View style={[styles.successAlert, { backgroundColor: colors.success || '#4CAF50' }]}>
+          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+          <Text style={styles.successAlertText}>{successMessage}</Text>
+        </View>
+      )}
+
       <View style={styles.cameraContainer}>
         {photoUri ? (
           <View style={styles.photoContainer}>
-            <Image
-              source={{ uri: photoUri }}
-              style={styles.photo}
-              resizeMode="contain"
-            />
+            {/* Background - Première carte correspondante ou placeholder */}
+            {matchingCards.length > 0 ? (
+              <Image
+                source={{ uri: matchingCards[0].image_large || matchingCards[0].image_small }}
+                style={styles.backgroundCardImage}
+                resizeMode="cover"
+              />
+            ) : (
+              // Fond neutre quand pas de résultats (pas de message ici)
+              <View style={[styles.noResultsBackground, { backgroundColor: colors.background }]} />
+            )}
+            
+            {/* Overlay semi-transparent pour la lisibilité */}
+            <View style={styles.backgroundOverlay} />
             
             {/* Overlay de traitement */}
             {isProcessing && (
@@ -616,44 +834,103 @@ export default function ScanScreen() {
               </View>
             )}
 
-            {/* Liste des cartes correspondantes - modale transparente par-dessus la photo */}
+            {/* Contenu principal - remontée aux 2/3 */}
             {!isProcessing && !scanError && (
-              <View style={styles.matchingCardsContainer}>
-                {/* Overlay semi-transparent pour la lisibilité */}
-                <View style={[styles.backgroundOverlay, { backgroundColor: colors.background + '99' }]} />
-                
-                {/* Contenu de la modale */}
-                <View style={styles.modalContentContainer}>
-                  <View style={[styles.matchingCardsHeader, { backgroundColor: colors.surface + 'F0' }]}>
-                    <Text style={[styles.matchingCardsTitle, { color: colors.text.primary }]}>{t('scan.matchingCards')}</Text>
-                    {isLoadingCards && <ActivityIndicator size="small" color={colors.primary} />}
+              <>
+                {matchingCards.length > 0 ? (
+                  // Cartes correspondantes trouvées
+                  <View style={styles.resultsContainer}>
+                    <View style={styles.matchingCardsSection}>
+                      <View style={[styles.matchingCardsHeader, { backgroundColor: colors.surface + 'F0' }]}>
+                        <Text style={[styles.matchingCardsTitle, { color: colors.text.primary }]}>{t('scan.matchingCards')}</Text>
+                        {isLoadingCards && <ActivityIndicator size="small" color={colors.primary} />}
+                      </View>
+                      
+                      <FlatList
+                        data={matchingCards}
+                        renderItem={renderCardItem}
+                        keyExtractor={(item) => item.id}
+                        style={styles.cardsList}
+                        contentContainerStyle={styles.cardsListContent}
+                        showsVerticalScrollIndicator={false}
+                      />
+                    </View>
                   </View>
-                  
-                  {matchingCards.length > 0 ? (
-                    <FlatList
-                      data={matchingCards}
-                      renderItem={renderCardItem}
-                      keyExtractor={(item) => item.id}
-                      style={styles.cardsList}
-                      contentContainerStyle={styles.cardsListContent}
-                      showsVerticalScrollIndicator={false}
-                    />
-                  ) : (
-                    <View style={styles.noCardsContainer}>
-                      {isLoadingCards ? (
-                        <ActivityIndicator size="large" color={colors.primary} />
-                      ) : (
-                        <>
-                          <Ionicons name="search" size={50} color={colors.text.secondary} />
-                          <Text style={[styles.noCardsText, { color: colors.text.secondary }]}>
-                            {t('scan.noMatchingCards')}
-                          </Text>
-                        </>
+                ) : (
+                  // Aucune correspondance - Recherche manuelle pleine page
+                  <View style={[styles.fullPageSearchSection, { backgroundColor: colors.surface }]}>
+                    <View style={[styles.searchSectionHeader, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.searchSectionTitle, { color: colors.text.primary }]}>
+                        Pas de résultat, recherche manuelle :
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.searchSectionContent}>
+                      {/* Champ de recherche */}
+                      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+                        <Ionicons name="search-outline" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+                        <TextInput
+                          ref={searchInputRef}
+                          style={[styles.searchInput, { color: colors.text.primary }]}
+                          placeholder={t('scan.searchPlaceholder') || "Rechercher une carte..."}
+                          placeholderTextColor={colors.text.secondary}
+                          value={searchQuery}
+                          onChangeText={setSearchQuery}
+                          returnKeyType="search"
+                          clearButtonMode="while-editing"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          onFocus={() => setSearchFocused(true)}
+                          onBlur={() => setSearchFocused(false)}
+                        />
+                      </View>
+                      
+                      {/* Suggestions de recherche */}
+                      {showSuggestions && (
+                        <View style={[styles.suggestionsContainer, { backgroundColor: colors.background }]}>
+                          {searchResults.length > 0 ? (
+                            <FlatList
+                              data={searchResults}
+                              keyExtractor={item => item.card_id}
+                              renderItem={({ item }) => (
+                                <TouchableOpacity
+                                  style={[styles.suggestionItem, { borderBottomColor: colors.border }]}
+                                  onPress={() => handleCardSelectFromSearch(item)}
+                                >
+                                  <View style={styles.suggestionContent}>
+                                    {item.image_small ? (
+                                      <Image source={{ uri: item.image_small }} style={styles.suggestionImage} resizeMode="contain" />
+                                    ) : (
+                                      <View style={[styles.suggestionImagePlaceholder, { backgroundColor: colors.surface }]} />
+                                    )}
+                                    <View style={styles.suggestionTextContainer}>
+                                      <Text style={[styles.suggestionTitle, { color: colors.text.primary }]}>{item.card_name}</Text>
+                                      {item.edition_name && (
+                                        <Text style={[styles.suggestionSubtitle, { color: colors.text.secondary }]}>{item.edition_name}</Text>
+                                      )}
+                                    </View>
+                                    <Ionicons name="add-circle" size={24} color={colors.primary} />
+                                  </View>
+                                </TouchableOpacity>
+                              )}
+                              style={styles.suggestionsList}
+                              keyboardShouldPersistTaps="handled"
+                              showsVerticalScrollIndicator={false}
+                            />
+                          ) : searchQuery.trim().length >= 2 ? (
+                            <View style={styles.noResultsContainer}>
+                              <Text style={[styles.noResultsText, { color: colors.text.secondary }]}>
+                                {isSearching ? (t('scan.searching') || 'Recherche en cours...') : (t('scan.noResults') || 'Aucun résultat trouvé')}
+                              </Text>
+                              {isSearching && <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />}
+                            </View>
+                          ) : null}
+                        </View>
                       )}
                     </View>
-                  )}
-                </View>
-              </View>
+                  </View>
+                )}
+              </>
             )}
           </View>
         ) : (
@@ -698,9 +975,9 @@ export default function ScanScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Bouton pour scanner à nouveau - remonté pour éviter la barre de menu */}
-      {(photoUri && !scanError) && (
-        <View style={styles.buttonContainer}>
+      {/* Bouton pour scanner à nouveau - positionné plus bas */}
+      {(photoUri && !scanError && !isLoadingCards) && (
+        <View style={styles.bottomButtonContainer}>
           <TouchableOpacity 
             style={[styles.scanButton, { backgroundColor: colors.secondary }]} 
             onPress={resetScanState}
@@ -919,6 +1196,17 @@ const styles = StyleSheet.create({
   photo: {
     flex: 1,
   },
+  backgroundCardImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+  },
+  noResultsBackground: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backgroundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1035,20 +1323,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  matchingCardsContainer: {
+  resultsContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: '60%',
+    top: '33%', // Remontée aux 2/3 (33% du haut)
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
-  backgroundOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  matchingCardsSection: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+  },
+  fullPageSearchSection: {
+    ...StyleSheet.absoluteFillObject,
+    paddingTop: 0,
+  },
+  searchSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  searchSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  searchSectionContent: {
+    flex: 1,
+    padding: 16,
   },
   modalContentContainer: {
     flex: 1,
@@ -1318,5 +1628,120 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  successAlert: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  successAlertText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  manualSearchContainer: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  manualSearchTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    marginBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    fontSize: 16,
+  },
+  suggestionsContainer: {
+    maxHeight: 300,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  suggestionsList: {
+    maxHeight: 280,
+  },
+  suggestionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 0.5,
+  },
+  suggestionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  suggestionImage: {
+    width: 40,
+    height: 56,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  suggestionImagePlaceholder: {
+    width: 40,
+    height: 56,
+    borderRadius: 4,
+    marginRight: 12,
+    opacity: 0.5,
+  },
+  suggestionTextContainer: {
+    flex: 1,
+  },
+  suggestionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  suggestionSubtitle: {
+    fontSize: 12,
+  },
+  noResultsContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  bottomButtonContainer: {
+    position: 'absolute',
+    bottom: 100, // Remonté pour éviter la barre de navigation
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
 }); 

@@ -573,9 +573,13 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
 
     // Récupérer la liste de tous les edition_id des cartes
     const editionIds = new Set<string>();
+    const cardIds = new Set<string>();
     data?.forEach((card: any) => {
       if (card.official_cards && card.official_cards.edition_id) {
         editionIds.add(card.official_cards.edition_id);
+      }
+      if (card.card_id) {
+        cardIds.add(card.card_id);
       }
     });
 
@@ -590,13 +594,33 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
       return { data: null, error: editionsError };
     }
 
+    // 3. Récupérer les prix du marché pour toutes les cartes
+    const { data: marketPrices, error: marketPricesError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid')
+      .in('card_id', Array.from(cardIds))
+      .order('date', { ascending: false });
+
+    // Créer une map des prix du marché les plus récents
+    const marketPriceMap = new Map();
+    if (marketPrices && !marketPricesError) {
+      // Pour chaque carte, ne garder que le prix le plus récent
+      const seenCardIds = new Set();
+      marketPrices.forEach(price => {
+        if (!seenCardIds.has(price.card_id) && price.price_mid !== null) {
+          marketPriceMap.set(price.card_id, price.price_mid);
+          seenCardIds.add(price.card_id);
+        }
+      });
+    }
+
     // Créer un dictionnaire pour un accès facile aux données des éditions
     const editionsMap: Record<string, any> = {};
     editionsData?.forEach((edition: any) => {
       editionsMap[edition.id] = edition;
     });
 
-    // 3. Regrouper les cartes par édition
+    // 4. Regrouper les cartes par édition
     const groupedCards: Record<string, any> = {};
     
     data?.forEach((card: any) => {
@@ -620,6 +644,11 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
         };
       }
       
+      // Calculer le prix à utiliser : prix de vente utilisateur ou prix du marché
+      const userPrice = card.price;
+      const marketPrice = marketPriceMap.get(card.card_id);
+      const finalPrice = userPrice !== null && userPrice !== undefined ? userPrice : (marketPrice || 0);
+      
       groupedCards[editionId].cards.push({
         id: card.id,
         card_id: card.card_id,
@@ -629,14 +658,16 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
         quantity: 1, // Par défaut, nous supposons que l'utilisateur possède 1 exemplaire
         condition: card.condition,
         is_for_sale: card.is_for_sale || false,
-        price: card.price || 0
+        price: finalPrice, // Prix calculé (priorité au prix utilisateur, sinon prix marché)
+        user_price: userPrice, // Prix de vente défini par l'utilisateur
+        market_price: marketPrice // Prix du marché
       });
     });
     
-    // 4. Convertir l'objet en tableau pour faciliter l'affichage
+    // 5. Convertir l'objet en tableau pour faciliter l'affichage
     const editions = Object.values(groupedCards);
     
-    // 5. Trier les éditions par date de sortie (du plus récent au plus ancien)
+    // 6. Trier les éditions par date de sortie (du plus récent au plus ancien)
     editions.sort((a: any, b: any) => {
       return new Date(b.release_date || 0).getTime() - new Date(a.release_date || 0).getTime();
     });
@@ -1929,75 +1960,139 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
       return { data: [], error: null };
     }
     
-    let query = supabase
-      .from('official_cards')
-      .select(`
-        id,
-        name,
-        hp,
-        number,
-        supertype,
-        types,
-        rarity,
-        image_small,
-        image_large,
-        edition_id,
-        editions:edition_id (
-          name,
-          symbol_image
-        )
-      `);
+    let allResults: any[] = [];
     
-    // Ajouter les filtres si disponibles
+    // Si on a un nom de Pokémon, essayer plusieurs variations
     if (details.pokemonName) {
-      query = query.ilike('name', `%${details.pokemonName}%`);
-    }
-    
-    if (details.healthPoints) {
-      query = query.eq('hp', details.healthPoints);
-    }
-    
-    if (details.cardNumber) {
-      // Extraire juste le numéro de la carte sans le dénominateur
-      const numberParts = details.cardNumber.split('/');
-      if (numberParts.length > 0) {
-        let cardNumber = numberParts[0].trim();
+      const nameVariants = normalizePokemonName(details.pokemonName);
+      console.log(`Recherche avec ${nameVariants.length} variantes de nom:`, nameVariants);
+      
+      for (const nameVariant of nameVariants) {
+        let query = supabase
+          .from('official_cards')
+          .select(`
+            id,
+            name,
+            hp,
+            number,
+            supertype,
+            types,
+            rarity,
+            image_small,
+            image_large,
+            edition_id,
+            editions:edition_id (
+              name,
+              symbol_image
+            )
+          `)
+          .ilike('name', `%${nameVariant}%`);
         
-        // Traitement pour retirer les zéros en début si c'est un nombre pur
-        // Mais garder les préfixes comme "SM", "XY", etc.
-        if (/^\d+$/.test(cardNumber)) {
-          // Si c'est uniquement des chiffres, retirer les zéros en début
-          cardNumber = parseInt(cardNumber, 10).toString();
-        } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
-          // Si c'est un format comme "SM098", garder le préfixe et retirer les zéros du nombre
-          const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
-          if (match) {
-            const prefix = match[1];
-            const number = parseInt(match[2], 10).toString();
-            cardNumber = prefix + number;
+        // Ajouter les filtres supplémentaires si disponibles
+        if (details.healthPoints) {
+          query = query.eq('hp', details.healthPoints);
+        }
+        
+        if (details.cardNumber) {
+          // Extraire juste le numéro de la carte sans le dénominateur
+          const numberParts = details.cardNumber.split('/');
+          if (numberParts.length > 0) {
+            let cardNumber = numberParts[0].trim();
+            
+            // Traitement pour retirer les zéros en début si c'est un nombre pur
+            // Mais garder les préfixes comme "SM", "XY", etc.
+            if (/^\d+$/.test(cardNumber)) {
+              // Si c'est uniquement des chiffres, retirer les zéros en début
+              cardNumber = parseInt(cardNumber, 10).toString();
+            } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
+              // Si c'est un format comme "SM098", garder le préfixe et retirer les zéros du nombre
+              const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
+              if (match) {
+                const prefix = match[1];
+                const number = parseInt(match[2], 10).toString();
+                cardNumber = prefix + number;
+              }
+            }
+            
+            console.log(`Numéro original: "${details.cardNumber}" -> Numéro traité: "${cardNumber}"`);
+            query = query.eq('number', cardNumber);
           }
         }
         
-        // Log pour debug
-        console.log(`Numéro original: "${details.cardNumber}" -> Numéro traité: "${cardNumber}"`);
+        // Exécuter la requête pour cette variante
+        const { data, error } = await query.order('name').limit(10);
         
-        // Essayer de trouver avec le numéro traité
-        query = query.eq('number', cardNumber);
+        if (!error && data && data.length > 0) {
+          // Ajouter les résultats en évitant les doublons
+          const newResults = data.filter(newCard => 
+            !allResults.some(existingCard => existingCard.id === newCard.id)
+          );
+          allResults.push(...newResults);
+          
+          console.log(`Trouvé ${newResults.length} nouvelles cartes avec la variante "${nameVariant}"`);
+        }
+        
+        // Si on a trouvé suffisamment de résultats, s'arrêter
+        if (allResults.length >= 10) {
+          break;
+        }
+      }
+    } else {
+      // Si pas de nom de Pokémon, faire une recherche classique
+      let query = supabase
+        .from('official_cards')
+        .select(`
+          id,
+          name,
+          hp,
+          number,
+          supertype,
+          types,
+          rarity,
+          image_small,
+          image_large,
+          edition_id,
+          editions:edition_id (
+            name,
+            symbol_image
+          )
+        `);
+      
+      if (details.healthPoints) {
+        query = query.eq('hp', details.healthPoints);
+      }
+      
+      if (details.cardNumber) {
+        const numberParts = details.cardNumber.split('/');
+        if (numberParts.length > 0) {
+          let cardNumber = numberParts[0].trim();
+          
+          if (/^\d+$/.test(cardNumber)) {
+            cardNumber = parseInt(cardNumber, 10).toString();
+          } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
+            const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
+            if (match) {
+              const prefix = match[1];
+              const number = parseInt(match[2], 10).toString();
+              cardNumber = prefix + number;
+            }
+          }
+          
+          query = query.eq('number', cardNumber);
+        }
+      }
+      
+      const { data, error } = await query.order('name');
+      
+      if (!error && data) {
+        allResults = data;
       }
     }
     
-    // Exécuter la requête
-    const { data, error } = await query.order('name');
-    
-    if (error) {
-      console.error('Erreur lors de la recherche de cartes par détails:', error);
-      return { data: [], error };
-    }
-    
-    console.log(`Résultats trouvés: ${data?.length || 0}`);
+    console.log(`Résultats totaux trouvés: ${allResults.length}`);
     
     // Transformer les données pour être plus facilement utilisables
-    const transformedData = data?.map(card => {
+    const transformedData = allResults.map(card => {
       // Extraire le nom de l'édition de manière sécurisée
       let editionName = '';
       let editionSymbol = '';
@@ -2030,7 +2125,22 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
           symbol: editionSymbol
         }
       };
-    }) || [];
+    });
+    
+    // Trier les résultats par pertinence (correspondance exacte du nom d'abord)
+    if (details.pokemonName) {
+      const originalName = details.pokemonName.toLowerCase();
+      transformedData.sort((a, b) => {
+        const aExact = a.name.toLowerCase() === originalName;
+        const bExact = b.name.toLowerCase() === originalName;
+        
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        
+        // Si ni l'un ni l'autre n'est exact, trier par nom
+        return a.name.localeCompare(b.name);
+      });
+    }
     
     return { data: transformedData, error: null };
   } catch (error) {
@@ -2214,18 +2324,25 @@ export const getUserCardsWithOffersCount = async (userId: string) => {
 };
 
 // Fonction pour marquer une carte comme vendue
-export const markCardAsSold = async (userCardId: string) => {
+export const markCardAsSold = async (userCardId: string, salePrice?: number) => {
   try {
     console.log(`[markCardAsSold] Marquage de la carte ${userCardId} comme vendue`);
     
     // 1. Marquer la carte comme vendue
+    const updateData: any = { 
+      is_sold: true,
+      is_for_sale: false, // Retirer de la vente
+      updated_at: new Date().toISOString()
+    };
+    
+    // Ajouter le prix de vente si fourni
+    if (salePrice !== undefined) {
+      updateData.price = salePrice;
+    }
+    
     const { data, error } = await supabase
       .from('user_cards')
-      .update({ 
-        is_sold: true,
-        is_for_sale: false, // Retirer de la vente
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', userCardId)
       .select();
     
@@ -2283,47 +2400,304 @@ export const getUserSoldCardsCount = async (userId: string) => {
 // Fonction pour récupérer toutes les cartes vendues de l'utilisateur
 export const getUserSoldCards = async (userId: string) => {
   try {
+    console.log(`[getUserSoldCards] Récupération des cartes vendues pour l'utilisateur ${userId}`);
+    
     const { data, error } = await supabase
       .from('user_cards')
       .select(`
         id,
-        card_id,
-        price,
         condition,
-        created_at,
+        price,
+        card_id,
         updated_at,
         official_cards:card_id (
           id,
           name,
           image_small,
-          edition_id,
-          editions:edition_id (name)
+          rarity,
+          editions:edition_id (
+            name
+          )
         )
       `)
       .eq('user_id', userId)
       .eq('is_sold', true)
-      .order('updated_at', { ascending: false }); // Trier par date de vente (updated_at)
+      .order('updated_at', { ascending: false });
 
     if (error) {
-      console.error("Erreur lors de la récupération des cartes vendues:", error);
+      console.error('[getUserSoldCards] Erreur lors de la récupération des cartes vendues:', error);
+      return { data: [], error };
+    }
+
+    // Récupérer les prix du marché pour toutes les cartes vendues
+    const cardIds = data?.map(item => item.card_id) || [];
+    
+    const { data: marketPrices, error: pricesError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid')
+      .in('card_id', cardIds)
+      .order('date', { ascending: false });
+
+    if (pricesError) {
+      console.warn('[getUserSoldCards] Erreur lors de la récupération des prix:', pricesError);
+    }
+
+    // Créer un map des prix pour un accès rapide
+    const priceMap = new Map();
+    if (marketPrices) {
+      marketPrices.forEach(price => {
+        if (!priceMap.has(price.card_id)) {
+          priceMap.set(price.card_id, price.price_mid);
+        }
+      });
+    }
+
+    // Transformer les données pour être plus facilement utilisables
+    const transformedData = data?.map(userCard => {
+      const cardData = userCard.official_cards as any;
+      if (!cardData) return null;
+
+      // Gérer le cas où editions peut être un tableau ou un objet
+      let editionName = '';
+      let editionId = '';
+      let editionSymbol = '';
+      if (cardData.editions) {
+        if (Array.isArray(cardData.editions) && cardData.editions.length > 0) {
+          editionName = cardData.editions[0].name || '';
+          editionId = cardData.editions[0].id || '';
+          editionSymbol = cardData.editions[0].symbol_image || '';
+        } else if (typeof cardData.editions === 'object') {
+          editionName = (cardData.editions as any).name || '';
+          editionId = (cardData.editions as any).id || '';
+          editionSymbol = (cardData.editions as any).symbol_image || '';
+        }
+      }
+
+      return {
+        user_card_id: userCard.id,
+        condition: userCard.condition,
+        price: userCard.price,
+        updated_at: userCard.updated_at,
+        card: {
+          id: cardData.id,
+          name: cardData.name,
+          image_small: cardData.image_small,
+          image_large: cardData.image_large,
+          rarity: cardData.rarity,
+          supertype: cardData.supertype,
+          hp: cardData.hp,
+          card_number: cardData.number,
+          edition_name: editionName,
+          edition_id: editionId,
+          edition_symbol_image: editionSymbol,
+          // market_price_mid: null, // TODO: Récupérer le prix du marché
+        }
+      };
+    }).filter(item => item !== null) || [];
+
+    console.log(`[getUserSoldCards] ${transformedData.length} cartes vendues récupérées`);
+    return { data: transformedData, error: null };
+  } catch (error) {
+    console.error('[getUserSoldCards] Erreur inattendue:', error);
+    return { data: [], error };
+  }
+};
+
+// Fonction pour normaliser les noms de Pokémon pour améliorer la correspondance
+const normalizePokemonName = (name: string): string[] => {
+  if (!name) return [];
+  
+  const normalizedName = name.trim();
+  const variants: string[] = [normalizedName];
+  
+  // Variations courantes des suffixes spéciaux
+  const suffixVariations = [
+    // Variations de ex/EX
+    { from: /\s+ex$/i, to: ' ex' },
+    { from: /\s+EX$/i, to: '-EX' },
+    { from: /\s+Ex$/i, to: ' ex' },
+    { from: /-ex$/i, to: ' ex' },
+    { from: /-EX$/i, to: '-EX' },
+    
+    // Variations de GX
+    { from: /\s+gx$/i, to: '-GX' },
+    { from: /\s+GX$/i, to: '-GX' },
+    { from: /\s+Gx$/i, to: '-GX' },
+    { from: /-gx$/i, to: '-GX' },
+    { from: /-GX$/i, to: '-GX' },
+    
+    // Variations de V/VMAX/VSTAR
+    { from: /\s+v$/i, to: ' V' },
+    { from: /\s+V$/i, to: ' V' },
+    { from: /-v$/i, to: ' V' },
+    { from: /-V$/i, to: ' V' },
+    { from: /\s+vmax$/i, to: ' VMAX' },
+    { from: /\s+VMAX$/i, to: ' VMAX' },
+    { from: /\s+VMax$/i, to: ' VMAX' },
+    { from: /\s+vstar$/i, to: ' VSTAR' },
+    { from: /\s+VSTAR$/i, to: ' VSTAR' },
+    { from: /\s+VStar$/i, to: ' VSTAR' },
+    
+    // Variations avec &
+    { from: /\s+&\s+/g, to: ' & ' },
+    { from: /\s*&\s*/g, to: ' & ' },
+  ];
+  
+  // Appliquer les variations pour créer différentes possibilités
+  suffixVariations.forEach(variation => {
+    if (variation.from.test(normalizedName)) {
+      const variant = normalizedName.replace(variation.from, variation.to);
+      if (variant !== normalizedName && !variants.includes(variant)) {
+        variants.push(variant);
+      }
+    }
+    
+    // Aussi essayer l'inverse (si on a "ex", essayer "-EX", etc.)
+    const reverseVariant = normalizedName.replace(variation.to, variation.from.source.replace(/[\\^$]/g, ''));
+    if (reverseVariant !== normalizedName && !variants.includes(reverseVariant)) {
+      variants.push(reverseVariant);
+    }
+  });
+  
+  // Ajouter des variations spécifiques courantes
+  const baseName = normalizedName.replace(/\s+(ex|EX|gx|GX|v|V|vmax|VMAX|vstar|VSTAR)$/i, '');
+  
+  if (baseName !== normalizedName) {
+    // Variations avec espaces vs tirets
+    variants.push(`${baseName} ex`);
+    variants.push(`${baseName}-EX`);
+    variants.push(`${baseName} EX`);
+    variants.push(`${baseName}-GX`);
+    variants.push(`${baseName} GX`);
+    variants.push(`${baseName} V`);
+    variants.push(`${baseName} VMAX`);
+    variants.push(`${baseName} VSTAR`);
+  }
+  
+  // Retirer les doublons et retourner
+  return [...new Set(variants)];
+};
+
+// Récupérer toutes les cartes de l'utilisateur (sans distinction d'éditions)
+export const getAllUserCards = async (userId: string) => {
+  try {
+    console.log(`[getAllUserCards] Récupération de toutes les cartes pour l'utilisateur ${userId}`);
+    
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        condition,
+        card_id,
+        created_at,
+        is_sold,
+        official_cards:card_id (
+          id,
+          name,
+          image_small,
+          image_large,
+          rarity,
+          supertype,
+          hp,
+          number,
+          editions:edition_id (
+            id,
+            name,
+            symbol_image
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_sold', false)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[getAllUserCards] Erreur lors de la récupération des cartes:', error);
       return { data: null, error };
     }
 
-    // Formater les données pour correspondre au format attendu
-    const formattedData = data?.map((card: any) => ({
-      user_card_id: card.id,
-      card_id: card.card_id,
-      card_name: card.official_cards?.name || 'Carte inconnue',
-      edition_name: card.official_cards?.editions?.name || null,
-      image_small: card.official_cards?.image_small || null,
-      price: card.price,
-      condition: card.condition,
-      sold_date: card.updated_at
-    })) || [];
+    if (!data || data.length === 0) {
+      console.log('[getAllUserCards] Aucune carte trouvée pour cet utilisateur');
+      return { data: [], error: null };
+    }
 
-    return { data: formattedData, error: null };
+    console.log(`[getAllUserCards] ${data.length} cartes récupérées`);
+
+    // Récupérer les prix du marché pour toutes les cartes
+    const cardIds = data.map(item => item.card_id);
+    
+    const { data: marketPrices, error: pricesError } = await supabase
+      .from('market_prices')
+      .select('card_id, price_mid')
+      .in('card_id', cardIds)
+      .order('date', { ascending: false });
+
+    if (pricesError) {
+      console.warn('[getAllUserCards] Erreur lors de la récupération des prix:', pricesError);
+    }
+
+    // Créer un map des prix pour un accès rapide
+    const priceMap = new Map();
+    if (marketPrices) {
+      marketPrices.forEach(price => {
+        if (!priceMap.has(price.card_id)) {
+          priceMap.set(price.card_id, price.price_mid);
+        }
+      });
+    }
+
+    // Transformer les données
+    const transformedData = data.map(userCard => {
+      const cardData = userCard.official_cards as any;
+      if (!cardData) {
+        console.warn(`[getAllUserCards] Aucune donnée officielle trouvée pour la carte ${userCard.card_id}`);
+        return null;
+      }
+
+      // Gérer les éditions (peut être un tableau ou un objet)
+      let editionName = 'Unknown';
+      let editionId = '';
+      let editionSymbol = '';
+      
+      if ((cardData as any).editions) {
+        if (Array.isArray((cardData as any).editions)) {
+          editionName = (cardData as any).editions[0]?.name || 'Unknown';
+          editionId = (cardData as any).editions[0]?.id || '';
+          editionSymbol = (cardData as any).editions[0]?.symbol_image || '';
+        } else {
+          editionName = (cardData as any).editions.name || 'Unknown';
+          editionId = (cardData as any).editions.id || '';
+          editionSymbol = (cardData as any).editions.symbol_image || '';
+        }
+      }
+
+      return {
+        user_card_id: userCard.id,
+        condition: userCard.condition,
+        created_at: userCard.created_at,
+        is_sold: userCard.is_sold,
+        card: {
+          id: (cardData as any).id,
+          name: (cardData as any).name,
+          image_small: (cardData as any).image_small,
+          image_large: (cardData as any).image_large,
+          rarity: (cardData as any).rarity,
+          supertype: (cardData as any).supertype,
+          hp: (cardData as any).hp,
+          card_number: (cardData as any).number,
+          edition_name: editionName,
+          edition_id: editionId,
+          edition_symbol_image: editionSymbol,
+          // market_price_mid: null, // TODO: Récupérer le prix du marché
+        }
+      };
+    }).filter(Boolean); // Retirer les éléments null
+
+    console.log(`[getAllUserCards] ${transformedData.length} cartes transformées avec succès`);
+    return { data: transformedData, error: null };
+
   } catch (error) {
-    console.error("Erreur lors de la récupération des cartes vendues:", error);
+    console.error('[getAllUserCards] Erreur inattendue:', error);
     return { data: null, error };
   }
 };
@@ -2372,7 +2746,8 @@ const SupabaseService = {
   initUserImagesBucket,
   addCardToCollection,
   getUserCardsWithOffersCount,
-  markCardAsSold
+  markCardAsSold,
+  getAllUserCards
 };
 
 export default SupabaseService; 

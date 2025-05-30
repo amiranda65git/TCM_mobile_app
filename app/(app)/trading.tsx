@@ -8,6 +8,7 @@ import { useAuth } from '../lib/auth';
 import { getUserCardsForSale, getCardsForSaleFromOthers } from '../lib/supabase';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
+import { EventRegister } from 'react-native-event-listeners';
 
 // Enum pour les options de tri
 enum SortOption {
@@ -50,15 +51,33 @@ const BuyTab = () => {
     currentSortOption 
   } = React.useContext(TradingFilterContext);
 
-  React.useEffect(() => {
+  // Fonction pour charger les données
+  const loadData = React.useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    getCardsForSaleFromOthers(user.id).then(({ data }) => {
-      setAllCards(data || []);
-      setFilteredCards(data || []);
-      setLoading(false);
-    });
+    const { data } = await getCardsForSaleFromOthers(user.id);
+    setAllCards(data || []);
+    setFilteredCards(data || []);
+    setLoading(false);
   }, [user?.id]);
+
+  React.useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Écouter les changements de données
+  React.useEffect(() => {
+    const listener = EventRegister.addEventListener('trading_data_changed', () => {
+      console.log('BuyTab: Données de trading changées, rechargement...');
+      loadData();
+    });
+
+    return () => {
+      if (typeof listener === 'string') {
+        EventRegister.removeEventListener(listener);
+      }
+    };
+  }, [loadData]);
 
   // Appliquer les filtres quand ils changent
   React.useEffect(() => {
@@ -174,30 +193,48 @@ const SellTab = () => {
     currentSortOption 
   } = React.useContext(TradingFilterContext);
 
-  React.useEffect(() => {
+  // Fonction pour charger les données
+  const loadData = React.useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    getUserCardsForSale(user.id).then(async ({ data }) => {
-      setAllCards(data || []);
-      setFilteredCards(data || []);
-      setLoading(false);
-      // Récupérer le nombre d'offres pour chaque carte
-      if (data && data.length > 0) {
-        const ids = data.map((c: any) => c.user_card_id);
-        const { data: offersData, error } = await supabase
-          .from('offers')
-          .select('user_card_id')
-          .in('user_card_id', ids);
-        if (!error && offersData) {
-          const map: { [userCardId: string]: number } = {};
-          offersData.forEach((o: any) => {
-            map[o.user_card_id] = (map[o.user_card_id] || 0) + 1;
-          });
-          setOffersCount(map);
-        }
+    const { data } = await getUserCardsForSale(user.id);
+    setAllCards(data || []);
+    setFilteredCards(data || []);
+    setLoading(false);
+    // Récupérer le nombre d'offres pour chaque carte
+    if (data && data.length > 0) {
+      const ids = data.map((c: any) => c.user_card_id);
+      const { data: offersData, error } = await supabase
+        .from('offers')
+        .select('user_card_id')
+        .in('user_card_id', ids);
+      if (!error && offersData) {
+        const map: { [userCardId: string]: number } = {};
+        offersData.forEach((o: any) => {
+          map[o.user_card_id] = (map[o.user_card_id] || 0) + 1;
+        });
+        setOffersCount(map);
       }
-    });
+    }
   }, [user?.id]);
+
+  React.useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Écouter les changements de données
+  React.useEffect(() => {
+    const listener = EventRegister.addEventListener('trading_data_changed', () => {
+      console.log('SellTab: Données de trading changées, rechargement...');
+      loadData();
+    });
+
+    return () => {
+      if (typeof listener === 'string') {
+        EventRegister.removeEventListener(listener);
+      }
+    };
+  }, [loadData]);
 
   // Appliquer les filtres quand ils changent
   React.useEffect(() => {

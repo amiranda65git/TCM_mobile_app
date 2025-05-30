@@ -68,6 +68,14 @@ export default function Settings() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState('');
   
+  // États pour la modification du mot de passe
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  
   // État pour afficher le modal de sélection de langue
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   
@@ -360,7 +368,7 @@ export default function Settings() {
   };
 
   const handlePremium = () => {
-    Alert.alert(t('settings.subscription'), t('settings.alerts.comingSoon'));
+    router.push('/premium');
   };
 
   const handlePermissions = () => {
@@ -368,9 +376,83 @@ export default function Settings() {
   };
 
   const handleChangePassword = () => {
-    Alert.alert(t('settings.password'), t('settings.alerts.comingSoon'));
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setShowPasswordModal(true);
   };
-  
+
+  // Fonction pour valider et changer le mot de passe
+  const handlePasswordSubmit = async () => {
+    if (!currentPassword.trim()) {
+      setPasswordError(t('settings.password.currentPasswordRequired', 'Le mot de passe actuel est requis'));
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      setPasswordError(t('settings.password.newPasswordRequired', 'Le nouveau mot de passe est requis'));
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError(t('settings.password.passwordTooShort', 'Le mot de passe doit contenir au moins 6 caractères'));
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('settings.password.passwordsDoNotMatch', 'Les mots de passe ne correspondent pas'));
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError(t('settings.password.samePassword', 'Le nouveau mot de passe doit être différent de l\'actuel'));
+      return;
+    }
+
+    setUpdatingPassword(true);
+    setPasswordError('');
+
+    try {
+      // Vérifier d'abord le mot de passe actuel en essayant de se reconnecter
+      if (user?.email) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword
+        });
+
+        if (signInError) {
+          setPasswordError(t('settings.password.incorrectCurrentPassword', 'Le mot de passe actuel est incorrect'));
+          return;
+        }
+      }
+
+      // Mettre à jour le mot de passe
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        console.error('Erreur lors de la mise à jour du mot de passe:', updateError);
+        setPasswordError(t('settings.password.updateError', 'Erreur lors de la mise à jour du mot de passe'));
+        return;
+      }
+
+      // Succès
+      Alert.alert(
+        t('settings.alerts.success'), 
+        t('settings.password.updateSuccess', 'Mot de passe mis à jour avec succès')
+      );
+      setShowPasswordModal(false);
+
+    } catch (error: any) {
+      console.error('Erreur lors du changement de mot de passe:', error);
+      setPasswordError(t('settings.password.unexpectedError', 'Une erreur inattendue s\'est produite'));
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   const handleOpenTerms = () => {
     Alert.alert(t('settings.termsAndConditions'), t('settings.alerts.comingSoon'));
     // Lorsque le lien sera disponible:
@@ -780,15 +862,6 @@ export default function Settings() {
           />
         </View>
         
-        {/* Section Permissions */}
-        <Text style={dynamicStyles.sectionTitle}>{t('settings.permissions')}</Text>
-        <View style={dynamicStyles.section}>
-          <MenuItem 
-            icon="shield-checkmark" 
-            text={t('settings.manageAccess')} 
-            onPress={handlePermissions}
-          />
-        </View>
         
         {/* Section Sécurité */}
         <Text style={dynamicStyles.sectionTitle}>{t('settings.password')}</Text>
@@ -842,6 +915,81 @@ export default function Settings() {
       
       {/* Modals */}
       <LanguageModal />
+      
+      {/* Modale de changement de mot de passe */}
+      <Modal
+        visible={showPasswordModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View style={dynamicStyles.modalContainer}>
+          <View style={dynamicStyles.modalContent}>
+            <Text style={dynamicStyles.modalTitle}>
+              {t('settings.password.changeTitle', 'Modifier le mot de passe')}
+            </Text>
+            
+            <TextInput
+              style={dynamicStyles.input}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder={t('settings.password.currentPassword', 'Mot de passe actuel')}
+              placeholderTextColor={colors.text.secondary}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            
+            <TextInput
+              style={dynamicStyles.input}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder={t('settings.password.newPassword', 'Nouveau mot de passe')}
+              placeholderTextColor={colors.text.secondary}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            
+            <TextInput
+              style={dynamicStyles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder={t('settings.password.confirmPassword', 'Confirmer le nouveau mot de passe')}
+              placeholderTextColor={colors.text.secondary}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            
+            {passwordError ? (
+              <Text style={dynamicStyles.errorText}>{passwordError}</Text>
+            ) : null}
+            
+            <View style={dynamicStyles.buttonRow}>
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.cancelButton]}
+                onPress={() => setShowPasswordModal(false)}
+              >
+                <Text style={[dynamicStyles.buttonText, dynamicStyles.cancelButtonText]}>
+                  {t('settings.changeUsernameModal.cancel')}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.saveButton]}
+                onPress={handlePasswordSubmit}
+                disabled={updatingPassword || !currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()}
+              >
+                {updatingPassword ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={[dynamicStyles.buttonText, dynamicStyles.saveButtonText]}>
+                    {t('settings.password.update', 'Modifier')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       <Modal
         visible={showUsernameModal}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Image, TextInput, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -13,14 +13,6 @@ import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, se
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/auth';
-
-// Correction des titres d'onglets : chaînes statiques si besoin
-const TAB_TITLES = [
-  'Toutes les cartes',
-  'Meilleures hausses',
-  'Moins performantes',
-  'Mes cartes surveillées'
-];
 
 // Mise à jour du composant CardListItem pour accepter des enfants (pour la différence de prix)
 const CardListItem = ({ card, colors, onPress, children }: { card: any, colors: any, onPress: () => void, children?: React.ReactNode }) => (
@@ -86,12 +78,12 @@ export default function MarketScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [index, setIndex] = useState(0);
-  const [routes] = useState([
-    { key: 'all', title: TAB_TITLES[0] },
-    { key: 'gainers', title: TAB_TITLES[1] },
-    { key: 'losers', title: TAB_TITLES[2] },
-    { key: 'watched', title: TAB_TITLES[3] },
-  ]);
+  const routes = useMemo(() => [
+    { key: 'all', title: t('market.tabs.all') },
+    { key: 'gainers', title: t('market.tabs.gainers') },
+    { key: 'losers', title: t('market.tabs.losers') },
+    { key: 'watched', title: t('market.tabs.watched') },
+  ], [t]);
   const [allCards, setAllCards] = useState<any[]>([]);
   const [allLoading, setAllLoading] = useState(true);
   const [gainers, setGainers] = useState<any[]>([]);
@@ -528,11 +520,7 @@ export default function MarketScreen() {
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
         />
-        {!searchQuery && !searchFocused && (
-          <Text style={{ color: colors.text.secondary, fontSize: 12, fontStyle: 'italic', marginLeft: 4 }}>
-            {t('market.typeToSearch')}
-          </Text>
-        )}
+
       </View>
       
       {/* Suggestions de recherche */}
