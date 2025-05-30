@@ -322,7 +322,9 @@ export default function ScanScreen() {
       clearInterval(intervalRef.current);
     }
 
+    // DÉSACTIVÉ : Ne démarre plus la simulation automatique
     // Ne démarre la simulation que si on n'est pas en erreur et qu'aucun scan n'est en cours
+    /*
     if (!scanError && !photoUri) {
       intervalRef.current = setInterval(() => {
         if (!isProcessing) {
@@ -335,6 +337,7 @@ export default function ScanScreen() {
         }
       }, 3000);
     }
+    */
 
     return () => {
       if (intervalRef.current !== null) {
@@ -427,7 +430,7 @@ export default function ScanScreen() {
             allCards.push(...newCards);
             
             // Si on a trouvé suffisamment de cartes avec une variante exacte, on peut s'arrêter
-            if (data.length >= 3) {
+            if (data.length >= 10) {
               break;
             }
           }
@@ -783,7 +786,17 @@ export default function ScanScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text.primary }]}>{t('scan.scanCard')}</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity 
+          style={styles.headerCameraButton} 
+          onPress={handleStartScan}
+          disabled={isProcessing}
+        >
+          <Ionicons 
+            name="camera" 
+            size={24} 
+            color={isProcessing ? colors.text.secondary : colors.primary} 
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Alerte de succès */}
@@ -946,44 +959,52 @@ export default function ScanScreen() {
             
             {/* Guide de placement de carte */}
             <View style={styles.cardGuideOverlay}>
-              <View style={[styles.cardGuide, rectangleDetected && styles.cardGuideActive]} />
+              <View style={styles.cardGuide} />
             </View>
           </View>
         )}
       </View>
 
-      {/* Bouton de scan/retour */}
+      {/* Bouton de scan circulaire centré */}
       {!photoUri && !scanError && (
-        <TouchableOpacity 
-          style={[styles.scanButton, { backgroundColor: colors.primary }]} 
-          onPress={handleStartScan}
-          disabled={isProcessing}
-        >
-          <Ionicons name="scan" size={24} color="#FFFFFF" />
-          <Text style={styles.scanButtonText}>{t('scan.scan')}</Text>
-        </TouchableOpacity>
+        <View style={styles.circularButtonContainer}>
+          <TouchableOpacity 
+            style={[styles.circularButton, { backgroundColor: colors.primary }]} 
+            onPress={handleStartScan}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            {isProcessing ? (
+              <ActivityIndicator size="large" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="camera" size={32} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        </View>
       )}
       
       {/* Bouton pour réessayer en cas d'erreur */}
       {(photoUri && scanError) && (
-        <TouchableOpacity 
-          style={[styles.scanButton, { backgroundColor: colors.error || '#e53935' }]} 
-          onPress={resetScanState}
-        >
-          <Ionicons name="refresh" size={24} color="#FFFFFF" />
-          <Text style={styles.scanButtonText}>{t('scan.scanAgain')}</Text>
-        </TouchableOpacity>
+        <View style={styles.circularButtonContainer}>
+          <TouchableOpacity 
+            style={[styles.circularButton, { backgroundColor: colors.error || '#e53935' }]} 
+            onPress={resetScanState}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh" size={32} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       )}
 
-      {/* Bouton pour scanner à nouveau - positionné plus bas */}
+      {/* Bouton pour scanner à nouveau */}
       {(photoUri && !scanError && !isLoadingCards) && (
-        <View style={styles.bottomButtonContainer}>
+        <View style={styles.circularButtonContainer}>
           <TouchableOpacity 
-            style={[styles.scanButton, { backgroundColor: colors.secondary }]} 
+            style={[styles.circularButton, { backgroundColor: colors.secondary }]} 
             onPress={resetScanState}
+            activeOpacity={0.8}
           >
-            <Ionicons name="camera" size={24} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>{t('scan.scanAgain')}</Text>
+            <Ionicons name="camera" size={32} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       )}
@@ -1154,12 +1175,12 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  headerCameraButton: {
+    padding: 8,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 40,
   },
   cameraContainer: {
     flex: 1,
@@ -1181,13 +1202,14 @@ const styles = StyleSheet.create({
   cardGuide: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 8,
-  },
-  cardGuideActive: {
-    borderColor: '#4CAF50',
     borderWidth: 3,
+    borderColor: '#4CAF50',
+    borderRadius: 8,
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 5,
   },
   photoContainer: {
     flex: 1,
@@ -1205,7 +1227,7 @@ const styles = StyleSheet.create({
   },
   backgroundOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1230,8 +1252,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    marginHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 10,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   scanButtonText: {
     color: '#FFFFFF',
@@ -1335,7 +1362,7 @@ const styles = StyleSheet.create({
   },
   matchingCardsSection: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
@@ -1737,11 +1764,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  bottomButtonContainer: {
+  circularButtonContainer: {
     position: 'absolute',
-    bottom: 100, // Remonté pour éviter la barre de navigation
+    bottom: 50,
     left: 0,
     right: 0,
-    zIndex: 10,
+    alignItems: 'center',
+    zIndex: 99999,
+    elevation: 50,
+  },
+  circularButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
 }); 

@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons, FontAwesome6 } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import '../i18n/i18n.config';
-import { useRouter } from 'expo-router';
 import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -14,6 +13,10 @@ export default function TabNavigator() {
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
+  const segments = useSegments();
+  
+  // Vérifier si on est sur l'écran de scan
+  const isOnScanScreen = segments[segments.length - 1] === 'scan';
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -57,7 +60,7 @@ export default function TabNavigator() {
         tabBarShowLabel: true,
         tabBarActiveTintColor: Colors.secondary,
         tabBarInactiveTintColor: Colors.text.secondary,
-        tabBarStyle: {
+        tabBarStyle: isOnScanScreen ? { display: 'none' } : {
           backgroundColor: Colors.surface,
           borderTopWidth: 1,
           borderTopColor: Colors.border,
@@ -71,7 +74,7 @@ export default function TabNavigator() {
           marginTop: -5,
         },
       }}
-      tabBar={(props) => <CustomTabBar key={refreshKey} {...props} />}
+      tabBar={isOnScanScreen ? () => null : (props) => <CustomTabBar key={refreshKey} {...props} />}
     >
       <Tabs.Screen
         name="home"
