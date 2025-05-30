@@ -15,6 +15,7 @@ import OpenAI from 'openai';
 import SupabaseService from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -95,118 +96,141 @@ const normalizePokemonName = (name: string): string[] => {
   return [...new Set(variants)];
 };
 
-// Ajout dans la fonction d'appel à l'API OpenAI images-vision
+// Fonction optimisée pour traiter et compresser l'image avant envoi à OpenAI
+async function optimizeImageForAPI(imagePath: string): Promise<string> {
+  const optimizeStart = Date.now();
+  console.log(`🕐 [${new Date().toISOString()}] Image optimization STARTED for: ${imagePath}`);
+  
+  try {
+    // Étape 1: Redimensionner l'image pour réduire la taille
+    const resizeStart = Date.now();
+    console.log(`🔄 [${new Date().toISOString()}] Resizing image...`);
+    
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      imagePath,
+      [
+        // Redimensionner à maximum 1024px de largeur (conserve le ratio)
+        { resize: { width: 1024 } }
+      ],
+      {
+        // Compression JPEG aggressive pour réduire la taille
+        compress: 0.7, // 70% de qualité (bon compromis qualité/taille)
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true, // Obtenir directement le base64
+      }
+    );
+    
+    const resizeEnd = Date.now();
+    console.log(`⏱️ [${new Date().toISOString()}] Image optimization completed in ${resizeEnd - resizeStart}ms`);
+    console.log(`📊 Optimization stats:
+      - Original path: ${imagePath}
+      - New dimensions: ${manipulatedImage.width}x${manipulatedImage.height}
+      - Base64 length: ${manipulatedImage.base64?.length || 0}
+      - Estimated size: ${Math.round((manipulatedImage.base64?.length || 0) * 0.75 / 1024)}KB`);
+    
+    const optimizeEnd = Date.now();
+    console.log(`🏁 [${new Date().toISOString()}] Total optimization time: ${optimizeEnd - optimizeStart}ms`);
+    
+    return `data:image/jpeg;base64,${manipulatedImage.base64}`;
+    
+  } catch (error) {
+    console.error(`🔴 [${new Date().toISOString()}] Image optimization failed:`, error);
+    // Fallback: utiliser l'image originale si l'optimisation échoue
+    throw error;
+  }
+}
+
+// Fonction d'appel à l'API OpenAI images-vision optimisée
 async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | null> {
+  const startTime = Date.now();
+  console.log(`🕐 [${new Date().toISOString()}] OpenAI Analysis STARTED for: ${imagePath}`);
+  
   try {
     console.log('🔍 analyzeCardWithOpenAI - Début avec image:', imagePath);
     
-    // Lire l'image en base64
-    let response;
-    try {
-      console.log('🔍 Tentative de fetch de l\'image locale...');
-      // Ajouter le préfixe file:// pour les chemins Android et iOS
-      const imageUri = imagePath.startsWith('file://') 
-        ? imagePath 
-        : `file://${imagePath}`;
-      console.log('🔍 URI de l\'image formaté:', imageUri);
-      response = await fetch(imageUri);
-      console.log('🔍 fetch image réussi, taille réponse:', response.headers.get('content-length'));
-    } catch (fetchError) {
-      console.error('🔴 Erreur lors du fetch de l\'image:', fetchError);
-      console.error('🔴 Détails erreur fetch:', JSON.stringify(fetchError, Object.getOwnPropertyNames(fetchError)));
-      throw new Error('Échec du chargement de l\'image');
+    // Étape 1: Optimiser l'image (redimensionner + compresser + base64)
+    const base64Image = await optimizeImageForAPI(imagePath);
+    console.log(`✅ Image optimized, base64 length: ${base64Image.length}`);
+
+    // Étape 2: Initialiser le client OpenAI
+    const clientInitStart = Date.now();
+    const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
+    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-nano';
+    console.log('🔍 Clé API présente:', !!apiKey, 'longueur:', apiKey.length, 'modèle:', openaiModel);
+    
+    const openai = new OpenAI({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true
+    });
+    const clientInitEnd = Date.now();
+    console.log(`⏱️ [${new Date().toISOString()}] Client initialization completed in ${clientInitEnd - clientInitStart}ms`);
+
+    // Étape 3: Appel à l'API OpenAI
+    const apiCallStart = Date.now();
+    console.log(`🕐 [${new Date().toISOString()}] OpenAI API call STARTED`);
+    
+    const completion = await openai.responses.create({
+      model: openaiModel,
+      input: [
+        {
+          role: "user",
+          content: [
+            { 
+              type: "input_text", 
+              text: "Voici une photo d'une carte Pokémon. Peux-tu extraire le nom du Pokémon, ses points de vie (PV ou HP) et le numéro de la carte (format X/Y) ? Réponds uniquement sous la forme d'un objet JSON avec les clés: pokemonName, healthPoints, cardNumber."
+            },
+            { 
+              type: "input_image",
+              image_url: base64Image
+            }
+          ]
+        }
+      ] as any
+    });
+    
+    const apiCallEnd = Date.now();
+    console.log(`⏱️ [${new Date().toISOString()}] OpenAI API call completed in ${apiCallEnd - apiCallStart}ms`);
+
+    // Étape 4: Parser la réponse
+    const responseParseStart = Date.now();
+    console.log(`🕐 [${new Date().toISOString()}] Response parsing STARTED`);
+    
+    const text = completion.output_text || '';
+    console.log('🔍 Texte de sortie:', text.substring(0, 100));
+    
+    const match = text.match(/\{[\s\S]*\}/);
+    console.log('🔍 Match JSON trouvé:', !!match);
+    
+    if (!match) {
+      const responseParseEnd = Date.now();
+      console.log(`⏱️ [${new Date().toISOString()}] Response parsing failed in ${responseParseEnd - responseParseStart}ms`);
+      return null;
     }
     
-    try {
-      const blob = await response.blob();
-      console.log('🔍 conversion blob réussie, taille:', blob.size);
-      
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = (fileError) => {
-          console.error('🔴 Erreur FileReader:', fileError);
-          reject(fileError);
-        }
-      });
-      reader.readAsDataURL(blob);
-      const base64 = await base64Promise;
-      console.log('🔍 conversion base64 réussie, longueur:', base64.length, 'début:', base64.substring(0, 50) + '...');
-
-      // Initialiser le client OpenAI avec la clé API
-      const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
-      const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-nano';
-      console.log('🔍 Clé API présente:', !!apiKey, 'longueur:', apiKey.length, 'modèle:', openaiModel);
-      
-      const openai = new OpenAI({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true // Nécessaire pour React Native
-      });
-      console.log('🔍 Client OpenAI initialisé');
-
-      console.log('🔍 Préparation requête à l\'API...');
-      // Paramètres à envoyer (pour le debug)
-      const requestParams = {
-        model: openaiModel,
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: "..." }, // Texte abrégé pour le log
-              { type: "input_image", image_url: base64.substring(0, 30) + "..." } // URL abrégée pour le log
-            ]
-          }
-        ]
-      };
-      console.log('🔍 Paramètres:', JSON.stringify(requestParams, null, 2));
-
-      // Appel à l'API en utilisant le SDK officiel
-      console.log('🔍 Envoi de la requête à OpenAI...');
-      const completion = await openai.responses.create({
-        model: openaiModel,
-        input: [
-          {
-            role: "user",
-            content: [
-              { 
-                type: "input_text", 
-                text: "Voici une photo d'une carte Pokémon. Peux-tu extraire le nom du Pokémon, ses points de vie (PV ou HP) et le numéro de la carte (format X/Y) ? Réponds uniquement sous la forme d'un objet JSON avec les clés: pokemonName, healthPoints, cardNumber."
-              },
-              { 
-                type: "input_image",
-                // L'URL doit être une chaîne pour l'API
-                image_url: base64
-              }
-            ]
-          }
-        ] as any
-      });
-      console.log('🔍 Réponse OpenAI reçue:', completion ? 'Oui' : 'Non');
-
-      // Extraction du JSON depuis la réponse
-      const text = completion.output_text || '';
-      console.log('🔍 Texte de sortie:', text.substring(0, 100));
-      
-      const match = text.match(/\{[\s\S]*\}/);
-      console.log('🔍 Match JSON trouvé:', !!match);
-      
-      if (!match) return null;
-      const json = JSON.parse(match[0]);
-      console.log('🔍 JSON parsé:', json);
-      
-      return {
-        pokemonName: json.pokemonName || null,
-        healthPoints: json.healthPoints || null,
-        cardNumber: json.cardNumber || null,
-        imageUri: imagePath,
-      };
-    } catch (processingError) {
-      console.error('🔴 Erreur traitement image/API:', processingError);
-      console.error('🔴 Détails erreur processing:', JSON.stringify(processingError, Object.getOwnPropertyNames(processingError)));
-      throw processingError;
-    }
+    const json = JSON.parse(match[0]);
+    const responseParseEnd = Date.now();
+    console.log(`⏱️ [${new Date().toISOString()}] Response parsing completed in ${responseParseEnd - responseParseStart}ms`);
+    console.log('🔍 JSON parsé:', json);
+    
+    const endTime = Date.now();
+    const totalTime = endTime - startTime;
+    console.log(`🏁 [${new Date().toISOString()}] OpenAI Analysis COMPLETED in ${totalTime}ms total`);
+    console.log(`📊 Performance breakdown:
+      - Image optimization: ${apiCallStart - startTime}ms
+      - API call: ${apiCallEnd - apiCallStart}ms
+      - Response parsing: ${responseParseEnd - responseParseStart}ms
+      - Total: ${totalTime}ms`);
+    
+    return {
+      pokemonName: json.pokemonName || null,
+      healthPoints: json.healthPoints || null,
+      cardNumber: json.cardNumber || null,
+      imageUri: imagePath,
+    };
+    
   } catch (e) {
-    console.error('🔴 Erreur OpenAI Vision:', e);
+    const errorTime = Date.now();
+    console.error(`🔴 [${new Date().toISOString()}] OpenAI Vision failed after ${errorTime - startTime}ms:`, e);
     console.error('🔴 Détails erreur:', JSON.stringify(e, Object.getOwnPropertyNames(e)));
     return null;
   }
@@ -352,7 +376,10 @@ export default function ScanScreen() {
     if (isProcessing || !camera.current) return;
     setIsProcessing(true);
     try {
-      const photo = await camera.current.takePhoto({ flash: 'off' });
+      const photo = await camera.current.takePhoto({ 
+        flash: 'off',
+        enableAutoRedEyeReduction: false // Désactiver la réduction yeux rouges pour plus de vitesse
+      });
       setPhotoUri(photo.path);
       await processImage(photo.path);
     } catch (err) {
@@ -387,7 +414,11 @@ export default function ScanScreen() {
     
     setIsProcessing(true);
     try {
-      const photo = await camera.current.takePhoto({ flash: 'off' });
+      // Prise de photo optimisée
+      const photo = await camera.current.takePhoto({ 
+        flash: 'off',
+        enableAutoRedEyeReduction: false // Désactiver la réduction yeux rouges pour plus de vitesse
+      });
       setPhotoUri(photo.path);
       await processImage(photo.path);
     } catch (err) {
@@ -399,6 +430,9 @@ export default function ScanScreen() {
 
   // Fonction pour rechercher les cartes correspondantes
   const searchMatchingCards = async (scanResult: ScanResult) => {
+    const searchStartTime = Date.now();
+    console.log(`🕐 [${new Date().toISOString()}] Database search STARTED for:`, JSON.stringify(scanResult));
+    
     setIsLoadingCards(true);
     try {
       console.log('Recherche de cartes correspondantes avec:', scanResult);
@@ -412,13 +446,17 @@ export default function ScanScreen() {
         
         // Essayer chaque variante jusqu'à trouver des résultats
         for (const nameVariant of nameVariants) {
-          console.log(`Recherche avec la variante: "${nameVariant}"`);
+          const variantStartTime = Date.now();
+          console.log(`🔍 [${new Date().toISOString()}] Searching variant: "${nameVariant}"`);
           
           const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
             pokemonName: nameVariant,
             healthPoints: scanResult.healthPoints,
             cardNumber: scanResult.cardNumber
           });
+          
+          const variantEndTime = Date.now();
+          console.log(`⏱️ [${new Date().toISOString()}] Variant "${nameVariant}" search completed in ${variantEndTime - variantStartTime}ms`);
           
           if (!error && data && data.length > 0) {
             console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}"`);
@@ -430,7 +468,7 @@ export default function ScanScreen() {
             allCards.push(...newCards);
             
             // Si on a trouvé suffisamment de cartes avec une variante exacte, on peut s'arrêter
-            if (data.length >= 10) {
+            if (data.length >= 3) {
               break;
             }
           }
@@ -442,12 +480,16 @@ export default function ScanScreen() {
           
           if (baseName !== scanResult.pokemonName) {
             console.log(`Recherche de secours avec le nom de base: "${baseName}"`);
+            const fallbackStartTime = Date.now();
             
             const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
               pokemonName: baseName,
               healthPoints: scanResult.healthPoints,
               cardNumber: scanResult.cardNumber
             });
+            
+            const fallbackEndTime = Date.now();
+            console.log(`⏱️ [${new Date().toISOString()}] Fallback search completed in ${fallbackEndTime - fallbackStartTime}ms`);
             
             if (!error && data) {
               allCards = data;
@@ -456,11 +498,17 @@ export default function ScanScreen() {
         }
       } else {
         // Pas de nom, recherche classique
+        const classicSearchStart = Date.now();
+        console.log(`🔍 [${new Date().toISOString()}] Classic search (no name) STARTED`);
+        
         const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
           healthPoints: scanResult.healthPoints,
           cardNumber: scanResult.cardNumber
         });
+        
+        const classicSearchEnd = Date.now();
+        console.log(`⏱️ [${new Date().toISOString()}] Classic search completed in ${classicSearchEnd - classicSearchStart}ms`);
         
         if (!error && data) {
           allCards = data;
@@ -470,6 +518,7 @@ export default function ScanScreen() {
       console.log(`Total de ${allCards.length} cartes trouvées après toutes les recherches`);
       
       // Trier les résultats par pertinence si on a un nom original
+      const sortStartTime = Date.now();
       if (scanResult.pokemonName && allCards.length > 1) {
         const originalName = scanResult.pokemonName.toLowerCase();
         allCards.sort((a, b) => {
@@ -489,10 +538,20 @@ export default function ScanScreen() {
           return a.name.localeCompare(b.name);
         });
       }
+      const sortEndTime = Date.now();
+      if (sortEndTime - sortStartTime > 1) {
+        console.log(`⏱️ [${new Date().toISOString()}] Results sorting completed in ${sortEndTime - sortStartTime}ms`);
+      }
       
       setMatchingCards(allCards);
+      
+      const searchEndTime = Date.now();
+      const totalSearchTime = searchEndTime - searchStartTime;
+      console.log(`🏁 [${new Date().toISOString()}] Database search COMPLETED in ${totalSearchTime}ms total, found ${allCards.length} cards`);
+      
     } catch (error) {
-      console.error('Erreur lors de la recherche de cartes:', error);
+      const errorTime = Date.now();
+      console.error(`🔴 [${new Date().toISOString()}] Database search failed after ${errorTime - searchStartTime}ms:`, error);
       setMatchingCards([]);
     } finally {
       setIsLoadingCards(false);
