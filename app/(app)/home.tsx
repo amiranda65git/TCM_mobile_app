@@ -315,11 +315,6 @@ export default function HomeScreen() {
       ]}>
         {hideValues ? "***" : formatVariation(valueVariation || 0)}
       </Text>
-      <View style={styles.cardsCount}>
-        <Text style={[styles.cardsText, { color: colors.text.secondary }]}>
-          {cardsCount || 0} {t('home.cards')}
-        </Text>
-      </View>
     </View>
   );
 

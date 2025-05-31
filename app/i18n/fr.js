@@ -331,6 +331,8 @@ export default {
     title: 'Toutes mes cartes',
     loading: 'Chargement de vos cartes...',
     totalCards: 'Cartes totales',
+    cardsWithPrice: 'Avec prix',
+    totalValue: 'Valeur totale',
     estimatedValue: 'Valeur estimée',
     noCards: 'Aucune carte dans votre collection',
     startScanning: 'Commencer à scanner',

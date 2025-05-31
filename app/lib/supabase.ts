@@ -2479,18 +2479,18 @@ export const getUserSoldCards = async (userId: string) => {
         price: userCard.price,
         updated_at: userCard.updated_at,
         card: {
-          id: cardData.id,
-          name: cardData.name,
-          image_small: cardData.image_small,
-          image_large: cardData.image_large,
-          rarity: cardData.rarity,
-          supertype: cardData.supertype,
-          hp: cardData.hp,
-          card_number: cardData.number,
+          id: (cardData as any).id,
+          name: (cardData as any).name,
+          image_small: (cardData as any).image_small,
+          image_large: (cardData as any).image_large,
+          rarity: (cardData as any).rarity,
+          supertype: (cardData as any).supertype,
+          hp: (cardData as any).hp,
+          card_number: (cardData as any).number,
           edition_name: editionName,
           edition_id: editionId,
           edition_symbol_image: editionSymbol,
-          // market_price_mid: null, // TODO: Récupérer le prix du marché
+          market_price_mid: priceMap.get(userCard.card_id) || null,
         }
       };
     }).filter(item => item !== null) || [];
@@ -2688,7 +2688,7 @@ export const getAllUserCards = async (userId: string) => {
           edition_name: editionName,
           edition_id: editionId,
           edition_symbol_image: editionSymbol,
-          // market_price_mid: null, // TODO: Récupérer le prix du marché
+          market_price_mid: priceMap.get(userCard.card_id) || null,
         }
       };
     }).filter(Boolean); // Retirer les éléments null

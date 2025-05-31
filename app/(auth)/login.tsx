@@ -343,10 +343,10 @@ export default function Login() {
             )}
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.socialButton} onPress={handleAppleLogin}>
+          {/* <TouchableOpacity style={styles.socialButton} onPress={handleAppleLogin}>
             <Ionicons name="logo-apple" size={20} color="#000" />
             <Text style={styles.socialButtonText}>Continuer avec Apple</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           
           <View style={styles.links}>
             <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
