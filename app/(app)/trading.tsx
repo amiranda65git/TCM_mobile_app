@@ -9,6 +9,7 @@ import { getUserCardsForSale, getCardsForSaleFromOthers } from '../lib/supabase'
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
+import LanguageFlag from '../components/LanguageFlag';
 
 // Enum pour les options de tri
 enum SortOption {
@@ -153,7 +154,10 @@ const BuyTab = () => {
           )}
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text.primary, fontWeight: 'bold', fontSize: 16 }} numberOfLines={1}>{item.card_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={{ color: colors.text.primary, fontWeight: 'bold', fontSize: 16, flex: 1 }} numberOfLines={1}>{item.card_name}</Text>
+                <LanguageFlag language={item.lang} size="small" />
+              </View>
               {item.edition_name && (
                 <Text style={{ color: colors.text.secondary, fontSize: 12 }} numberOfLines={1}>{item.edition_name}</Text>
               )}
@@ -310,7 +314,10 @@ const SellTab = () => {
           )}
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text.primary, fontWeight: 'bold', fontSize: 16 }} numberOfLines={1}>{item.card_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={{ color: colors.text.primary, fontWeight: 'bold', fontSize: 16, flex: 1 }} numberOfLines={1}>{item.card_name}</Text>
+                <LanguageFlag language={item.lang} size="small" />
+              </View>
               {item.edition_name && (
                 <Text style={{ color: colors.text.secondary, fontSize: 12 }} numberOfLines={1}>{item.edition_name}</Text>
               )}

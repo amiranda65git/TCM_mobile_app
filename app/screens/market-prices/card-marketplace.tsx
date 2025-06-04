@@ -353,7 +353,7 @@ export default function CardMarketplace() {
                   <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
                     {t('card.midPrice')}
                   </Text>
-                  <Text style={[styles.priceValue, styles.midPriceValue, { color: 'white' }]}>
+                  <Text style={[styles.priceValue, styles.midPriceValue, { color: '#3498db' }]}>
                     {officialCard.market_price_mid?.toFixed(2) || '-'} €
                   </Text>
                 </View>

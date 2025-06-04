@@ -697,7 +697,7 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
     // 2. Récupérer toutes les cartes de cette édition
     const { data: cardsData, error: cardsError } = await supabase
       .from('official_cards')
-      .select('id, name, number, rarity, image_small, image_large')
+      .select('id, name, number, rarity, image_small, image_large, lang')
       .eq('edition_id', editionId)
       .order('number');
     
@@ -869,6 +869,7 @@ export const getCardsForSaleFromOthers = async (userId: string) => {
           id,
           name,
           image_small,
+          lang,
           edition_id,
           editions:edition_id (name)
         )
@@ -918,6 +919,7 @@ export const getCardsForSaleFromOthers = async (userId: string) => {
         card_id: item.official_cards?.id,
         card_name: item.official_cards?.name,
         image_small: item.official_cards?.image_small,
+        lang: item.official_cards?.lang || 'EN', // Ajouter le champ lang
         edition_name: item.official_cards?.editions?.name,
         price: item.price,
         condition: item.condition,
@@ -2600,6 +2602,7 @@ export const getAllUserCards = async (userId: string) => {
           supertype,
           hp,
           number,
+          lang,
           editions:edition_id (
             id,
             name,
@@ -2685,6 +2688,7 @@ export const getAllUserCards = async (userId: string) => {
           supertype: (cardData as any).supertype,
           hp: (cardData as any).hp,
           card_number: (cardData as any).number,
+          lang: (cardData as any).lang || 'EN', // Ajouter le champ lang avec 'EN' par défaut
           edition_name: editionName,
           edition_id: editionId,
           edition_symbol_image: editionSymbol,

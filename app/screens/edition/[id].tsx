@@ -9,6 +9,7 @@ import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase, getEditionDetails, addOrRemoveFromWishlist } from '../../lib/supabase';
 import SwipeableCard from '../../components/SwipeableCard';
 import NotificationIcon from '../../components/NotificationIcon';
+import LanguageFlag from '../../components/LanguageFlag';
 
 interface CardInfo {
   id: string;
@@ -26,6 +27,7 @@ interface CardInfo {
   market_price_high?: number | null;
   has_wishlist: boolean;
   condition?: string;
+  lang?: string;
 }
 
 interface EditionDetail {

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
+import LanguageFlag from './LanguageFlag';
 
 interface CardInfo {
   id: string;
@@ -21,6 +22,7 @@ interface CardInfo {
   condition?: string;
   edition_name?: string;
   edition_symbol_image?: string;
+  lang?: string;
 }
 
 interface SwipeableCardProps {
@@ -265,6 +267,11 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
           
           {/* Labels de couleur pour rareté et condition */}
           <View style={styles.labelsContainer}>
+            {/* Drapeau de langue pour les cartes possédées */}
+            {card.owned && (
+              <LanguageFlag language={card.lang} size="small" />
+            )}
+            
             <View style={[styles.rarityLabel, { backgroundColor: getRarityColor(card.rarity) }]}>
               <Text style={styles.labelText}>
                 {card.rarity || t('general.common')}

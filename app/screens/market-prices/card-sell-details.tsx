@@ -275,7 +275,7 @@ export default function CardSellDetails() {
             <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
               Prix bas: {marketPrices.price_low ? `${marketPrices.price_low}€` : 'N/A'}
             </Text>
-            <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
+            <Text style={[styles.priceLabel, { color: '#3498db' }]}>
               Prix moyen: {marketPrices.price_mid ? `${marketPrices.price_mid}€` : 'N/A'}
             </Text>
             <Text style={[styles.priceLabel, { color: colors.text.primary }]}>

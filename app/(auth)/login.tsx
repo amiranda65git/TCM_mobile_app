@@ -10,7 +10,8 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Linking
+  Linking,
+  Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -23,6 +24,32 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+
+  // Récupérer le logo de marque depuis les variables d'environnement
+  const brandLogo = process.env.EXPO_PUBLIC_BRAND_LOGO || 'pokemon';
+  
+  // Debug: afficher les valeurs
+  console.log('Brand logo from env:', brandLogo);
+  console.log('EXPO_PUBLIC_BRAND_LOGO:', process.env.EXPO_PUBLIC_BRAND_LOGO);
+  
+  // Créer le chemin vers l'image du logo
+  const getLogoSource = (): any => {
+    // L'utilisateur a ajouté son fichier pokemon_logo.png
+    console.log('Getting logo source for brand:', brandLogo);
+    try {
+      if (brandLogo === 'pokemon') {
+        // Réactivé - le fichier existe maintenant
+        console.log('Loading pokemon logo...');
+        return require('../../assets/brands/pokemon_logo.png');
+      }
+      console.log('Brand not pokemon, returning null');
+      return null;
+    } catch (error) {
+      console.warn(`Logo not found for brand: ${brandLogo}`, error);
+      return null;
+    }
+  };
 
   // Écouter les événements d'authentification
   useEffect(() => {
@@ -274,6 +301,26 @@ export default function Login() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* Logo de marque (affiché seulement si disponible) */}
+        {(() => {
+          const logoSource = getLogoSource();
+          console.log('Logo source:', logoSource);
+          console.log('Logo error state:', logoError);
+          console.log('Should show logo:', !logoError && logoSource);
+          
+          return !logoError && logoSource ? (
+            <Image
+              source={logoSource}
+              style={styles.logo}
+              onError={(e) => {
+                console.log('Image error:', e.nativeEvent.error);
+                setLogoError(true);
+              }}
+              onLoad={() => console.log('Image loaded successfully')}
+              resizeMode="contain"
+            />
+          ) : null;
+        })()}
         <Text style={styles.title}>TCMarket</Text>
         
         <View style={styles.form}>
@@ -372,6 +419,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   title: {
     fontSize: 42,

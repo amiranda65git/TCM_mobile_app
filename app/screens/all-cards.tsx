@@ -9,6 +9,7 @@ import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { supabase, addOrRemoveFromWishlist, getAllUserCards, markCardAsSold } from '../lib/supabase';
 import SwipeableCard from '../components/SwipeableCard';
+import LanguageFlag from '../components/LanguageFlag';
 
 interface Card {
   user_card_id: any;
@@ -24,6 +25,7 @@ interface Card {
     supertype: any;
     hp: any;
     card_number: any;
+    lang: string;
     edition_name: string;
     edition_id: string;
     edition_symbol_image: string;
@@ -138,6 +140,7 @@ export default function AllCardsScreen() {
     condition: card.condition,
     edition_name: card.card.edition_name,
     edition_symbol_image: card.card.edition_symbol_image,
+    lang: card.card.lang,
   });
 
   // Fonction pour ouvrir le modal de vente
