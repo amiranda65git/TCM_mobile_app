@@ -43,7 +43,8 @@ export default {
       permissions: [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "com.android.vending.BILLING"
       ],
       intentFilters: [{
         action: "VIEW",
@@ -70,7 +71,8 @@ export default {
       "expo-font",
       "expo-localization",
       "expo-image-picker",
-      "react-native-vision-camera"
+      "react-native-vision-camera",
+      "expo-iap"
     ],
     experiments: {
       tsconfigPaths: true,

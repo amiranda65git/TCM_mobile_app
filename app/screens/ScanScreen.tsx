@@ -16,6 +16,7 @@ import SupabaseService from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -242,12 +243,13 @@ export default function ScanScreen() {
   const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const { canScanCard } = useSubscriptionRestrictions();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [userInventoryCount, setUserInventoryCount] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [rectangleDetected, setRectangleDetected] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult>({
     pokemonName: null,
@@ -262,9 +264,6 @@ export default function ScanScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [isAddingToCollection, setIsAddingToCollection] = useState(false);
   const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
-  
-  // Pour la simulation périodique de la détection
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // État pour l'alerte de succès
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -340,53 +339,21 @@ export default function ScanScreen() {
     })();
   }, []);
 
-  // Démarre une simulation périodique pour la détection de cartes
+  // Récupérer le nombre de cartes de l'utilisateur
   useEffect(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-    }
-
-    // DÉSACTIVÉ : Ne démarre plus la simulation automatique
-    // Ne démarre la simulation que si on n'est pas en erreur et qu'aucun scan n'est en cours
-    /*
-    if (!scanError && !photoUri) {
-      intervalRef.current = setInterval(() => {
-        if (!isProcessing) {
-          setRectangleDetected(true);
-          setTimeout(() => {
-            if (!isProcessing) {
-              triggerAutoCapture();
-            }
-          }, 1000);
-        }
-      }, 3000);
-    }
-    */
-
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    const loadUserInventoryCount = async () => {
+      try {
+        const { data } = await SupabaseService.getUserCardsCount();
+        setUserInventoryCount(data || 0);
+      } catch (error) {
+        console.error('Erreur lors du chargement du nombre de cartes:', error);
       }
     };
-  }, [isProcessing, scanError, photoUri]);
+    
+    loadUserInventoryCount();
+  }, []);
 
-  // Capture automatique quand rectangle détecté
-  const triggerAutoCapture = useCallback(async () => {
-    if (isProcessing || !camera.current) return;
-    setIsProcessing(true);
-    try {
-      const photo = await camera.current.takePhoto({ 
-        flash: 'off',
-        enableAutoRedEyeReduction: false // Désactiver la réduction yeux rouges pour plus de vitesse
-      });
-      setPhotoUri(photo.path);
-      await processImage(photo.path);
-    } catch (err) {
-      Alert.alert(t('scan.error'), t('scan.captureError'));
-      setIsProcessing(false);
-    }
-  }, [isProcessing, t]);
+
 
   // Fonction pour réinitialiser complètement l'état du scan
   const resetScanState = () => {
@@ -399,7 +366,6 @@ export default function ScanScreen() {
     });
     setIsProcessing(false);
     setScanError(null);
-    setRectangleDetected(false);
   };
 
   // Capture manuelle
@@ -407,6 +373,26 @@ export default function ScanScreen() {
     // Si on a une erreur ou une photo, on réinitialise pour un nouveau scan
     if (scanError || photoUri) {
       resetScanState();
+      return;
+    }
+
+    // Vérifier les restrictions d'abonnement
+    const canScan = await canScanCard(userInventoryCount);
+    if (!canScan) {
+      Alert.alert(
+        t('scan.restrictionTitle', 'Limitation atteinte'),
+        t('scan.restrictionMessage', 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.'),
+        [
+          {
+            text: t('general.cancel', 'Annuler'),
+            style: 'cancel'
+          },
+          {
+            text: t('premium.subscribeButton', 'S\'abonner'),
+            onPress: () => router.push('/premium')
+          }
+        ]
+      );
       return;
     }
     
@@ -428,7 +414,7 @@ export default function ScanScreen() {
     }
   };
 
-  // Fonction pour rechercher les cartes correspondantes
+  // Fonction pour rechercher les cartes correspondantes (recherche plus permissive : Nom + HP seulement)
   const searchMatchingCards = async (scanResult: ScanResult) => {
     const searchStartTime = Date.now();
     console.log(`🕐 [${new Date().toISOString()}] Database search STARTED for:`, JSON.stringify(scanResult));
@@ -439,53 +425,48 @@ export default function ScanScreen() {
       
       let allCards: OfficialCard[] = [];
       
-      // Si on a un nom de Pokémon, essayer différentes variantes
+      // Si on a un nom de Pokémon, essayer différentes variantes avec Nom + HP seulement
       if (scanResult.pokemonName) {
         const nameVariants = normalizePokemonName(scanResult.pokemonName);
-        console.log(`Tentative de recherche avec ${nameVariants.length} variantes:`, nameVariants);
+        console.log(`Tentative de recherche avec ${nameVariants.length} variantes (Nom + HP seulement):`, nameVariants);
         
-        // Essayer chaque variante jusqu'à trouver des résultats
+        // Essayer chaque variante avec Nom + HP seulement (plus permissif)
         for (const nameVariant of nameVariants) {
           const variantStartTime = Date.now();
-          console.log(`🔍 [${new Date().toISOString()}] Searching variant: "${nameVariant}"`);
+          console.log(`🔍 [${new Date().toISOString()}] Searching variant: "${nameVariant}" + HP`);
           
           const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
             pokemonName: nameVariant,
             healthPoints: scanResult.healthPoints,
-            cardNumber: scanResult.cardNumber
+            cardNumber: null // On ignore le numéro de carte pour être plus permissif
           });
           
           const variantEndTime = Date.now();
           console.log(`⏱️ [${new Date().toISOString()}] Variant "${nameVariant}" search completed in ${variantEndTime - variantStartTime}ms`);
           
           if (!error && data && data.length > 0) {
-            console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}"`);
+            console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}" + HP`);
             
             // Ajouter les nouvelles cartes en évitant les doublons
             const newCards = data.filter(newCard => 
               !allCards.some(existingCard => existingCard.id === newCard.id)
             );
             allCards.push(...newCards);
-            
-            // Si on a trouvé suffisamment de cartes avec une variante exacte, on peut s'arrêter
-            if (data.length >= 3) {
-              break;
-            }
           }
         }
         
-        // Si aucune variante n'a donné de résultat, essayer une recherche plus large (nom de base seulement)
+        // Si aucune variante n'a donné de résultat, essayer une recherche encore plus large (nom de base + HP)
         if (allCards.length === 0) {
           const baseName = scanResult.pokemonName.replace(/\s+(ex|EX|Ex|gx|GX|Gx|v|V|vmax|VMAX|VMax|vstar|VSTAR|VStar)$/i, '');
           
           if (baseName !== scanResult.pokemonName) {
-            console.log(`Recherche de secours avec le nom de base: "${baseName}"`);
+            console.log(`Recherche de secours avec le nom de base + HP: "${baseName}"`);
             const fallbackStartTime = Date.now();
             
             const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
               pokemonName: baseName,
               healthPoints: scanResult.healthPoints,
-              cardNumber: scanResult.cardNumber
+              cardNumber: null // Toujours ignorer le numéro pour plus de résultats
             });
             
             const fallbackEndTime = Date.now();
@@ -496,15 +477,34 @@ export default function ScanScreen() {
             }
           }
         }
+        
+        // Dernier recours : recherche avec nom seulement si toujours aucun résultat
+        if (allCards.length === 0) {
+          console.log(`Recherche finale avec nom seulement: "${scanResult.pokemonName}"`);
+          const finalSearchStart = Date.now();
+          
+          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+            pokemonName: scanResult.pokemonName,
+            healthPoints: null, // Ignorer même les HP
+            cardNumber: null
+          });
+          
+          const finalSearchEnd = Date.now();
+          console.log(`⏱️ [${new Date().toISOString()}] Final search completed in ${finalSearchEnd - finalSearchStart}ms`);
+          
+          if (!error && data) {
+            allCards = data;
+          }
+        }
       } else {
-        // Pas de nom, recherche classique
+        // Pas de nom, recherche avec HP seulement si disponible
         const classicSearchStart = Date.now();
         console.log(`🔍 [${new Date().toISOString()}] Classic search (no name) STARTED`);
         
         const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
           healthPoints: scanResult.healthPoints,
-          cardNumber: scanResult.cardNumber
+          cardNumber: null // Plus permissif
         });
         
         const classicSearchEnd = Date.now();
@@ -628,7 +628,6 @@ export default function ScanScreen() {
       setScanError(t('scan.imageAnalysisError'));
     } finally {
       setIsProcessing(false);
-      setRectangleDetected(false);
     }
   };
 
@@ -765,16 +764,18 @@ export default function ScanScreen() {
           <Text style={[styles.cardInfoText, { color: colors.text.secondary }]}>
             {item.edition.name}
           </Text>
-          {item.hp && (
-            <Text style={[styles.cardInfoText, { color: colors.text.secondary }]}>
-              HP: {item.hp}
-            </Text>
-          )}
-          {item.number && (
-            <Text style={[styles.cardInfoText, { color: colors.text.secondary }]}>
-              #{item.number}
-            </Text>
-          )}
+          <View style={styles.cardInfoRow}>
+            {item.hp && (
+              <Text style={[styles.cardInfoText, { color: colors.text.secondary }]}>
+                HP: {item.hp}
+              </Text>
+            )}
+            {item.number && (
+              <Text style={[styles.cardNumberText, { color: colors.primary, fontWeight: '600' }]}>
+                n° {item.number.padStart(3, '0')}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -1504,6 +1505,15 @@ const styles = StyleSheet.create({
   },
   cardInfoText: {
     fontSize: 14,
+  },
+  cardInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardNumberText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   noCardsContainer: {
     flex: 1,

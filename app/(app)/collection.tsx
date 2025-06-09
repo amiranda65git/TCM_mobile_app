@@ -11,6 +11,8 @@ import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue, getCollectionPriceVariation } from '../lib/supabase';
+import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
+import PremiumRestrictionBanner from '../components/PremiumRestrictionBanner';
 
 interface CardProps {
   id: string;
@@ -56,6 +58,7 @@ export default function CollectionScreen() {
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   const router = useRouter();
+  const { canAccessFullCollection, getMaxCollectionCards } = useSubscriptionRestrictions();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -263,7 +266,25 @@ export default function CollectionScreen() {
       // Charger les cartes groupées par édition
       const collectionResult = await getUserCardsGroupedByEdition(user.id);
       if (!collectionResult.error && collectionResult.data) {
-        const sortedData = sortEditions(collectionResult.data, currentSortOption);
+        let processedData = collectionResult.data;
+        
+        // Appliquer les restrictions d'abonnement
+        if (!canAccessFullCollection) {
+          const maxCards = getMaxCollectionCards();
+          let totalCardsShown = 0;
+          
+          processedData = processedData.map(edition => ({
+            ...edition,
+            cards: edition.cards.slice(0, Math.max(0, maxCards - totalCardsShown))
+          })).filter(edition => {
+            const editionCardCount = edition.cards.length;
+            if (totalCardsShown >= maxCards) return false;
+            totalCardsShown += editionCardCount;
+            return editionCardCount > 0;
+          });
+        }
+        
+        const sortedData = sortEditions(processedData, currentSortOption);
         setEditions(sortedData);
         setFilteredEditions(sortedData);
       }
@@ -609,6 +630,14 @@ export default function CollectionScreen() {
               <Text style={[styles.statLabel, { color: colors.text.secondary }]}>{t('home.sold')}</Text>
             </View>
           </View>
+
+          {/* Banner de restriction pour les utilisateurs non-premium */}
+          <PremiumRestrictionBanner 
+            type="collection"
+            currentCount={cardsCount}
+            maxCount={getMaxCollectionCards()}
+            visible={!canAccessFullCollection}
+          />
           
           {/* Afficher un message si des filtres sont appliqués */}
           {(editionNameFilter || pokemonNameFilter) && (

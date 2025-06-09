@@ -142,28 +142,20 @@ export const getUserEditionsCount = async (userId: string) => {
 };
 
 // Fonction pour récupérer le nombre total de cartes de l'utilisateur
-export const getUserCardsCount = async (userId: string) => {
+export const getUserCardsCount = async () => {
   try {
-    const { count, error } = await supabase
-      .from('user_cards')
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId)
-      .eq('is_sold', false); // Exclure les cartes vendues
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Utilisateur non authentifié');
 
-    if (error) {
-      // Vérifier si l'erreur est due à une table inexistante
-      if (error.code === '42P01') {
-        console.log("La table user_cards n'existe pas encore. C'est normal pendant le développement.");
-        return { count: 0, error: null };
-      }
-      console.error("Erreur lors de la récupération du nombre de cartes:", error);
-      return { count: 0, error };
-    }
+    const { data, error } = await supabase
+      .rpc('get_user_cards_count', { user_uuid: user.id });
 
-    return { count: count || 0, error: null };
+    if (error) throw error;
+
+    return { data, error: null };
   } catch (error) {
-    console.error("Erreur inattendue lors de la récupération du nombre de cartes:", error);
-    return { count: 0, error };
+    console.error('Erreur lors du récupération du nombre de cartes:', error);
+    return { data: 0, error };
   }
 };
 

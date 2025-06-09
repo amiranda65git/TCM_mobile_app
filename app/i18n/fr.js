@@ -372,6 +372,27 @@ export default {
     explanation1: 'TCMarket fait appel à des services externes pour traiter vos images de cartes et récupérer les prix du marché en temps réel.',
     explanation2: 'Ces services ont un coût, et votre abonnement nous permet de couvrir ces frais tout en continuant à améliorer l\'application.',
     explanation3: 'En devenant membre Premium, vous soutenez le développement de TCMarket et bénéficiez d\'une expérience optimale !',
-    subscribeButton: 'Je m\'abonne pour seulement 3.- par mois'
+    subscribeButton: 'Je m\'abonne pour seulement 3.- par mois',
+    alreadySubscribed: {
+      title: 'Déjà abonné',
+      message: 'Vous êtes déjà abonné à TCMarket Premium !'
+    },
+    loadingProducts: 'Chargement des abonnements...',
+    noProducts: 'Aucun abonnement disponible',
+    selectProduct: 'Sélectionner un abonnement',
+    monthly: 'Mensuel',
+    yearly: 'Annuel',
+    subscribe: 'S\'abonner',
+    restore: 'Restaurer les achats',
+    processing: 'Traitement en cours...'
+  },
+  scan: {
+    restrictionTitle: 'Limitation atteinte',
+    restrictionMessage: 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.',
+    error: 'Erreur',
+    captureError: 'Erreur lors de la capture'
+  },
+  general: {
+    cancel: 'Annuler'
   },
 }; 

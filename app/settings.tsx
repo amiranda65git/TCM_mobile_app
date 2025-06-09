@@ -82,6 +82,13 @@ export default function Settings() {
   // Langue courante
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
   
+  // États pour le signalement d'utilisateur
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportedUsername, setReportedUsername] = useState('');
+  const [reportComment, setReportComment] = useState('');
+  const [reportError, setReportError] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  
   // Fonction pour changer la langue de l'application
   const handleChangeLanguage = async (language: string) => {
     const success = await changeLanguage(language);
@@ -465,6 +472,62 @@ export default function Settings() {
     // Linking.openURL('https://votre-site.com/privacy');
   };
 
+  const handleOpenReportModal = () => {
+    setReportedUsername('');
+    setReportComment('');
+    setReportError('');
+    setShowReportModal(true);
+  };
+
+  const handleSubmitReport = async () => {
+    // Validation du formulaire
+    if (!reportedUsername.trim()) {
+      setReportError('Le pseudonyme de l\'utilisateur à signaler est requis');
+      return;
+    }
+
+    // Vérifier que l'utilisateur ne se signale pas lui-même
+    if (reportedUsername.trim().toLowerCase() === username.toLowerCase()) {
+      setReportError('Vous ne pouvez pas vous signaler vous-même');
+      return;
+    }
+
+    // Vérifier la longueur du pseudonyme
+    if (reportedUsername.length < 3) {
+      setReportError('Le pseudonyme doit contenir au moins 3 caractères');
+      return;
+    }
+
+    setSubmittingReport(true);
+    setReportError('');
+
+    try {
+      // TODO: Implémenter l'envoi d'email à l'administrateur
+      // Pour l'instant, on simule la soumission
+      console.log('=== SIGNALEMENT D\'UTILISATEUR ===');
+      console.log('Signalé par:', username, '(', user?.email, ')');
+      console.log('Utilisateur signalé:', reportedUsername);
+      console.log('Commentaire:', reportComment || 'Aucun commentaire');
+      console.log('Date:', new Date().toISOString());
+      console.log('================================');
+
+      // Simuler un délai d'envoi
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      Alert.alert(
+        'Signalement envoyé',
+        'Votre signalement a été transmis à l\'équipe de modération. Nous examinerons votre demande dans les plus brefs délais.',
+        [{ text: 'OK', onPress: () => setShowReportModal(false) }]
+      );
+
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du signalement:', error);
+      setReportError('Une erreur s\'est produite lors de l\'envoi du signalement');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   // Définir les styles dynamiques en fonction du thème
   const dynamicStyles = StyleSheet.create({
     container: {
@@ -611,6 +674,11 @@ export default function Settings() {
       fontWeight: 'bold',
       color: colors.text.primary,
       marginBottom: 16,
+      textAlign: 'center',
+    },
+    modalSubtitle: {
+      fontSize: 14,
+      lineHeight: 20,
       textAlign: 'center',
     },
     input: {
@@ -888,6 +956,17 @@ export default function Settings() {
             onPress={handleOpenPrivacy}
           />
         </View>
+
+        {/* Section Modération */}
+        <Text style={dynamicStyles.sectionTitle}>Modération</Text>
+        <View style={dynamicStyles.section}>
+          <MenuItem 
+            icon="flag" 
+            iconColor="#FF6B6B"
+            text="Signaler un utilisateur" 
+            onPress={handleOpenReportModal}
+          />
+        </View>
         
         {/* Section Compte */}
         <Text style={dynamicStyles.sectionTitle}>{t('settings.account')}</Text>
@@ -915,6 +994,72 @@ export default function Settings() {
       
       {/* Modals */}
       <LanguageModal />
+      
+      {/* Modal de signalement d'utilisateur */}
+      <Modal
+        visible={showReportModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <View style={dynamicStyles.modalContainer}>
+          <View style={dynamicStyles.modalContent}>
+            <Text style={dynamicStyles.modalTitle}>Signaler un utilisateur</Text>
+            
+            <Text style={[dynamicStyles.modalSubtitle, { color: colors.text.secondary, marginBottom: 16 }]}>
+              Veuillez indiquer le pseudonyme de l'utilisateur que vous souhaitez signaler.
+            </Text>
+            
+            <TextInput
+              style={dynamicStyles.input}
+              value={reportedUsername}
+              onChangeText={setReportedUsername}
+              placeholder="Pseudonyme de l'utilisateur"
+              placeholderTextColor={colors.text.secondary}
+              autoCapitalize="none"
+            />
+            
+            <TextInput
+              style={[dynamicStyles.input, { height: 80, textAlignVertical: 'top' }]}
+              value={reportComment}
+              onChangeText={setReportComment}
+              placeholder="Commentaire (optionnel)"
+              placeholderTextColor={colors.text.secondary}
+              multiline
+              numberOfLines={3}
+            />
+            
+            {reportError ? (
+              <Text style={dynamicStyles.errorText}>{reportError}</Text>
+            ) : null}
+            
+            <View style={dynamicStyles.buttonRow}>
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.cancelButton]}
+                onPress={() => setShowReportModal(false)}
+              >
+                <Text style={[dynamicStyles.buttonText, dynamicStyles.cancelButtonText]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[dynamicStyles.button, dynamicStyles.saveButton]}
+                onPress={handleSubmitReport}
+                disabled={submittingReport || !reportedUsername.trim()}
+              >
+                {submittingReport ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={[dynamicStyles.buttonText, dynamicStyles.saveButtonText]}>
+                    Signaler
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       {/* Modale de changement de mot de passe */}
       <Modal

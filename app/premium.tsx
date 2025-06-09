@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -8,22 +8,96 @@ import {
   Image,
   SafeAreaView,
   Platform,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
+import { useSubscription } from './lib/SubscriptionService';
 
 export default function Premium() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, testConfiguration, loading } = useSubscription();
+  
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleSubscribe = () => {
-    // TODO: Implémenter la fonction d'abonnement
-    console.log('Abonnement demandé');
+  // Si l'utilisateur est déjà abonné, rediriger vers l'accueil
+  useEffect(() => {
+    if (subscriptionStatus.isActive) {
+      Alert.alert(
+        t('premium.alreadySubscribed.title', 'Déjà abonné'),
+        t('premium.alreadySubscribed.message', 'Vous avez déjà un abonnement actif !'),
+        [
+          {
+            text: t('general.ok', 'OK'),
+            onPress: () => router.back()
+          }
+        ]
+      );
+    }
+  }, [subscriptionStatus.isActive]);
+
+  // Sélectionner automatiquement le produit mensuel par défaut
+  useEffect(() => {
+    if (products.length > 0 && !selectedProductId) {
+      const monthlyProduct = products.find(p => p.productId.includes('monthly'));
+      setSelectedProductId(monthlyProduct?.productId || products[0].productId);
+    }
+  }, [products]);
+
+  const handleSubscribe = async () => {
+    if (!selectedProductId) {
+      Alert.alert(t('general.error'), t('premium.selectProduct', 'Veuillez sélectionner un abonnement'));
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const success = await purchaseSubscription(selectedProductId);
+      if (success) {
+        router.replace('/(app)/home');
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'abonnement:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    setIsProcessing(true);
+    try {
+      await restorePurchases();
+    } catch (error) {
+      console.error('Erreur lors de la restauration:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleTestConfiguration = async () => {
+    setIsProcessing(true);
+    try {
+      await testConfiguration();
+      Alert.alert('Test', 'Configuration testée. Vérifiez les logs de la console.');
+    } catch (error) {
+      console.error('Erreur lors du test:', error);
+      Alert.alert('Erreur', 'Erreur lors du test de configuration.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const formatPrice = (price: string) => {
+    // Supprimer les symboles de devise pour nettoyer l'affichage
+    return price.replace(/[€$£¥]/g, '') + ' €';
   };
 
   // Définir les styles dynamiques en fonction du thème
@@ -110,6 +184,52 @@ export default function Premium() {
     premiumIcon: {
       marginBottom: 5,
     },
+    productsContainer: {
+      marginTop: 20,
+      paddingHorizontal: 10,
+      width: '100%',
+    },
+    productsTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: colors.text.primary,
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+    productItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 12,
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    selectedProduct: {
+      borderColor: '#FFD700',
+      backgroundColor: colors.surface,
+    },
+    productInfo: {
+      flex: 1,
+      marginRight: 12,
+    },
+    productTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text.primary,
+      marginBottom: 4,
+    },
+    productDescription: {
+      fontSize: 14,
+      color: colors.text.secondary,
+    },
+    productPrice: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#FFD700',
+      marginRight: 8,
+    },
     floatingButtonContainer: {
       position: 'absolute',
       bottom: 0,
@@ -119,6 +239,21 @@ export default function Premium() {
       backgroundColor: colors.background,
       borderTopWidth: 1,
       borderTopColor: colors.border,
+    },
+    restoreButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    restoreButtonText: {
+      fontSize: 14,
+      textAlign: 'center',
+    },
+    subscribeButtonDisabled: {
+      opacity: 0.6,
     },
   });
 
@@ -166,18 +301,75 @@ export default function Premium() {
               {t('premium.explanation3')}
             </Text>
           </View>
+
+          {/* Sélection des produits d'abonnement */}
+          {!loading && products.length > 0 && (
+            <View style={dynamicStyles.productsContainer}>
+              <Text style={dynamicStyles.productsTitle}>
+                {t('premium.choosePlan', 'Choisissez votre plan')}
+              </Text>
+              {products.map((product) => (
+                <TouchableOpacity
+                  key={product.productId}
+                  style={[
+                    dynamicStyles.productItem,
+                    selectedProductId === product.productId && dynamicStyles.selectedProduct
+                  ]}
+                  onPress={() => setSelectedProductId(product.productId)}
+                >
+                  <View style={dynamicStyles.productInfo}>
+                    <Text style={dynamicStyles.productTitle}>
+                      {product.title || product.productId}
+                    </Text>
+                    <Text style={dynamicStyles.productDescription}>
+                      {product.description}
+                    </Text>
+                  </View>
+                  <Text style={dynamicStyles.productPrice}>
+                    {formatPrice(product.price)}
+                  </Text>
+                  {selectedProductId === product.productId && (
+                    <Ionicons name="checkmark-circle" size={24} color="#FFD700" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
       
-      {/* Bouton d'abonnement flottant */}
+      {/* Boutons flottants */}
       <View style={dynamicStyles.floatingButtonContainer}>
+        {/* Bouton Restaurer les achats */}
         <TouchableOpacity 
-          style={dynamicStyles.subscribeButton}
-          onPress={handleSubscribe}
+          style={[dynamicStyles.restoreButton, { backgroundColor: colors.surface }]}
+          onPress={handleRestorePurchases}
+          disabled={isProcessing || loading}
         >
-          <Text style={dynamicStyles.subscribeButtonText}>
-            {t('premium.subscribeButton')}
+          <Text style={[dynamicStyles.restoreButtonText, { color: colors.text.secondary }]}>
+            {t('premium.restorePurchases', 'Restaurer mes achats')}
           </Text>
+        </TouchableOpacity>
+
+        {/* Bouton d'abonnement principal */}
+        <TouchableOpacity 
+          style={[
+            dynamicStyles.subscribeButton,
+            (isProcessing || loading || !selectedProductId) && dynamicStyles.subscribeButtonDisabled
+          ]}
+          onPress={handleSubscribe}
+          disabled={isProcessing || loading || !selectedProductId}
+        >
+          {isProcessing ? (
+            <ActivityIndicator color="#1E2F4D" size="small" />
+          ) : (
+            <Text style={dynamicStyles.subscribeButtonText}>
+              {selectedProductId 
+                ? t('premium.subscribeNow', 'S\'abonner maintenant')
+                : t('premium.selectProduct', 'Sélectionnez un plan')
+              }
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

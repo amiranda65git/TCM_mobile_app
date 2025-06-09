@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
 import { ThemeProvider, useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
+import { SubscriptionProvider } from './lib/SubscriptionService';
 
 // Composant pour le contenu de l'application
 function AppContent() {
@@ -118,7 +119,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppContent />
+        <SubscriptionProvider>
+          <AppContent />
+        </SubscriptionProvider>
       </AuthProvider>
     </ThemeProvider>
   );

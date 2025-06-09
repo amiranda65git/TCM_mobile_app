@@ -10,6 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import LanguageFlag from '../components/LanguageFlag';
+import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
 
 // Enum pour les options de tri
 enum SortOption {
@@ -354,6 +355,8 @@ export default function TradingScreen() {
   const colors = useThemeColors();
   const { t } = useTranslation();
   const { tab } = useLocalSearchParams();
+  const { canAccessTrading } = useSubscriptionRestrictions();
+  const router = useRouter();
   
   // Déterminer l'index initial basé sur le paramètre tab
   const getInitialIndex = () => {
@@ -381,6 +384,13 @@ export default function TradingScreen() {
   const [tempSortOption, setTempSortOption] = useState<SortOption>(SortOption.NAME_DESC);
   const [tempSortCategory, setTempSortCategory] = useState<SortCategory>('name');
   const [tempSortDirection, setTempSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Vérifier l'accès au trading
+  useEffect(() => {
+    if (!canAccessTrading) {
+      router.replace('/premium');
+    }
+  }, [canAccessTrading]);
 
   // Créer l'objet de contexte de filtrage à partager avec les onglets
   const filterContext = {
