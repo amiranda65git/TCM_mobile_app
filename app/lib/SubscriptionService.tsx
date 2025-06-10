@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
-  connectAsync, 
-  getProductsAsync, 
-  purchaseItemAsync, 
-  finishTransactionAsync,
-  getPurchaseHistoryAsync,
-  IAPProduct,
-  IAPPurchase
+  initConnection, 
+  getProducts, 
+  requestPurchase, 
+  finishTransaction,
+  getPurchaseHistory
 } from 'expo-iap';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
@@ -23,7 +21,7 @@ export interface SubscriptionStatus {
 
 interface SubscriptionContextType {
   subscriptionStatus: SubscriptionStatus;
-  products: IAPProduct[];
+  products: any[];
   purchaseSubscription: (productId: string) => Promise<boolean>;
   restorePurchases: () => Promise<boolean>;
   checkSubscriptionStatus: () => Promise<void>;
@@ -49,7 +47,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     transactionId: null,
     loading: true
   });
-  const [products, setProducts] = useState<IAPProduct[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Initialisation des IAP
@@ -60,7 +58,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     return () => {
-      // Nettoyage si nécessaire - disconnectAsync n'est plus disponible dans expo-iap v2+
+      // Nettoyage si nécessaire
     };
   }, [isAuthenticated]);
 
@@ -71,15 +69,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       console.log('[SubscriptionService] Initialisation des IAP...');
       
       // Connexion aux services IAP
-      await connectAsync();
+      await initConnection();
       console.log('[SubscriptionService] Connexion aux services IAP réussie');
 
       // Récupération des produits disponibles
       if (SUBSCRIPTION_PRODUCTS.length > 0) {
         console.log('[SubscriptionService] Récupération des produits:', SUBSCRIPTION_PRODUCTS);
-        const availableProducts = await getProductsAsync(SUBSCRIPTION_PRODUCTS);
+        const availableProducts = await getProducts(SUBSCRIPTION_PRODUCTS);
         setProducts(availableProducts);
-        console.log('[SubscriptionService] Produits récupérés:', availableProducts.map(p => ({ id: p.productId, price: p.price })));
+        console.log('[SubscriptionService] Produits récupérés:', availableProducts.map((p: Product) => ({ id: p.productId, price: p.price })));
         
         if (availableProducts.length === 0) {
           console.warn('[SubscriptionService] Aucun produit trouvé. Vérifiez la configuration Google Play Console.');
@@ -89,8 +87,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('[SubscriptionService] Erreur d\'initialisation IAP:', error);
-      console.error('[SubscriptionService] Type d\'erreur:', error.constructor.name);
-      console.error('[SubscriptionService] Message:', error.message);
+      console.error('[SubscriptionService] Type d\'erreur:', (error as Error).constructor.name);
+      console.error('[SubscriptionService] Message:', (error as Error).message);
       
       // Pour le développement Android, on peut simuler les produits
       if (__DEV__ && Platform.OS === 'android') {
@@ -112,7 +110,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             description: 'Abonnement premium annuel',
             currency: 'EUR'
           }
-        ] as IAPProduct[]);
+        ] as Product[]);
       }
     } finally {
       setLoading(false);
@@ -163,7 +161,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       // Vérifier que le produit existe
-      const product = products.find(p => p.productId === productId);
+      const product = products.find(p => p.id === productId);
       if (!product) {
         Alert.alert('Erreur', 'Produit non trouvé. Veuillez réessayer.');
         return false;
@@ -178,14 +176,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         
         // Simuler un achat réussi
         const mockPurchase = {
-          productId: productId,
+          id: productId,
           transactionId: `dev_android_${Date.now()}`,
           transactionReceipt: `mock_receipt_${Date.now()}`,
-          purchaseTime: Date.now(),
+          transactionDate: Date.now(),
         };
         
         // Valider l'achat côté backend
-        const isValid = await validatePurchaseWithBackend(mockPurchase as IAPPurchase);
+        const isValid = await validatePurchaseWithBackend(mockPurchase as Purchase);
         
         if (isValid) {
           await checkSubscriptionStatus();
@@ -197,10 +195,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      // Effectuer l'achat réel
-      const purchase = await purchaseItemAsync(productId);
+      // Effectuer l'achat réel pour un abonnement
+      const purchaseRequest = {
+        request: Platform.OS === 'ios' 
+          ? { sku: productId }
+          : { skus: [productId] },
+        type: 'subs' as const
+      };
       
-      if (purchase) {
+      const purchase = await requestPurchase(purchaseRequest);
+      
+      if (purchase && !Array.isArray(purchase)) {
         console.log('[SubscriptionService] Achat réussi:', purchase.transactionId);
         
         // Valider l'achat côté backend
@@ -208,7 +213,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         
         if (isValid) {
           // Finaliser la transaction
-          await finishTransactionAsync(purchase, false);
+          await finishTransaction({ purchase, isConsumable: false });
           
           // Mettre à jour le statut de l'abonnement
           await checkSubscriptionStatus();
@@ -224,17 +229,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       return false;
     } catch (error) {
       console.error('[SubscriptionService] Erreur lors de l\'achat:', error);
-      console.error('[SubscriptionService] Type d\'erreur:', error.constructor.name);
-      console.error('[SubscriptionService] Message:', error.message);
+      console.error('[SubscriptionService] Type d\'erreur:', (error as Error).constructor.name);
+      console.error('[SubscriptionService] Message:', (error as Error).message);
       
       let errorMessage = 'Une erreur est survenue lors de l\'achat.';
       
       // Messages d'erreur spécifiques selon le type d'erreur
-      if (error.message?.includes('User cancelled')) {
+      if ((error as Error).message?.includes('User cancelled')) {
         errorMessage = 'Achat annulé par l\'utilisateur.';
-      } else if (error.message?.includes('Network')) {
+      } else if ((error as Error).message?.includes('Network')) {
         errorMessage = 'Erreur de connexion. Vérifiez votre connexion internet.';
-      } else if (error.message?.includes('Invalid')) {
+      } else if ((error as Error).message?.includes('Invalid')) {
         errorMessage = 'Produit non valide. Contactez le support.';
       }
       
@@ -245,7 +250,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const validatePurchaseWithBackend = async (purchase: IAPPurchase): Promise<boolean> => {
+  const validatePurchaseWithBackend = async (purchase: Purchase): Promise<boolean> => {
     try {
       const { data, error } = await supabase.functions.invoke('validate-subscription', {
         body: {
@@ -277,7 +282,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       // Récupérer l'historique des achats
-      const purchases = await getPurchaseHistoryAsync();
+      const purchases = await getPurchaseHistory();
       console.log('[SubscriptionService] Achats trouvés:', purchases.length);
       
       if (purchases.length === 0) {
