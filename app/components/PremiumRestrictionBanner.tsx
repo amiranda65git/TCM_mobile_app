@@ -135,7 +135,7 @@ export default function PremiumRestrictionBanner({
         </Text>
         {currentCount !== undefined && maxCount !== undefined && (
           <Text style={dynamicStyles.countText}>
-            {currentCount}/{maxCount} {type === 'collection' ? 'cartes' : 'scans'}
+            {currentCount}/{maxCount} {type === 'collection' ? t('home.cards', 'cartes') : t('scan.scans', 'scans')}
           </Text>
         )}
       </View>
@@ -145,7 +145,7 @@ export default function PremiumRestrictionBanner({
         onPress={handleUpgrade}
       >
         <Text style={dynamicStyles.upgradeText}>
-          {t('premium.upgrade', 'Passer Premium')}
+          {t('premium.whyPay', 'Pourquoi payer ?')}
         </Text>
       </TouchableOpacity>
     </View>

@@ -1238,10 +1238,10 @@ export const getCardsForSale = async (cardId: string) => {
       let userInfo: UserInfo;
       if (Array.isArray(card.users)) {
         userInfo = card.users[0] || {}; // Prendre le premier élément si c'est un tableau
-        console.log("[getCardsForSale] userInfo depuis tableau:", JSON.stringify(userInfo, null, 2));
+        console.log("[getCardsForSale] userInfo depuis tableau - username:", userInfo.username);
       } else if (card.users && typeof card.users === 'object') {
         userInfo = card.users as unknown as UserInfo || {}; // Casting si c'est un objet
-        console.log("[getCardsForSale] userInfo depuis objet:", JSON.stringify(userInfo, null, 2));
+        console.log("[getCardsForSale] userInfo depuis objet - username:", userInfo.username);
       } else {
         userInfo = { username: '', avatar_url: '' };
         console.log("[getCardsForSale] userInfo par défaut car users est null ou undefined");

@@ -31,8 +31,8 @@ interface SubscriptionContextType {
 
 // Configuration des produits d'abonnement
 const SUBSCRIPTION_PRODUCTS = Platform.select({
-  ios: ['tcmarket_premium_monthly', 'tcmarket_premium_yearly'],
-  android: ['tcmarket_premium_monthly', 'tcmarket_premium_yearly'],
+  ios: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly'],
+  android: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly', 'tcmarket-premium-yearly2'],
   default: []
 });
 
@@ -95,7 +95,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         console.log('[SubscriptionService] Mode développement: simulation des produits');
         setProducts([
           {
-            productId: 'tcmarket_premium_monthly',
+            productId: 'tcmarket-premium-monthly',
             price: '4,99 €',
             localizedPrice: '4,99 €',
             title: 'TCMarket Premium Mensuel',
@@ -103,11 +103,19 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             currency: 'EUR'
           },
           {
-            productId: 'tcmarket_premium_yearly',
+            productId: 'tcmarket-premium-yearly',
             price: '49,99 €',
             localizedPrice: '49,99 €',
             title: 'TCMarket Premium Annuel',
             description: 'Abonnement premium annuel',
+            currency: 'EUR'
+          },
+          {
+            productId: 'tcmarket-premium-yearly2',
+            price: '39,99 €',
+            localizedPrice: '39,99 €',
+            title: 'TCMarket Premium Annuel 2',
+            description: 'Abonnement premium annuel (version 2)',
             currency: 'EUR'
           }
         ] as Product[]);

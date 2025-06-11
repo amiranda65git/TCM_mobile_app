@@ -141,7 +141,8 @@ export default {
     searchManually: 'Search manually',
     searchPlaceholder: 'Search for a card...',
     searching: 'Searching...',
-    noResults: 'No results found'
+    noResults: 'No results found',
+    scans: 'scans'
   },
   settings: {
     title: 'Settings',
@@ -171,6 +172,12 @@ export default {
     sell: 'Sell',
     filter: 'Filter',
     export: 'Export',
+    moderation: 'Moderation',
+    reportUser: 'Report user',
+    reportUserDescription: 'Please indicate the username of the user you want to report.',
+    usernamePlaceholder: 'Username',
+    commentPlaceholder: 'Comment (optional)',
+    reportButton: 'Report',
     changeUsernameModal: {
       title: 'Change username',
       placeholder: 'Enter your new username',
@@ -368,10 +375,32 @@ export default {
   },
   premium: {
     title: 'Premium',
-    whyPay: 'Why do I have to pay?',
+    whyPay: 'Why pay?',
     explanation1: 'TCMarket uses external services to process your card images and retrieve real-time market prices.',
     explanation2: 'These services have a cost, and your subscription allows us to cover these fees while continuing to improve the application.',
     explanation3: 'By becoming a Premium member, you support TCMarket\'s development and enjoy an optimal experience!',
-    subscribeButton: 'Subscribe for only $3 per month'
+    subscribeButton: 'Subscribe for only $3 per month',
+    alreadySubscribed: {
+      title: 'Already subscribed',
+      message: 'You already have an active TCMarket Premium subscription!'
+    },
+    loadingProducts: 'Loading subscriptions...',
+    noProducts: 'No subscription available',
+    selectProduct: 'Select a subscription',
+    choosePlan: 'Choose your plan',
+    subscribeNow: 'Subscribe now',
+    restorePurchases: 'Restore purchases',
+    monthly: 'Monthly',
+    yearly: 'Yearly',
+    subscribe: 'Subscribe',
+    restore: 'Restore purchases',
+    processing: 'Processing...',
+    restrictions: {
+      collection: 'You only see {{maxCount}} cards. Subscribe to see your entire collection.',
+      scan: 'Limit of {{maxCount}} cards reached. Subscribe to scan more cards.',
+      market: 'Market access reserved for Premium members.',
+      trading: 'Trading access reserved for Premium members.'
+    },
+    upgrade: 'Go Premium'
   },
 }; 

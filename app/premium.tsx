@@ -23,7 +23,7 @@ export default function Premium() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, testConfiguration, loading } = useSubscription();
+  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, loading } = useSubscription();
   
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -82,18 +82,7 @@ export default function Premium() {
     }
   };
 
-  const handleTestConfiguration = async () => {
-    setIsProcessing(true);
-    try {
-      await testConfiguration();
-      Alert.alert('Test', 'Configuration testée. Vérifiez les logs de la console.');
-    } catch (error) {
-      console.error('Erreur lors du test:', error);
-      Alert.alert('Erreur', 'Erreur lors du test de configuration.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+
 
   const formatPrice = (price: string) => {
     // Supprimer les symboles de devise pour nettoyer l'affichage
@@ -130,7 +119,7 @@ export default function Premium() {
       flex: 1,
       paddingHorizontal: 20,
       paddingVertical: 30,
-      paddingBottom: 100,
+      paddingBottom: 140, // Augmenté pour laisser plus d'espace aux boutons
       alignItems: 'center',
     },
     mainTitle: {
@@ -340,6 +329,7 @@ export default function Premium() {
       
       {/* Boutons flottants */}
       <View style={dynamicStyles.floatingButtonContainer}>
+        
         {/* Bouton Restaurer les achats */}
         <TouchableOpacity 
           style={[dynamicStyles.restoreButton, { backgroundColor: colors.surface }]}

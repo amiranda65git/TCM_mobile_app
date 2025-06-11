@@ -892,7 +892,7 @@ export default function Settings() {
           
           <MenuItem 
             icon="rocket" 
-            text={t('settings.upgradeToPremium')} 
+            text={t('premium.whyPay', 'Pourquoi payer ?')} 
             onPress={handlePremium}
           />
         </View>
@@ -958,12 +958,12 @@ export default function Settings() {
         </View>
 
         {/* Section Modération */}
-        <Text style={dynamicStyles.sectionTitle}>Modération</Text>
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.moderation', 'Modération')}</Text>
         <View style={dynamicStyles.section}>
           <MenuItem 
             icon="flag" 
             iconColor="#FF6B6B"
-            text="Signaler un utilisateur" 
+            text={t('settings.reportUser', 'Signaler un utilisateur')} 
             onPress={handleOpenReportModal}
           />
         </View>
@@ -1004,17 +1004,17 @@ export default function Settings() {
       >
         <View style={dynamicStyles.modalContainer}>
           <View style={dynamicStyles.modalContent}>
-            <Text style={dynamicStyles.modalTitle}>Signaler un utilisateur</Text>
+            <Text style={dynamicStyles.modalTitle}>{t('settings.reportUser', 'Signaler un utilisateur')}</Text>
             
             <Text style={[dynamicStyles.modalSubtitle, { color: colors.text.secondary, marginBottom: 16 }]}>
-              Veuillez indiquer le pseudonyme de l'utilisateur que vous souhaitez signaler.
+              {t('settings.reportUserDescription', 'Veuillez indiquer le pseudonyme de l\'utilisateur que vous souhaitez signaler.')}
             </Text>
             
             <TextInput
               style={dynamicStyles.input}
               value={reportedUsername}
               onChangeText={setReportedUsername}
-              placeholder="Pseudonyme de l'utilisateur"
+              placeholder={t('settings.usernamePlaceholder', 'Pseudonyme de l\'utilisateur')}
               placeholderTextColor={colors.text.secondary}
               autoCapitalize="none"
             />
@@ -1023,7 +1023,7 @@ export default function Settings() {
               style={[dynamicStyles.input, { height: 80, textAlignVertical: 'top' }]}
               value={reportComment}
               onChangeText={setReportComment}
-              placeholder="Commentaire (optionnel)"
+              placeholder={t('settings.commentPlaceholder', 'Commentaire (optionnel)')}
               placeholderTextColor={colors.text.secondary}
               multiline
               numberOfLines={3}
@@ -1039,7 +1039,7 @@ export default function Settings() {
                 onPress={() => setShowReportModal(false)}
               >
                 <Text style={[dynamicStyles.buttonText, dynamicStyles.cancelButtonText]}>
-                  Annuler
+                  {t('general.cancel', 'Annuler')}
                 </Text>
               </TouchableOpacity>
               
@@ -1052,7 +1052,7 @@ export default function Settings() {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <Text style={[dynamicStyles.buttonText, dynamicStyles.saveButtonText]}>
-                    Signaler
+                    {t('settings.reportButton', 'Signaler')}
                   </Text>
                 )}
               </TouchableOpacity>

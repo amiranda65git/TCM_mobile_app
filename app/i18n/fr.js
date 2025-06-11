@@ -137,6 +137,7 @@ export default {
     unexpectedError: 'Une erreur inattendue s\'est produite',
     adding: 'Ajout en cours...',
     scan: 'Scanner',
+    scans: 'scans',
     selectCondition: 'Sélectionnez l\'état de la carte',
     searchManually: 'Rechercher manuellement',
     searchPlaceholder: 'Rechercher une carte...',
@@ -171,6 +172,12 @@ export default {
     sell: 'Vendre',
     filter: 'Filtrer',
     export: 'Exporter',
+    moderation: 'Modération',
+    reportUser: 'Signaler un utilisateur',
+    reportUserDescription: 'Veuillez indiquer le pseudonyme de l\'utilisateur que vous souhaitez signaler.',
+    usernamePlaceholder: 'Pseudonyme de l\'utilisateur',
+    commentPlaceholder: 'Commentaire (optionnel)',
+    reportButton: 'Signaler',
     changeUsernameModal: {
       title: 'Modifier le pseudo',
       placeholder: 'Entrez votre nouveau pseudo',
@@ -368,7 +375,7 @@ export default {
   },
   premium: {
     title: 'Premium',
-    whyPay: 'Pourquoi je dois payer ?',
+    whyPay: 'Pourquoi payer ?',
     explanation1: 'TCMarket fait appel à des services externes pour traiter vos images de cartes et récupérer les prix du marché en temps réel.',
     explanation2: 'Ces services ont un coût, et votre abonnement nous permet de couvrir ces frais tout en continuant à améliorer l\'application.',
     explanation3: 'En devenant membre Premium, vous soutenez le développement de TCMarket et bénéficiez d\'une expérience optimale !',
@@ -380,11 +387,21 @@ export default {
     loadingProducts: 'Chargement des abonnements...',
     noProducts: 'Aucun abonnement disponible',
     selectProduct: 'Sélectionner un abonnement',
+    choosePlan: 'Choisissez votre plan',
+    subscribeNow: 'S\'abonner maintenant',
+    restorePurchases: 'Restaurer mes achats',
     monthly: 'Mensuel',
     yearly: 'Annuel',
     subscribe: 'S\'abonner',
     restore: 'Restaurer les achats',
-    processing: 'Traitement en cours...'
+    processing: 'Traitement en cours...',
+    restrictions: {
+      collection: 'Vous ne voyez que {{maxCount}} cartes. Abonnez-vous pour voir toute votre collection.',
+      scan: 'Limite de {{maxCount}} cartes atteinte. Abonnez-vous pour scanner plus de cartes.',
+      market: 'Accès au marché réservé aux membres Premium.',
+      trading: 'Accès au trading réservé aux membres Premium.'
+    },
+    upgrade: 'Passer Premium'
   },
   scan: {
     restrictionTitle: 'Limitation atteinte',

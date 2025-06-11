@@ -3,7 +3,7 @@ export const SUBSCRIPTION_PRODUCTS = {
   // Produits iOS (App Store)
   ios: [
     {
-      id: 'tcmarket_premium_monthly',
+      id: 'tcmarket-premium-monthly',
       name: 'TCMarket Premium - Mensuel',
       description: 'Accès complet à toutes les fonctionnalités',
       price: '2.99',
@@ -11,7 +11,7 @@ export const SUBSCRIPTION_PRODUCTS = {
       period: 'monthly'
     },
     {
-      id: 'tcmarket_premium_yearly',
+      id: 'tcmarket-premium-yearly',
       name: 'TCMarket Premium - Annuel',
       description: 'Accès complet à toutes les fonctionnalités (économisez 20%)',
       price: '29.99',
@@ -23,7 +23,7 @@ export const SUBSCRIPTION_PRODUCTS = {
   // Produits Android (Google Play)
   android: [
     {
-      id: 'tcmarket_premium_monthly',
+      id: 'tcmarket-premium-monthly',
       name: 'TCMarket Premium - Mensuel',
       description: 'Accès complet à toutes les fonctionnalités',
       price: '2.99',
@@ -31,10 +31,18 @@ export const SUBSCRIPTION_PRODUCTS = {
       period: 'monthly'
     },
     {
-      id: 'tcmarket_premium_yearly',
+      id: 'tcmarket-premium-yearly',
       name: 'TCMarket Premium - Annuel',
       description: 'Accès complet à toutes les fonctionnalités (économisez 20%)',
       price: '29.99',
+      currency: 'CHF',
+      period: 'yearly'
+    },
+    {
+      id: 'tcmarket-premium-yearly2',
+      name: 'TCMarket Premium - Annuel 2',
+      description: 'Accès complet à toutes les fonctionnalités (plan alternatif)',
+      price: '24.99',
       currency: 'CHF',
       period: 'yearly'
     }
