@@ -37,6 +37,7 @@ import { changeLanguage } from './i18n/i18n.config';
 import { EventRegister } from 'react-native-event-listeners';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
+import Constants from 'expo-constants';
 
 // Configuration statique pour masquer l'en-tête d'Expo Router
 export const unstable_settings = {
@@ -51,6 +52,14 @@ interface MenuItemProps {
   onPress?: () => void;
   rightComponent?: React.ReactNode;
   isBorderless?: boolean;
+}
+
+// Fonction utilitaire pour obtenir la version de l'app de façon compatible Expo/EAS
+function getAppVersion() {
+  // Expo SDK 53+ : expoConfig
+  if (Constants.expoConfig && Constants.expoConfig.version) return Constants.expoConfig.version;
+  // Fallback
+  return 'N/A';
 }
 
 export default function Settings() {
@@ -988,7 +997,7 @@ export default function Settings() {
         </View>
         
         <Text style={dynamicStyles.versionText}>
-          {t('settings.version')} 1.0.0
+          {t('settings.version')} {getAppVersion()}
         </Text>
       </ScrollView>
       
