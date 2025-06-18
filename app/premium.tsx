@@ -28,6 +28,20 @@ export default function Premium() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Remplace les logs de debug par une popin d'information au chargement
+  useEffect(() => {
+    if (!loading) {
+      Alert.alert(
+        'État de la page Premium',
+        `Produits trouvés : ${products.length}\n` +
+        `Produits disponibles :\n${products.map(p => 
+          `- ${p.title || p.productId} : ${p.price}`
+        ).join('\n')}\n` +
+        `Produit sélectionné : ${selectedProductId || 'Aucun'}`
+      );
+    }
+  }, [loading, products]);
+
   // Si l'utilisateur est déjà abonné, rediriger vers l'accueil
   useEffect(() => {
     if (subscriptionStatus.isActive) {
@@ -60,12 +74,26 @@ export default function Premium() {
 
     setIsProcessing(true);
     try {
+      Alert.alert(
+        'Début de l\'achat',
+        `Tentative d'achat du produit : ${selectedProductId}\n` +
+        'Veuillez patienter...'
+      );
+
       const success = await purchaseSubscription(selectedProductId);
+      
       if (success) {
-        router.replace('/(app)/home');
+        Alert.alert(
+          'Succès',
+          'Achat réussi ! Redirection vers l\'accueil...',
+          [{ text: 'OK', onPress: () => router.replace('/(app)/home') }]
+        );
       }
     } catch (error) {
-      console.error('Erreur lors de l\'abonnement:', error);
+      Alert.alert(
+        'Erreur d\'achat',
+        `Une erreur est survenue :\n${(error as Error).message}\n\nVeuillez réessayer.`
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -81,8 +109,6 @@ export default function Premium() {
       setIsProcessing(false);
     }
   };
-
-
 
   const formatPrice = (price: string) => {
     // Supprimer les symboles de devise pour nettoyer l'affichage

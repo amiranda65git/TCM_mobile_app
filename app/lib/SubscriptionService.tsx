@@ -80,6 +80,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   // Initialisation des IAP
   useEffect(() => {
+    console.log('[SubscriptionService] useEffect déclenché:', {
+      isAuthenticated,
+      userId: user?.id
+    });
+    
     if (isAuthenticated) {
       initializeIAP();
       checkSubscriptionStatus();
@@ -94,34 +99,57 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      console.log('[SubscriptionService] Initialisation des IAP...');
+      // Popin de diagnostic technique
+      Alert.alert(
+        'Diagnostic Technique',
+        `Plateforme : ${Platform.OS}\n` +
+        `Version : ${Platform.Version}\n` +
+        `Mode dev : ${__DEV__ ? 'Oui' : 'Non'}\n` +
+        `Produits configurés : ${SUBSCRIPTION_PRODUCTS.join(', ')}\n` +
+        `User ID : ${user?.id || 'Non connecté'}`
+      );
       
       // Connexion aux services IAP
       await initConnection();
-      console.log('[SubscriptionService] Connexion aux services IAP réussie');
-
+      
       // Récupération des produits disponibles
       if (SUBSCRIPTION_PRODUCTS.length > 0) {
-        console.log('[SubscriptionService] Récupération des produits:', SUBSCRIPTION_PRODUCTS);
-        const availableProducts = await getProducts(SUBSCRIPTION_PRODUCTS);
-        setProducts(availableProducts);
-        console.log('[SubscriptionService] Produits récupérés:', availableProducts.map((p: any) => ({ id: p.productId, price: p.price })));
-        
-        if (availableProducts.length === 0) {
-          console.warn('[SubscriptionService] Aucun produit trouvé. Vérifiez la configuration Google Play Console.');
+        try {
+          const availableProducts = await getProducts(SUBSCRIPTION_PRODUCTS);
+          setProducts(availableProducts);
+          
+          if (availableProducts.length === 0) {
+            Alert.alert(
+              'Configuration IAP',
+              'Aucun produit trouvé. Vérifiez la configuration Google Play Console.'
+            );
+          }
+        } catch (productError) {
+          Alert.alert(
+            'Erreur produits',
+            `Impossible de récupérer les produits :\n${(productError as Error).message}`
+          );
+          throw productError;
         }
       } else {
-        console.warn('[SubscriptionService] Aucun produit configuré pour cette plateforme');
+        Alert.alert(
+          'Configuration IAP',
+          `Aucun produit configuré pour cette plateforme : ${Platform.OS}`
+        );
       }
     } catch (error) {
-      console.error('[SubscriptionService] Erreur d\'initialisation IAP:', error);
-      console.error('[SubscriptionService] Type d\'erreur:', (error as Error).constructor.name);
-      console.error('[SubscriptionService] Message:', (error as Error).message);
+      Alert.alert(
+        'Erreur IAP',
+        `Erreur d'initialisation :\n${(error as Error).message}\n\n` +
+        'Vérifiez votre connexion internet ou contactez le support.'
+      );
       
-      Alert.alert('Erreur abonnement', 'Impossible de récupérer les produits d\'abonnement. Vérifiez votre connexion internet ou contactez le support.');
       // Pour le développement Android, on peut simuler les produits
       if (__DEV__ && Platform.OS === 'android') {
-        console.log('[SubscriptionService] Mode développement: simulation des produits');
+        Alert.alert(
+          'Mode développement',
+          'Simulation des produits activée'
+        );
         setProducts([
           {
             productId: 'tcmarket-premium-monthly',
@@ -198,21 +226,19 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // Remplace 'id' par 'productId' pour la recherche de produit
       const product = products.find(p => p.productId === productId);
       if (!product) {
         Alert.alert('Erreur', 'Produit non trouvé. Veuillez réessayer.');
         return false;
       }
       
-      console.log('[SubscriptionService] Tentative d\'achat pour:', productId);
-      console.log('[SubscriptionService] Produit:', product);
-      
       // Mode développement : simuler l'achat
       if (__DEV__ && Platform.OS === 'android') {
-        console.log('[SubscriptionService] Mode développement: simulation d\'achat');
+        Alert.alert(
+          'Mode développement',
+          'Simulation d\'achat en cours...'
+        );
         
-        // Correction du mockPurchase pour inclure productId
         const mockPurchase = {
           productId: productId,
           transactionId: `dev_android_${Date.now()}`,
@@ -220,7 +246,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           transactionDate: Date.now(),
         };
         
-        // Valider l'achat côté backend
         const isValid = await validatePurchaseWithBackend(mockPurchase as any);
         
         if (isValid) {
@@ -233,7 +258,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      // Effectuer l'achat réel pour un abonnement
+      // Effectuer l'achat réel
       let purchaseRequest;
       if (Platform.OS === 'ios') {
         purchaseRequest = { request: { sku: productId }, type: 'subs' as const };
@@ -241,27 +266,30 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         purchaseRequest = {
           request: {
             skus: [productId],
-            subscriptionOffers: [] // Obligatoire même vide
+            subscriptionOffers: []
           },
           type: 'subs' as const
         };
       }
       
+      Alert.alert(
+        'Achat en cours',
+        'Connexion au service de paiement...'
+      );
+      
       const purchase = await requestPurchase(purchaseRequest);
       
       if (purchase && !Array.isArray(purchase)) {
-        console.log('[SubscriptionService] Achat réussi:', purchase.transactionId);
+        Alert.alert(
+          'Validation en cours',
+          'Vérification de votre achat...'
+        );
         
-        // Valider l'achat côté backend
         const isValid = await validatePurchaseWithBackend(purchase as any);
         
         if (isValid) {
-          // Finaliser la transaction
           await finishTransaction({ purchase, isConsumable: false });
-          
-          // Mettre à jour le statut de l'abonnement
           await checkSubscriptionStatus();
-          
           Alert.alert('Succès', 'Votre abonnement a été activé avec succès !');
           return true;
         } else {
@@ -272,13 +300,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       
       return false;
     } catch (error) {
-      console.error('[SubscriptionService] Erreur lors de l\'achat:', error);
-      console.error('[SubscriptionService] Type d\'erreur:', (error as Error).constructor.name);
-      console.error('[SubscriptionService] Message:', (error as Error).message);
-      
       let errorMessage = 'Une erreur est survenue lors de l\'achat.';
       
-      // Messages d'erreur spécifiques selon le type d'erreur
       if ((error as Error).message?.includes('User cancelled')) {
         errorMessage = 'Achat annulé par l\'utilisateur.';
       } else if ((error as Error).message?.includes('Network')) {
