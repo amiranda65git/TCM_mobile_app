@@ -50,7 +50,11 @@ interface SubscriptionContextType {
 // Configuration des produits d'abonnement
 const SUBSCRIPTION_PRODUCTS = Platform.select({
   ios: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly'],
-  android: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly', 'tcmarket-premium-yearly2'],
+  android: [
+    'tcmarket_premium_pokemon:tcmarket-premium-monthly',
+    'tcmarket_premium_pokemon:tcmarket-premium-yearly',
+    'tcmarket_premium_pokemon:tcmarket-premium-yearly2'
+  ],
   default: []
 });
 
