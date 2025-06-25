@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
   initConnection, 
-  getProducts, 
+  getSubscriptions, 
   requestPurchase, 
   finishTransaction,
   getPurchaseHistory
@@ -119,26 +119,26 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       // Récupération des produits disponibles
       if (SUBSCRIPTION_PRODUCTS.length > 0) {
         try {
-          const availableProducts = await getProducts(SUBSCRIPTION_PRODUCTS);
+          const availableProducts = await getSubscriptions(SUBSCRIPTION_PRODUCTS);
           setProducts(availableProducts);
           
           if (availableProducts.length === 0) {
             Alert.alert(
               'Configuration IAP',
-              'Aucun produit trouvé. Vérifiez la configuration Google Play Console.'
+              'Aucun abonnement trouvé. Vérifiez la configuration Google Play Console.'
             );
           }
         } catch (productError) {
           Alert.alert(
-            'Erreur produits',
-            `Impossible de récupérer les produits :\n${(productError as Error).message}`
+            'Erreur abonnements',
+            `Impossible de récupérer les abonnements :\n${(productError as Error).message}`
           );
           throw productError;
         }
       } else {
         Alert.alert(
           'Configuration IAP',
-          `Aucun produit configuré pour cette plateforme : ${Platform.OS}`
+          `Aucun abonnement configuré pour cette plateforme : ${Platform.OS}`
         );
       }
     } catch (error) {
