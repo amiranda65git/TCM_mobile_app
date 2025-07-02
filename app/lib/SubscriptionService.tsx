@@ -110,7 +110,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         `Version : ${Platform.Version}\n` +
         `Mode dev : ${__DEV__ ? 'Oui' : 'Non'}\n` +
         `Produits configurés : ${SUBSCRIPTION_PRODUCTS.join(', ')}\n` +
-        `User ID : ${user?.id || 'Non connecté'}`
+        `User ID : ${user?.id || 'Non connecté'}`,
+        [
+          { text: 'OK', style: 'default' }
+        ],
+        { cancelable: false }
       );
       
       // Connexion aux services IAP
@@ -121,7 +125,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         try {
           const availableProducts = await getSubscriptions(SUBSCRIPTION_PRODUCTS);
           setProducts(availableProducts);
-          
+
+          // Ajout d'une popin détaillée pour le debug
+          Alert.alert(
+            'Debug IAP',
+            `Résultat getSubscriptions :\n${JSON.stringify(availableProducts, null, 2)}\n\nProduits demandés :\n${JSON.stringify(SUBSCRIPTION_PRODUCTS)}\n\nUser ID : ${user?.id || 'Non connecté'}`,
+            [
+              { text: 'OK', style: 'default' }
+            ],
+            { cancelable: false }
+          );
+
           if (availableProducts.length === 0) {
             Alert.alert(
               'Configuration IAP',
@@ -129,9 +143,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             );
           }
         } catch (productError) {
+          // Popin détaillée sur l'erreur
           Alert.alert(
             'Erreur abonnements',
-            `Impossible de récupérer les abonnements :\n${(productError as Error).message}`
+            `Impossible de récupérer les abonnements :\n${(productError as Error).message}\n\nStack :\n${(productError as Error).stack}\n\nProduits demandés :\n${JSON.stringify(SUBSCRIPTION_PRODUCTS)}`,
+            [
+              { text: 'OK', style: 'default' }
+            ],
+            { cancelable: false }
           );
           throw productError;
         }
