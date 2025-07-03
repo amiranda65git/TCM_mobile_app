@@ -51,9 +51,7 @@ interface SubscriptionContextType {
 const SUBSCRIPTION_PRODUCTS = Platform.select({
   ios: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly'],
   android: [
-    'tcmarket_premium_pokemon:tcmarket-premium-monthly',
-    'tcmarket_premium_pokemon:tcmarket-premium-yearly',
-    'tcmarket_premium_pokemon:tcmarket-premium-yearly2'
+    'tcmarket_premium_pokemon'
   ],
   default: []
 });
@@ -119,6 +117,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       
       // Connexion aux services IAP
       await initConnection();
+      
+      // Vérification de la compatibilité avant getSubscriptions
+      Alert.alert(
+        'Test de compatibilité',
+        'Vérification de la compatibilité des fonctionnalités IAP...',
+        [{ text: 'OK', style: 'default' }],
+        { cancelable: false }
+      );
       
       // Récupération des produits disponibles
       if (SUBSCRIPTION_PRODUCTS.length > 0) {
