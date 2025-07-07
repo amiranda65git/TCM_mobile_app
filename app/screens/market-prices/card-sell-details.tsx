@@ -381,42 +381,52 @@ export default function CardSellDetails() {
                   [
                     { text: t('alerts.cancel'), style: 'cancel' },
                     { text: 'OK', style: 'default', onPress: async () => {
-                        // Récupérer les emails et infos nécessaires
-                        const seller_email = user?.email;
-                        const seller_username = user?.user_metadata?.username || '';
-                        const buyer_email = item.users?.email || '';
-                        const buyer_username = item.users?.username || '';
-                        // Si l'email de l'acheteur n'est pas dans item, il faut le récupérer via Supabase
-                        let final_buyer_email = buyer_email;
-                        if (!final_buyer_email && item.buyer_id) {
-                          const { data } = await supabase
-                            .from('users')
-                            .select('email')
-                            .eq('id', item.buyer_id)
-                            .single();
-                          final_buyer_email = data?.email || '';
-                        }
-                        // Appel Edge Function
-                        const payload = {
-                          seller_email,
-                          buyer_email: final_buyer_email,
-                          card_name: officialCard?.name || '',
-                          price: item.proposed_price.toFixed(2),
-                          seller_username,
-                          buyer_username,
-                        };
                         try {
-                          const res = await fetch('https://dzbdoptsnbonimwunwva.functions.supabase.co/send-transaction-emails', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload),
-                          });
-                          if (res.ok) {
-                            RNAlert.alert(t('settings.alerts.success'), t('market.acceptOfferSuccess'));
-                          } else {
-                            RNAlert.alert(t('settings.alerts.error'), t('market.acceptOfferError'));
+                          // Récupérer le token d'authentification
+                          const { data: { session } } = await supabase.auth.getSession();
+                          
+                          if (!session?.access_token) {
+                            RNAlert.alert(t('general.error'), 'Session expirée, veuillez vous reconnecter');
+                            return;
                           }
-                        } catch (e) {
+
+                          // Appel à notre backend sécurisé
+                          const response = await fetch('https://www.tcmarket.app/api/send-transaction-emails', {
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${session.access_token}`
+                            },
+                            body: JSON.stringify({ 
+                              offer_id: item.id 
+                            }),
+                          });
+
+                          const result = await response.json();
+
+                          if (result.success) {
+                            // Supprimer l'offre de la liste locale
+                            setOffers(prev => prev.filter(o => o.id !== item.id));
+                            
+                            // Recharger les données pour mettre à jour l'état
+                            await loadData();
+                            
+                            // Notifier les autres écrans que les données ont changé
+                            EventRegister.emit('trading_data_changed');
+                            
+                            RNAlert.alert(
+                              t('settings.alerts.success'), 
+                              `${t('market.acceptOfferSuccess')} (${result.transactionId})`
+                            );
+                          } else {
+                            console.error('Erreur acceptation offre:', result.error);
+                            RNAlert.alert(
+                              t('settings.alerts.error'), 
+                              result.error || t('market.acceptOfferError')
+                            );
+                          }
+                        } catch (error) {
+                          console.error('Erreur lors de l\'acceptation de l\'offre:', error);
                           RNAlert.alert(t('settings.alerts.error'), t('market.acceptOfferError'));
                         }
                       }

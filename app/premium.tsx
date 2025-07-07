@@ -28,43 +28,54 @@ export default function Premium() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Remplace les logs de debug par une popin d'information au chargement
+  // Si l'utilisateur est déjà abonné, rediriger vers l'accueil (avec protection)
   useEffect(() => {
-    if (!loading) {
-      Alert.alert(
-        'État de la page Premium',
-        `Produits trouvés : ${products.length}\n` +
-        `Produits disponibles :\n${products.map(p => 
-          `- ${p.title || p.productId} : ${p.price}`
-        ).join('\n')}\n` +
-        `Produit sélectionné : ${selectedProductId || 'Aucun'}`
-      );
+    if (subscriptionStatus?.isActive === true) {
+      const showAlertAndRedirect = () => {
+        Alert.alert(
+          t('premium.alreadySubscribed.title', 'Déjà abonné'),
+          t('premium.alreadySubscribed.message', 'Vous avez déjà un abonnement actif !'),
+          [
+            {
+              text: t('general.ok', 'OK'),
+              onPress: () => {
+                // Délai pour éviter les conflits de navigation
+                setTimeout(() => {
+                  try {
+                    router.back();
+                  } catch (error) {
+                    console.error('Erreur navigation:', error);
+                    router.replace('/(app)/home');
+                  }
+                }, 100);
+              }
+            }
+          ]
+        );
+      };
+      
+      // Délai pour s'assurer que le composant est monté
+      setTimeout(showAlertAndRedirect, 500);
     }
-  }, [loading, products]);
+  }, [subscriptionStatus?.isActive, t]);
 
-  // Si l'utilisateur est déjà abonné, rediriger vers l'accueil
+  // Sélectionner automatiquement le produit mensuel par défaut (avec protection)
   useEffect(() => {
-    if (subscriptionStatus.isActive) {
-      Alert.alert(
-        t('premium.alreadySubscribed.title', 'Déjà abonné'),
-        t('premium.alreadySubscribed.message', 'Vous avez déjà un abonnement actif !'),
-        [
-          {
-            text: t('general.ok', 'OK'),
-            onPress: () => router.back()
-          }
-        ]
-      );
+    if (Array.isArray(products) && products.length > 0 && !selectedProductId) {
+      try {
+        const monthlyProduct = products.find(p => 
+          p?.productId && p.productId.includes('monthly')
+        );
+        const defaultProduct = monthlyProduct || products[0];
+        
+        if (defaultProduct?.productId) {
+          setSelectedProductId(defaultProduct.productId);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la sélection du produit par défaut:', error);
+      }
     }
-  }, [subscriptionStatus.isActive]);
-
-  // Sélectionner automatiquement le produit mensuel par défaut
-  useEffect(() => {
-    if (products.length > 0 && !selectedProductId) {
-      const monthlyProduct = products.find(p => p.productId.includes('monthly'));
-      setSelectedProductId(monthlyProduct?.productId || products[0].productId);
-    }
-  }, [products]);
+  }, [products.length, selectedProductId]);
 
   const handleSubscribe = async () => {
     if (!selectedProductId) {
@@ -74,19 +85,24 @@ export default function Premium() {
 
     setIsProcessing(true);
     try {
-      Alert.alert(
-        'Début de l\'achat',
-        `Tentative d'achat du produit : ${selectedProductId}\n` +
-        'Veuillez patienter...'
-      );
-
       const success = await purchaseSubscription(selectedProductId);
       
       if (success) {
         Alert.alert(
           'Succès',
           'Achat réussi ! Redirection vers l\'accueil...',
-          [{ text: 'OK', onPress: () => router.replace('/(app)/home') }]
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              setTimeout(() => {
+                try {
+                  router.replace('/(app)/home');
+                } catch (error) {
+                  console.error('Erreur navigation après achat:', error);
+                }
+              }, 100);
+            }
+          }]
         );
       }
     } catch (error) {
@@ -105,12 +121,16 @@ export default function Premium() {
       await restorePurchases();
     } catch (error) {
       console.error('Erreur lors de la restauration:', error);
+      Alert.alert('Erreur', 'Impossible de restaurer les achats');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const formatPrice = (price: string) => {
+  const formatPrice = (price: string | undefined) => {
+    if (!price || typeof price !== 'string') {
+      return 'Prix indisponible';
+    }
     // Supprimer les symboles de devise pour nettoyer l'affichage
     return price.replace(/[€$£¥]/g, '') + ' €';
   };
@@ -318,26 +338,32 @@ export default function Premium() {
           </View>
 
           {/* Sélection des produits d'abonnement */}
-          {!loading && products.length > 0 && (
+          {!loading && Array.isArray(products) && products.length > 0 && (
             <View style={dynamicStyles.productsContainer}>
               <Text style={dynamicStyles.productsTitle}>
                 {t('premium.choosePlan', 'Choisissez votre plan')}
               </Text>
-              {products.map((product) => (
+              {products
+                .filter(product => product && product.productId) // Filtrer les produits valides
+                .map((product) => (
                 <TouchableOpacity
                   key={product.productId}
                   style={[
                     dynamicStyles.productItem,
                     selectedProductId === product.productId && dynamicStyles.selectedProduct
                   ]}
-                  onPress={() => setSelectedProductId(product.productId)}
+                  onPress={() => {
+                    if (product.productId) {
+                      setSelectedProductId(product.productId);
+                    }
+                  }}
                 >
                   <View style={dynamicStyles.productInfo}>
                     <Text style={dynamicStyles.productTitle}>
-                      {product.title || product.productId}
+                      {product.title || product.productId || 'Produit sans nom'}
                     </Text>
                     <Text style={dynamicStyles.productDescription}>
-                      {product.description}
+                      {product.description || 'Description non disponible'}
                     </Text>
                   </View>
                   <Text style={dynamicStyles.productPrice}>
