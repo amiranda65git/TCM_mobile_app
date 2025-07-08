@@ -28,48 +28,29 @@ export default function Premium() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Si l'utilisateur est déjà abonné, rediriger vers l'accueil (avec protection)
+  // Debug de l'état de subscription
   useEffect(() => {
-    if (subscriptionStatus?.isActive === true) {
-      const showAlertAndRedirect = () => {
-        Alert.alert(
-          t('premium.alreadySubscribed.title', 'Déjà abonné'),
-          t('premium.alreadySubscribed.message', 'Vous avez déjà un abonnement actif !'),
-          [
-            {
-              text: t('general.ok', 'OK'),
-              onPress: () => {
-                // Délai pour éviter les conflits de navigation
-                setTimeout(() => {
-                  try {
-                    router.back();
-                  } catch (error) {
-                    console.error('Erreur navigation:', error);
-                    router.replace('/(app)/home');
-                  }
-                }, 100);
-              }
-            }
-          ]
-        );
-      };
-      
-      // Délai pour s'assurer que le composant est monté
-      setTimeout(showAlertAndRedirect, 500);
-    }
-  }, [subscriptionStatus?.isActive, t]);
+    console.log('[Premium] État subscription:', {
+      subscriptionStatus,
+      loading,
+      products: products.length,
+      selectedProductId
+    });
+  }, [subscriptionStatus, loading, products, selectedProductId]);
 
-  // Sélectionner automatiquement le produit mensuel par défaut (avec protection)
+  // Sélectionner automatiquement le produit par défaut (avec protection)
   useEffect(() => {
     if (Array.isArray(products) && products.length > 0 && !selectedProductId) {
       try {
+        // Privilégier le produit mensuel ou le produit Pokemon Android
         const monthlyProduct = products.find(p => 
-          p?.productId && p.productId.includes('monthly')
+          p?.productId && (p.productId.includes('monthly') || p.productId === 'tcmarket_premium_pokemon')
         );
         const defaultProduct = monthlyProduct || products[0];
         
         if (defaultProduct?.productId) {
           setSelectedProductId(defaultProduct.productId);
+          console.log('[Premium] Produit sélectionné automatiquement:', defaultProduct.productId);
         }
       } catch (error) {
         console.error('Erreur lors de la sélection du produit par défaut:', error);
@@ -78,14 +59,24 @@ export default function Premium() {
   }, [products.length, selectedProductId]);
 
   const handleSubscribe = async () => {
+    console.log('[Premium] handleSubscribe appelé', {
+      selectedProductId,
+      isProcessing,
+      loading,
+      products: products.length
+    });
+
     if (!selectedProductId) {
+      console.log('[Premium] Aucun produit sélectionné');
       Alert.alert(t('general.error'), t('premium.selectProduct', 'Veuillez sélectionner un abonnement'));
       return;
     }
 
     setIsProcessing(true);
     try {
+      console.log('[Premium] Début de l\'achat pour:', selectedProductId);
       const success = await purchaseSubscription(selectedProductId);
+      console.log('[Premium] Résultat de l\'achat:', success);
       
       if (success) {
         Alert.alert(
@@ -106,6 +97,7 @@ export default function Premium() {
         );
       }
     } catch (error) {
+      console.error('[Premium] Erreur dans handleSubscribe:', error);
       Alert.alert(
         'Erreur d\'achat',
         `Une erreur est survenue :\n${(error as Error).message}\n\nVeuillez réessayer.`
@@ -399,7 +391,10 @@ export default function Premium() {
             dynamicStyles.subscribeButton,
             (isProcessing || loading || !selectedProductId) && dynamicStyles.subscribeButtonDisabled
           ]}
-          onPress={handleSubscribe}
+          onPress={() => {
+            console.log('[Premium] Bouton cliqué');
+            handleSubscribe();
+          }}
           disabled={isProcessing || loading || !selectedProductId}
         >
           {isProcessing ? (

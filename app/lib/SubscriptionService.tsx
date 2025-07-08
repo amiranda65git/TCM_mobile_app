@@ -50,9 +50,7 @@ interface SubscriptionContextType {
 // Configuration des produits d'abonnement
 const SUBSCRIPTION_PRODUCTS = Platform.select({
   ios: ['tcmarket-premium-monthly', 'tcmarket-premium-yearly'],
-  android: [
-    'tcmarket_premium_pokemon'
-  ],
+  android: ['tcmarket_premium_pokemon'],
   default: []
 });
 
@@ -101,111 +99,47 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // Popin de diagnostic technique
-      Alert.alert(
-        'Diagnostic Technique',
-        `Plateforme : ${Platform.OS}\n` +
-        `Version : ${Platform.Version}\n` +
-        `Mode dev : ${__DEV__ ? 'Oui' : 'Non'}\n` +
-        `Produits configurés : ${SUBSCRIPTION_PRODUCTS.join(', ')}\n` +
-        `User ID : ${user?.id || 'Non connecté'}`,
-        [
-          { text: 'OK', style: 'default' }
-        ],
-        { cancelable: false }
-      );
+      console.log('[SubscriptionService] Initialisation IAP:', {
+        platform: Platform.OS,
+        isDev: __DEV__,
+        products: SUBSCRIPTION_PRODUCTS,
+        userId: user?.id
+      });
       
-      // Connexion aux services IAP
+      // Connexion aux services IAP (Google Play / App Store)
       await initConnection();
+      console.log('[SubscriptionService] Connexion IAP établie');
       
-      // Vérification de la compatibilité avant getSubscriptions
-      Alert.alert(
-        'Test de compatibilité',
-        'Vérification de la compatibilité des fonctionnalités IAP...',
-        [{ text: 'OK', style: 'default' }],
-        { cancelable: false }
-      );
-      
-      // Récupération des produits disponibles
       if (SUBSCRIPTION_PRODUCTS.length > 0) {
         try {
           const availableProducts = await getSubscriptions(SUBSCRIPTION_PRODUCTS);
+          console.log('[SubscriptionService] Produits récupérés:', availableProducts);
           setProducts(availableProducts);
 
-          // Ajout d'une popin détaillée pour le debug
-          Alert.alert(
-            'Debug IAP',
-            `Résultat getSubscriptions :\n${JSON.stringify(availableProducts, null, 2)}\n\nProduits demandés :\n${JSON.stringify(SUBSCRIPTION_PRODUCTS)}\n\nUser ID : ${user?.id || 'Non connecté'}`,
-            [
-              { text: 'OK', style: 'default' }
-            ],
-            { cancelable: false }
-          );
-
           if (availableProducts.length === 0) {
-            Alert.alert(
-              'Configuration IAP',
-              'Aucun abonnement trouvé. Vérifiez la configuration Google Play Console.'
-            );
+            console.warn('[SubscriptionService] Aucun produit trouvé dans les stores');
           }
         } catch (productError) {
-          // Popin détaillée sur l'erreur
-          Alert.alert(
-            'Erreur abonnements',
-            `Impossible de récupérer les abonnements :\n${(productError as Error).message}\n\nStack :\n${(productError as Error).stack}\n\nProduits demandés :\n${JSON.stringify(SUBSCRIPTION_PRODUCTS)}`,
-            [
-              { text: 'OK', style: 'default' }
-            ],
-            { cancelable: false }
-          );
+          console.error('[SubscriptionService] Erreur récupération produits:', productError);
           throw productError;
         }
       } else {
-        Alert.alert(
-          'Configuration IAP',
-          `Aucun abonnement configuré pour cette plateforme : ${Platform.OS}`
-        );
+        console.warn('[SubscriptionService] Aucun produit configuré pour', Platform.OS);
       }
     } catch (error) {
-      Alert.alert(
-        'Erreur IAP',
-        `Erreur d'initialisation :\n${(error as Error).message}\n\n` +
-        'Vérifiez votre connexion internet ou contactez le support.'
-      );
+      console.error('[SubscriptionService] Erreur initialisation IAP:', error);
       
-      // Pour le développement Android, on peut simuler les produits
-      if (__DEV__ && Platform.OS === 'android') {
-        Alert.alert(
-          'Mode développement',
-          'Simulation des produits activée'
-        );
-        setProducts([
-          {
-            productId: 'tcmarket-premium-monthly',
-            price: '4,99 €',
-            localizedPrice: '4,99 €',
-            title: 'TCMarket Premium Mensuel',
-            description: 'Abonnement premium mensuel',
-            currency: 'EUR'
-          },
-          {
-            productId: 'tcmarket-premium-yearly',
-            price: '49,99 €',
-            localizedPrice: '49,99 €',
-            title: 'TCMarket Premium Annuel',
-            description: 'Abonnement premium annuel',
-            currency: 'EUR'
-          },
-          {
-            productId: 'tcmarket-premium-yearly2',
-            price: '39,99 €',
-            localizedPrice: '39,99 €',
-            title: 'TCMarket Premium Annuel 2',
-            description: 'Abonnement premium annuel (version 2)',
-            currency: 'EUR'
-          }
-        ] as ProductSimu[]);
-      }
+      // En cas d'erreur, ne pas charger de produits simulés
+      // L'utilisateur doit voir l'erreur et corriger la configuration
+      setProducts([]);
+      
+      Alert.alert(
+        'Erreur de configuration',
+        'Impossible de récupérer les abonnements depuis ' + 
+        (Platform.OS === 'android' ? 'Google Play' : 'App Store') + 
+        '. Vérifiez votre connexion internet et que les produits sont bien configurés.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
@@ -216,11 +150,19 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     try {
       setSubscriptionStatus(prev => ({ ...prev, loading: true }));
+      console.log('[SubscriptionService] Vérification du statut d\'abonnement pour:', user.id);
 
-      // Vérifier l'état de l'abonnement via Edge Function
-      const { data, error } = await supabase.functions.invoke('check-subscription');
+      // Vérifier l'état de l'abonnement via l'API backend
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error('[SubscriptionService] Erreur lors de la vérification:', error);
         setSubscriptionStatus({
           isActive: false,
@@ -232,16 +174,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const now = new Date();
+      const isActive = data && new Date(data.expires_at) > now;
+
+      console.log('[SubscriptionService] Statut abonnement:', { isActive, data });
+
       setSubscriptionStatus({
-        isActive: data.isActive,
-        expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-        productId: data.productId,
-        transactionId: null,
+        isActive: !!isActive,
+        expiresAt: data?.expires_at ? new Date(data.expires_at) : null,
+        productId: data?.product_id || null,
+        transactionId: data?.transaction_id || null,
         loading: false
       });
     } catch (error) {
       console.error('[SubscriptionService] Erreur lors de la vérification du statut:', error);
-      Alert.alert('Erreur abonnement', 'Impossible de vérifier le statut de votre abonnement.');
       setSubscriptionStatus(prev => ({ ...prev, loading: false }));
     }
   };
@@ -254,6 +200,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     try {
       setLoading(true);
+      console.log('[SubscriptionService] Achat en cours pour:', productId);
       
       const product = products.find(p => p.productId === productId);
       if (!product) {
@@ -261,33 +208,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return false;
       }
       
-      // Mode développement : simuler l'achat
-      if (__DEV__ && Platform.OS === 'android') {
-        Alert.alert(
-          'Mode développement',
-          'Simulation d\'achat en cours...'
-        );
-        
-        const mockPurchase = {
-          productId: productId,
-          transactionId: `dev_android_${Date.now()}`,
-          transactionReceipt: `mock_receipt_${Date.now()}`,
-          transactionDate: Date.now(),
-        };
-        
-        const isValid = await validatePurchaseWithBackend(mockPurchase as any);
-        
-        if (isValid) {
-          await checkSubscriptionStatus();
-          Alert.alert('Succès', 'Votre abonnement a été activé avec succès ! (Mode développement)');
-          return true;
-        } else {
-          Alert.alert('Erreur', 'Impossible de valider votre achat. Vérifiez la configuration backend.');
-          return false;
-        }
-      }
-      
-      // Effectuer l'achat réel
+      // Effectuer l'achat réel via Google Play / App Store
+      console.log('[SubscriptionService] Achat via', Platform.OS === 'android' ? 'Google Play' : 'App Store');
       let purchaseRequest;
       if (Platform.OS === 'ios') {
         purchaseRequest = { request: { sku: productId }, type: 'subs' as const };
@@ -301,25 +223,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         };
       }
       
-      Alert.alert(
-        'Achat en cours',
-        'Connexion au service de paiement...'
-      );
-      
       const purchase = await requestPurchase(purchaseRequest);
       
       if (purchase && !Array.isArray(purchase)) {
-        Alert.alert(
-          'Validation en cours',
-          'Vérification de votre achat...'
-        );
+        console.log('[SubscriptionService] Achat effectué, validation en cours');
         
         const isValid = await validatePurchaseWithBackend(purchase as any);
         
         if (isValid) {
           await finishTransaction({ purchase, isConsumable: false });
           await checkSubscriptionStatus();
-          Alert.alert('Succès', 'Votre abonnement a été activé avec succès !');
           return true;
         } else {
           Alert.alert('Erreur', 'Impossible de valider votre achat. Contactez le support.');
@@ -329,6 +242,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       
       return false;
     } catch (error) {
+      console.error('[SubscriptionService] Erreur lors de l\'achat:', error);
+      
       let errorMessage = 'Une erreur est survenue lors de l\'achat.';
       
       if ((error as Error).message?.includes('User cancelled')) {
@@ -348,24 +263,52 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   const validatePurchaseWithBackend = async (purchase: any): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.functions.invoke('validate-subscription', {
-        body: {
-          transactionReceipt: purchase.transactionReceipt,
-          productId: purchase.productId,
+      console.log('[SubscriptionService] Validation de l\'achat:', purchase);
+      
+      // Calculer la date d'expiration selon le produit
+      const now = new Date();
+      const expiresAt = new Date();
+      
+      if (purchase.productId.includes('monthly') || purchase.productId === 'tcmarket_premium_pokemon') {
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+      } else if (purchase.productId.includes('yearly')) {
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      } else {
+        expiresAt.setMonth(expiresAt.getMonth() + 1); // Par défaut 1 mois
+      }
+      
+      console.log('[SubscriptionService] Création abonnement en base de données');
+      
+      // Désactiver les anciens abonnements
+      await supabase
+        .from('subscriptions')
+        .update({ status: 'canceled', updated_at: now.toISOString() })
+        .eq('user_id', user!.id)
+        .eq('status', 'active');
+      
+      // Créer le nouvel abonnement
+      const { error } = await supabase
+        .from('subscriptions')
+        .insert({
+          user_id: user!.id,
+          product_id: purchase.productId,
+          transaction_id: purchase.transactionId,
           platform: Platform.OS,
-        },
-      });
-
+          status: 'active',
+          expires_at: expiresAt.toISOString(),
+          created_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        });
+      
       if (error) {
-        console.error('[SubscriptionService] Erreur lors de la validation:', error);
-        Alert.alert('Erreur abonnement', 'Erreur lors de la validation de l\'achat.');
+        console.error('[SubscriptionService] Erreur création abonnement:', error);
         return false;
       }
-
-      return data.success && data.isActive;
+      
+      console.log('[SubscriptionService] Abonnement créé avec succès, expire le:', expiresAt);
+      return true;
     } catch (error) {
       console.error('[SubscriptionService] Erreur lors de la validation:', error);
-      Alert.alert('Erreur abonnement', 'Erreur lors de la validation de l\'achat.');
       return false;
     }
   };
