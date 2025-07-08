@@ -40,23 +40,29 @@ export default function Premium() {
 
   // Sélectionner automatiquement le produit par défaut (avec protection)
   useEffect(() => {
+    console.log('[Premium] Effet de sélection automatique:', {
+      products: products,
+      productsLength: products.length,
+      selectedProductId,
+      isArray: Array.isArray(products)
+    });
+    
     if (Array.isArray(products) && products.length > 0 && !selectedProductId) {
       try {
-        // Privilégier le produit mensuel ou le produit Pokemon Android
-        const monthlyProduct = products.find(p => 
-          p?.productId && (p.productId.includes('monthly') || p.productId === 'tcmarket_premium_pokemon')
-        );
-        const defaultProduct = monthlyProduct || products[0];
+        // Forcer la sélection du premier produit disponible
+        const firstProduct = products[0];
         
-        if (defaultProduct?.productId) {
-          setSelectedProductId(defaultProduct.productId);
-          console.log('[Premium] Produit sélectionné automatiquement:', defaultProduct.productId);
+        if (firstProduct?.productId) {
+          setSelectedProductId(firstProduct.productId);
+          console.log('[Premium] Produit sélectionné automatiquement:', firstProduct.productId);
+        } else {
+          console.error('[Premium] Produit invalide:', firstProduct);
         }
       } catch (error) {
         console.error('Erreur lors de la sélection du produit par défaut:', error);
       }
     }
-  }, [products.length, selectedProductId]);
+  }, [products, selectedProductId]);
 
   const handleSubscribe = async () => {
     console.log('[Premium] handleSubscribe appelé', {
@@ -66,16 +72,27 @@ export default function Premium() {
       products: products.length
     });
 
-    if (!selectedProductId) {
-      console.log('[Premium] Aucun produit sélectionné');
-      Alert.alert(t('general.error'), t('premium.selectProduct', 'Veuillez sélectionner un abonnement'));
+    // Sélectionner automatiquement le premier produit si aucun n'est sélectionné
+    let productToUse: string | null = selectedProductId;
+    if (!productToUse && products.length > 0) {
+      productToUse = products[0].productId;
+      setSelectedProductId(productToUse);
+      console.log('[Premium] Sélection automatique du produit:', productToUse);
+    }
+
+    if (!productToUse) {
+      console.log('[Premium] Aucun produit disponible');
+      Alert.alert(t('general.error'), 'Aucun produit d\'abonnement disponible');
       return;
     }
 
+    // À ce point, productToUse est forcément non-null
+    const finalProductId: string = productToUse;
+
     setIsProcessing(true);
     try {
-      console.log('[Premium] Début de l\'achat pour:', selectedProductId);
-      const success = await purchaseSubscription(selectedProductId);
+      console.log('[Premium] Début de l\'achat pour:', finalProductId);
+      const success = await purchaseSubscription(finalProductId);
       console.log('[Premium] Résultat de l\'achat:', success);
       
       if (success) {
@@ -389,19 +406,29 @@ export default function Premium() {
         <TouchableOpacity 
           style={[
             dynamicStyles.subscribeButton,
-            (isProcessing || loading || !selectedProductId) && dynamicStyles.subscribeButtonDisabled
+            (isProcessing || loading || (products.length === 0)) && dynamicStyles.subscribeButtonDisabled
           ]}
           onPress={() => {
-            console.log('[Premium] Bouton cliqué');
+            console.log('[Premium] Bouton cliqué, données:', {
+              selectedProductId,
+              products: products.length,
+              firstProduct: products[0]?.productId
+            });
+            
+            // Si aucun produit n'est sélectionné mais qu'il y en a des disponibles, sélectionner le premier
+            if (!selectedProductId && products.length > 0) {
+              setSelectedProductId(products[0].productId);
+            }
+            
             handleSubscribe();
           }}
-          disabled={isProcessing || loading || !selectedProductId}
+          disabled={isProcessing || loading || (products.length === 0)}
         >
           {isProcessing ? (
             <ActivityIndicator color="#1E2F4D" size="small" />
           ) : (
             <Text style={dynamicStyles.subscribeButtonText}>
-              {selectedProductId 
+              {products.length > 0 
                 ? t('premium.subscribeNow', 'S\'abonner maintenant')
                 : t('premium.selectProduct', 'Sélectionnez un plan')
               }
