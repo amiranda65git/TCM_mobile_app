@@ -18,12 +18,14 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
 import { useSubscription } from './lib/SubscriptionService';
+import { useAuth } from './lib/auth';
 
 export default function Premium() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, loading } = useSubscription();
+  const { user } = useAuth();
+  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, loading, testConfiguration } = useSubscription();
   
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -399,6 +401,41 @@ export default function Premium() {
         >
           <Text style={[dynamicStyles.restoreButtonText, { color: colors.text.secondary }]}>
             {t('premium.restorePurchases', 'Restaurer mes achats')}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Bouton DEBUG temporaire */}
+        <TouchableOpacity 
+          style={[dynamicStyles.restoreButton, { backgroundColor: '#FF6B6B', marginBottom: 10 }]}
+          onPress={async () => {
+            // Debug info dans des alertes
+            const debugInfo = `
+Platform: ${Platform.OS}
+Products chargés: ${products.length}
+État loading: ${loading}
+Produit sélectionné: ${selectedProductId || 'aucun'}
+Utilisateur connecté: ${!!user}
+Mode DEV: ${__DEV__}
+
+Produits détaillés:
+${products.length > 0 ? 
+  products.map(p => `- ${p.productId}: ${p.price}`).join('\n') : 
+  'Aucun produit trouvé'
+}`;
+
+            Alert.alert('🐞 DEBUG IAP', debugInfo, [
+              { text: 'Test Config', onPress: async () => {
+                if (testConfiguration) {
+                  await testConfiguration();
+                  Alert.alert('Test Config', 'Vérifiez la console pour les détails');
+                }
+              }},
+              { text: 'OK' }
+            ]);
+          }}
+        >
+          <Text style={[dynamicStyles.restoreButtonText, { color: 'white' }]}>
+            🐞 DEBUG IAP
           </Text>
         </TouchableOpacity>
 
