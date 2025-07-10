@@ -11,7 +11,7 @@ import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue, getCollectionPriceVariation } from '../lib/supabase';
-import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import PremiumRestrictionBanner from '../components/PremiumRestrictionBanner';
 
 interface CardProps {

@@ -73,8 +73,7 @@ export default {
       "expo-font",
       "expo-localization",
       "expo-image-picker",
-      "react-native-vision-camera",
-      "expo-iap"
+      "react-native-vision-camera"
     ],
     experiments: {
       tsconfigPaths: true,

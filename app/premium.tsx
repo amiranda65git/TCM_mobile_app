@@ -17,84 +17,75 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
-import { useSubscription } from './lib/SubscriptionService';
-import { useAuth } from './lib/auth';
+import { useRevenueCat } from './lib/RevenueCatService';
+import { PurchasesPackage } from 'react-native-purchases';
 
 export default function Premium() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const { user } = useAuth();
-  const { subscriptionStatus, products, purchaseSubscription, restorePurchases, loading, testConfiguration } = useSubscription();
+  const { subscriptionStatus, packages, purchaseSubscription, restorePurchases, loading } = useRevenueCat();
   
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Debug de l'état de subscription
+  // Debug de l'état RevenueCat
   useEffect(() => {
-    console.log('[Premium] État subscription:', {
+    console.log('[Premium] État RevenueCat:', {
       subscriptionStatus,
       loading,
-      products: products.length,
-      selectedProductId
+      packages: packages.length,
+      selectedPackage: selectedPackage?.identifier
     });
-  }, [subscriptionStatus, loading, products, selectedProductId]);
+  }, [subscriptionStatus, loading, packages, selectedPackage]);
 
-  // Sélectionner automatiquement le produit par défaut (avec protection)
+  // Sélectionner automatiquement le premier package
   useEffect(() => {
     console.log('[Premium] Effet de sélection automatique:', {
-      products: products,
-      productsLength: products.length,
-      selectedProductId,
-      isArray: Array.isArray(products)
+      packages: packages,
+      packagesLength: packages.length,
+      selectedPackage: selectedPackage?.identifier,
+      isArray: Array.isArray(packages)
     });
     
-    if (Array.isArray(products) && products.length > 0 && !selectedProductId) {
+    if (Array.isArray(packages) && packages.length > 0 && !selectedPackage) {
       try {
-        // Forcer la sélection du premier produit disponible
-        const firstProduct = products[0];
-        
-        if (firstProduct?.productId) {
-          setSelectedProductId(firstProduct.productId);
-          console.log('[Premium] Produit sélectionné automatiquement:', firstProduct.productId);
-        } else {
-          console.error('[Premium] Produit invalide:', firstProduct);
-        }
+        // Sélectionner le premier package disponible
+        const firstPackage = packages[0];
+        setSelectedPackage(firstPackage);
+        console.log('[Premium] Package sélectionné automatiquement:', firstPackage.identifier);
       } catch (error) {
-        console.error('Erreur lors de la sélection du produit par défaut:', error);
+        console.error('Erreur lors de la sélection du package par défaut:', error);
       }
     }
-  }, [products, selectedProductId]);
+  }, [packages, selectedPackage]);
 
   const handleSubscribe = async () => {
     console.log('[Premium] handleSubscribe appelé', {
-      selectedProductId,
+      selectedPackage: selectedPackage?.identifier,
       isProcessing,
       loading,
-      products: products.length
+      packages: packages.length
     });
 
-    // Sélectionner automatiquement le premier produit si aucun n'est sélectionné
-    let productToUse: string | null = selectedProductId;
-    if (!productToUse && products.length > 0) {
-      productToUse = products[0].productId;
-      setSelectedProductId(productToUse);
-      console.log('[Premium] Sélection automatique du produit:', productToUse);
+    // Sélectionner automatiquement le premier package si aucun n'est sélectionné
+    let packageToUse = selectedPackage;
+    if (!packageToUse && packages.length > 0) {
+      packageToUse = packages[0];
+      setSelectedPackage(packageToUse);
+      console.log('[Premium] Sélection automatique du package:', packageToUse.identifier);
     }
 
-    if (!productToUse) {
-      console.log('[Premium] Aucun produit disponible');
+    if (!packageToUse) {
+      console.log('[Premium] Aucun package disponible');
       Alert.alert(t('general.error'), 'Aucun produit d\'abonnement disponible');
       return;
     }
 
-    // À ce point, productToUse est forcément non-null
-    const finalProductId: string = productToUse;
-
     setIsProcessing(true);
     try {
-      console.log('[Premium] Début de l\'achat pour:', finalProductId);
-      const success = await purchaseSubscription(finalProductId);
+      console.log('[Premium] Début de l\'achat pour:', packageToUse.identifier);
+      const success = await purchaseSubscription(packageToUse);
       console.log('[Premium] Résultat de l\'achat:', success);
       
       if (success) {
@@ -138,12 +129,46 @@ export default function Premium() {
     }
   };
 
-  const formatPrice = (price: string | undefined) => {
-    if (!price || typeof price !== 'string') {
-      return 'Prix indisponible';
+  const formatPrice = (pack: PurchasesPackage): string => {
+    try {
+      return pack.product.priceString || '2.99 CHF';
+    } catch (error) {
+      console.error('Erreur formatage prix:', error);
+      return '2.99 CHF';
     }
-    // Supprimer les symboles de devise pour nettoyer l'affichage
-    return price.replace(/[€$£¥]/g, '') + ' €';
+  };
+
+  const getPackageTitle = (pack: PurchasesPackage): string => {
+    try {
+      // Utiliser le titre du produit ou un titre basé sur l'identifiant
+      if (pack.product.title) {
+        return pack.product.title;
+      }
+      
+      // Générer un titre basé sur l'identifier
+      if (pack.identifier.includes('monthly') || pack.identifier.includes('month')) {
+        return 'TCMarket Premium - Mensuel';
+      } else if (pack.identifier.includes('yearly') || pack.identifier.includes('year')) {
+        return 'TCMarket Premium - Annuel';
+      } else {
+        return 'TCMarket Premium';
+      }
+    } catch (error) {
+      console.error('Erreur titre package:', error);
+      return 'TCMarket Premium';
+    }
+  };
+
+  const getPackageDescription = (pack: PurchasesPackage): string => {
+    try {
+      if (pack.product.description) {
+        return pack.product.description;
+      }
+      return 'Accès complet à toutes les fonctionnalités';
+    } catch (error) {
+      console.error('Erreur description package:', error);
+      return 'Accès complet à toutes les fonctionnalités';
+    }
   };
 
   // Définir les styles dynamiques en fonction du thème
@@ -151,26 +176,6 @@ export default function Premium() {
     container: {
       flex: 1,
       backgroundColor: colors.background,
-    },
-    header: {
-      paddingTop: Platform.OS === 'ios' ? 10 : 10,
-      paddingBottom: 10,
-      paddingHorizontal: 20,
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.background,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: colors.text.primary,
-      flex: 1,
-      textAlign: 'center',
-    },
-    backButton: {
-      padding: 10,
     },
     content: {
       flex: 1,
@@ -230,19 +235,19 @@ export default function Premium() {
     premiumIcon: {
       marginBottom: 5,
     },
-    productsContainer: {
+    packagesContainer: {
       marginTop: 20,
       paddingHorizontal: 10,
       width: '100%',
     },
-    productsTitle: {
+    packagesTitle: {
       fontSize: 20,
       fontWeight: 'bold',
       color: colors.text.primary,
       textAlign: 'center',
       marginBottom: 20,
     },
-    productItem: {
+    packageItem: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
@@ -252,25 +257,25 @@ export default function Premium() {
       borderWidth: 2,
       borderColor: 'transparent',
     },
-    selectedProduct: {
+    selectedPackage: {
       borderColor: '#FFD700',
       backgroundColor: colors.surface,
     },
-    productInfo: {
+    packageInfo: {
       flex: 1,
       marginRight: 12,
     },
-    productTitle: {
+    packageTitle: {
       fontSize: 16,
       fontWeight: 'bold',
       color: colors.text.primary,
       marginBottom: 4,
     },
-    productDescription: {
+    packageDescription: {
       fontSize: 14,
       color: colors.text.secondary,
     },
-    productPrice: {
+    packagePrice: {
       fontSize: 18,
       fontWeight: 'bold',
       color: '#FFD700',
@@ -300,6 +305,18 @@ export default function Premium() {
     },
     subscribeButtonDisabled: {
       opacity: 0.6,
+    },
+    debugButton: {
+      backgroundColor: '#FF6B6B',
+      marginBottom: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+    },
+    debugButtonText: {
+      color: 'white',
+      textAlign: 'center',
+      fontSize: 14,
     },
   });
 
@@ -348,39 +365,33 @@ export default function Premium() {
             </Text>
           </View>
 
-          {/* Sélection des produits d'abonnement */}
-          {!loading && Array.isArray(products) && products.length > 0 && (
-            <View style={dynamicStyles.productsContainer}>
-              <Text style={dynamicStyles.productsTitle}>
+          {/* Sélection des packages RevenueCat */}
+          {!loading && Array.isArray(packages) && packages.length > 0 && (
+            <View style={dynamicStyles.packagesContainer}>
+              <Text style={dynamicStyles.packagesTitle}>
                 {t('premium.choosePlan', 'Choisissez votre plan')}
               </Text>
-              {products
-                .filter(product => product && product.productId) // Filtrer les produits valides
-                .map((product) => (
+              {packages.map((pack) => (
                 <TouchableOpacity
-                  key={product.productId}
+                  key={pack.identifier}
                   style={[
-                    dynamicStyles.productItem,
-                    selectedProductId === product.productId && dynamicStyles.selectedProduct
+                    dynamicStyles.packageItem,
+                    selectedPackage?.identifier === pack.identifier && dynamicStyles.selectedPackage
                   ]}
-                  onPress={() => {
-                    if (product.productId) {
-                      setSelectedProductId(product.productId);
-                    }
-                  }}
+                  onPress={() => setSelectedPackage(pack)}
                 >
-                  <View style={dynamicStyles.productInfo}>
-                    <Text style={dynamicStyles.productTitle}>
-                      {product.title || product.productId || 'Produit sans nom'}
+                  <View style={dynamicStyles.packageInfo}>
+                    <Text style={dynamicStyles.packageTitle}>
+                      {getPackageTitle(pack)}
                     </Text>
-                    <Text style={dynamicStyles.productDescription}>
-                      {product.description || 'Description non disponible'}
+                    <Text style={dynamicStyles.packageDescription}>
+                      {getPackageDescription(pack)}
                     </Text>
                   </View>
-                  <Text style={dynamicStyles.productPrice}>
-                    {formatPrice(product.price)}
+                  <Text style={dynamicStyles.packagePrice}>
+                    {formatPrice(pack)}
                   </Text>
-                  {selectedProductId === product.productId && (
+                  {selectedPackage?.identifier === pack.identifier && (
                     <Ionicons name="checkmark-circle" size={24} color="#FFD700" />
                   )}
                 </TouchableOpacity>
@@ -393,6 +404,32 @@ export default function Premium() {
       {/* Boutons flottants */}
       <View style={dynamicStyles.floatingButtonContainer}>
         
+        {/* Bouton DEBUG temporaire RevenueCat */}
+        <TouchableOpacity 
+          style={dynamicStyles.debugButton}
+          onPress={() => {
+            const debugInfo = `
+Platform: ${Platform.OS}
+Packages chargés: ${packages.length}
+État loading: ${loading}
+Package sélectionné: ${selectedPackage?.identifier || 'aucun'}
+Statut abonnement: ${subscriptionStatus.isActive ? 'actif' : 'inactif'}
+Mode DEV: ${__DEV__}
+
+Packages détaillés:
+${packages.length > 0 ? 
+  packages.map(p => `- ID: ${p.identifier}\n  Prix: ${p.product.priceString}\n  Titre: ${getPackageTitle(p)}`).join('\n\n') : 
+  'Aucun package trouvé'
+}`;
+
+            Alert.alert('🚀 DEBUG RevenueCat', debugInfo, [{ text: 'OK' }]);
+          }}
+        >
+          <Text style={dynamicStyles.debugButtonText}>
+            🚀 DEBUG RevenueCat
+          </Text>
+        </TouchableOpacity>
+        
         {/* Bouton Restaurer les achats */}
         <TouchableOpacity 
           style={[dynamicStyles.restoreButton, { backgroundColor: colors.surface }]}
@@ -404,68 +441,28 @@ export default function Premium() {
           </Text>
         </TouchableOpacity>
 
-        {/* Bouton DEBUG temporaire */}
-        <TouchableOpacity 
-          style={[dynamicStyles.restoreButton, { backgroundColor: '#FF6B6B', marginBottom: 10 }]}
-          onPress={async () => {
-            // Debug info dans des alertes
-            const debugInfo = `
-Platform: ${Platform.OS}
-Products chargés: ${products.length}
-État loading: ${loading}
-Produit sélectionné: ${selectedProductId || 'aucun'}
-Utilisateur connecté: ${!!user}
-Mode DEV: ${__DEV__}
-
-Produits détaillés:
-${products.length > 0 ? 
-  products.map(p => `- ${p.productId}: ${p.price}`).join('\n') : 
-  'Aucun produit trouvé'
-}`;
-
-            Alert.alert('🐞 DEBUG IAP', debugInfo, [
-              { text: 'Test Config', onPress: async () => {
-                if (testConfiguration) {
-                  await testConfiguration();
-                  Alert.alert('Test Config', 'Vérifiez la console pour les détails');
-                }
-              }},
-              { text: 'OK' }
-            ]);
-          }}
-        >
-          <Text style={[dynamicStyles.restoreButtonText, { color: 'white' }]}>
-            🐞 DEBUG IAP
-          </Text>
-        </TouchableOpacity>
-
         {/* Bouton d'abonnement principal */}
         <TouchableOpacity 
           style={[
             dynamicStyles.subscribeButton,
-            (isProcessing || loading || (products.length === 0)) && dynamicStyles.subscribeButtonDisabled
+            (isProcessing || loading || (packages.length === 0)) && dynamicStyles.subscribeButtonDisabled
           ]}
           onPress={() => {
             console.log('[Premium] Bouton cliqué, données:', {
-              selectedProductId,
-              products: products.length,
-              firstProduct: products[0]?.productId
+              selectedPackage: selectedPackage?.identifier,
+              packages: packages.length,
+              firstPackage: packages[0]?.identifier
             });
-            
-            // Si aucun produit n'est sélectionné mais qu'il y en a des disponibles, sélectionner le premier
-            if (!selectedProductId && products.length > 0) {
-              setSelectedProductId(products[0].productId);
-            }
             
             handleSubscribe();
           }}
-          disabled={isProcessing || loading || (products.length === 0)}
+          disabled={isProcessing || loading || (packages.length === 0)}
         >
           {isProcessing ? (
             <ActivityIndicator color="#1E2F4D" size="small" />
           ) : (
             <Text style={dynamicStyles.subscribeButtonText}>
-              {products.length > 0 
+              {packages.length > 0 
                 ? t('premium.subscribeNow', 'S\'abonner maintenant')
                 : t('premium.selectProduct', 'Sélectionnez un plan')
               }

@@ -10,7 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import LanguageFlag from '../components/LanguageFlag';
-import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 // Enum pour les options de tri
 enum SortOption {

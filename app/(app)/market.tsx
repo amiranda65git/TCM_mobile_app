@@ -13,7 +13,7 @@ import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, se
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 // Mise à jour du composant CardListItem pour accepter des enfants (pour la différence de prix)
 const CardListItem = ({ card, colors, onPress, children }: { card: any, colors: any, onPress: () => void, children?: React.ReactNode }) => (

@@ -16,7 +16,7 @@ import SupabaseService from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { useSubscriptionRestrictions } from '../lib/SubscriptionService';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 type ScanResult = {
   pokemonName: string | null;
