@@ -22,7 +22,8 @@ export default {
     sold: 'Vendues',
     editions: 'Editions',
     cardsCategory: 'Cartes',
-    news: 'Nouveautés'
+    news: 'Nouveautés',
+    user: 'Utilisateur'
   },
   collection: {
     empty: 'Collection vide',
@@ -82,6 +83,35 @@ export default {
     cardMarkedAsSold: "Carte marquée comme vendue avec succès",
     markAsSoldError: "Erreur lors du marquage de la carte comme vendue",
     sold: "Vendu",
+    sellDetails: "Détails de la vente",
+    receivedOffers: "Offres reçues",
+    noOffers: "Aucune offre reçue",
+    updateSale: "Mettre à jour la vente",
+    cancelSale: "Annuler la vente",
+    priceInvalid: "Prix invalide",
+    saleUpdated: "Vente mise à jour avec succès",
+    updateError: "Erreur lors de la mise à jour",
+    saleUpdateError: "Erreur lors de la mise à jour de la vente",
+    cancelSaleTitle: "Annuler la vente",
+    cancelSaleMessage: "Êtes-vous sûr de vouloir retirer cette carte de la vente ?",
+    saleCancelled: "Vente annulée avec succès",
+    cancelError: "Erreur lors de l'annulation",
+    sessionExpired: "Session expirée, veuillez vous reconnecter",
+    editSale: "Modifier la vente",
+    marketPrices: "Prix du marché",
+    currentPrice: "Prix actuel",
+    currentCondition: "Condition actuelle",
+    notSpecified: "Non spécifiée",
+    sellingPrice: "Prix de vente",
+    accept: "Accepter",
+    refuse: "Refuser",
+    refuseOfferTitle: "Refuser l'offre",
+    lowPrice: "Prix bas",
+    highPrice: "Prix haut",
+    midPrice: "Prix moyen",
+    makeAnOffer: "Faire une offre",
+    yourOffer: "Votre offre",
+    sendOffer: "Envoyer l'offre"
   },
   alerts: {
     title: 'Notifications',
@@ -142,13 +172,17 @@ export default {
     searchManually: 'Rechercher manuellement',
     searchPlaceholder: 'Rechercher une carte...',
     searching: 'Recherche en cours...',
-    noResults: 'Aucun résultat trouvé'
+    noResults: 'Aucun résultat trouvé',
+    restrictionTitle: 'Limitation atteinte',
+    restrictionMessage: 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.'
   },
   settings: {
     title: 'Paramètres',
     modifyUsername: 'Modifier le pseudo',
     subscription: 'Abonnement',
     free: 'Gratuit',
+    premium: 'Premium',
+    manageSubscription: 'Gérer mon abonnement',
     upgradeToPremium: 'Passer Premium',
     customization: 'Personnalisation',
     darkTheme: 'Thème sombre',
@@ -178,6 +212,11 @@ export default {
     usernamePlaceholder: 'Pseudonyme de l\'utilisateur',
     commentPlaceholder: 'Commentaire (optionnel)',
     reportButton: 'Signaler',
+    subscription: {
+      monthly: 'Mensuel',
+      annual: 'Annuel',
+      premium: 'Premium'
+    },
     changeUsernameModal: {
       title: 'Modifier le pseudo',
       placeholder: 'Entrez votre nouveau pseudo',
@@ -223,7 +262,10 @@ export default {
     error: 'Erreur',
     success: 'Succès',
     passwordMismatch: 'Les mots de passe ne correspondent pas',
-    verificationEmailSent: 'Un email de vérification vous a été envoyé. Veuillez vérifier votre boîte de réception.'
+    verificationEmailSent: 'Un email de vérification vous a été envoyé. Veuillez vérifier votre boîte de réception.',
+    fillAllFields: 'Veuillez remplir tous les champs',
+    genericError: 'Une erreur inattendue s\'est produite',
+    alreadyHaveAccount: 'Vous avez déjà un compte ?'
   },
   forgotPassword: {
     title: 'Mot de passe oublié',
@@ -255,7 +297,10 @@ export default {
     getStarted: 'Commencer',
     all: 'Tous',
     ok: 'OK',
-    error: 'Erreur'
+    error: 'Erreur',
+    cancel: 'Annuler',
+    success: 'Succès',
+    confirm: 'Confirmer'
   },
   card: {
     buy: 'Acheter',
@@ -300,7 +345,11 @@ export default {
     alreadyForSale: 'Cette carte est déjà en vente',
     currentPrice: 'Prix actuel',
     removePriceAlert: 'Supprimer l\'alerte',
-    alert: 'Alerte'
+    alert: 'Alerte',
+    bid: 'Offre',
+    realPhoto: 'Photo réelle',
+    noUserPhoto: 'Pas de photo utilisateur',
+    sellerPrice: 'Prix demandé'
   },
   notifications: {
     title: 'Notifications',
@@ -373,6 +422,9 @@ export default {
     created: 'Alerte de prix créée',
     error: 'Erreur lors de la création de l\'alerte'
   },
+  cards: {
+    loadError: 'Erreur lors du chargement des cartes'
+  },
   premium: {
     title: 'Premium',
     whyPay: 'Pourquoi payer ?',
@@ -402,14 +454,5 @@ export default {
       trading: 'Accès au trading réservé aux membres Premium.'
     },
     upgrade: 'Passer Premium'
-  },
-  scan: {
-    restrictionTitle: 'Limitation atteinte',
-    restrictionMessage: 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.',
-    error: 'Erreur',
-    captureError: 'Erreur lors de la capture'
-  },
-  general: {
-    cancel: 'Annuler'
   },
 }; 

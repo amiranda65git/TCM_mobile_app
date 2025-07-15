@@ -393,7 +393,7 @@ export default function CardMarketplace() {
                       { color: selectedCondition === null ? colors.primary : colors.text.secondary }
                     ]}
                   >
-                    {t('general.all', 'Tous')}
+                    {t('general.all')}
                   </Text>
                 </TouchableOpacity>
                 {CONDITIONS.map(condition => (
@@ -528,7 +528,7 @@ export default function CardMarketplace() {
               {userOffers[item.id] ? (
                 <View style={[styles.buyButton, { backgroundColor: colors.primary, opacity: 0.7 }]}> 
                   <Text style={styles.buyButtonText}>
-                    {t('card.bid', 'Offre')} : {userOffers[item.id].toFixed(2)} €
+                    {t('card.bid')} : {userOffers[item.id].toFixed(2)} €
                   </Text>
                 </View>
               ) : (
@@ -537,7 +537,7 @@ export default function CardMarketplace() {
                   onPress={() => handleBidPress(item)}
                 >
                   <Text style={styles.buyButtonText}>
-                    {t('card.bid', 'Offre')}
+                    {t('card.bid')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -555,7 +555,7 @@ export default function CardMarketplace() {
         <View style={{ flex: 1, backgroundColor: '#00000099', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '85%' }}>
             <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 18, color: colors.text.primary, textAlign: 'center' }}>
-              {t('market.makeAnOffer', 'Faire une offre')}
+              {t('market.makeAnOffer')}
             </Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <View style={{ alignItems: 'center' }}>
@@ -565,7 +565,7 @@ export default function CardMarketplace() {
                 </Text>
               </View>
               <View style={{ alignItems: 'center' }}>
-                <Text style={{ color: colors.text.secondary, fontSize: 13 }}>{t('card.sellerPrice', 'Prix demandé')}</Text>
+                <Text style={{ color: colors.text.secondary, fontSize: 13 }}>{t('card.sellerPrice')}</Text>
                 <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 22 }}>
                   {selectedCardForSale?.price.toFixed(2)} €
                 </Text>
@@ -577,7 +577,7 @@ export default function CardMarketplace() {
                 </Text>
               </View>
             </View>
-            <Text style={{ color: colors.text.primary, marginBottom: 6 }}>{t('market.yourOffer', 'Votre offre')}</Text>
+            <Text style={{ color: colors.text.primary, marginBottom: 6 }}>{t('market.yourOffer')}</Text>
             <TextInput
               style={{
                 borderWidth: 1,
@@ -597,13 +597,13 @@ export default function CardMarketplace() {
                 style={{ marginRight: 16 }}
                 onPress={() => setShowBidModal(false)}
               >
-                <Text style={{ color: colors.text.secondary, fontSize: 16 }}>{t('general.cancel', 'Annuler')}</Text>
+                <Text style={{ color: colors.text.secondary, fontSize: 16 }}>{t('general.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10 }}
                 onPress={handleSendBid}
               >
-                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{t('market.sendOffer', 'Envoyer')}</Text>
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{t('market.sendOffer')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -38,6 +38,7 @@ import { EventRegister } from 'react-native-event-listeners';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
 import Constants from 'expo-constants';
+import { useRevenueCat } from './lib/RevenueCatService';
 
 // Configuration statique pour masquer l'en-tête d'Expo Router
 export const unstable_settings = {
@@ -66,6 +67,7 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const { isDarkMode, toggleTheme } = useTheme();
   const colors = useThemeColors();
+  const { subscriptionStatus, loading: isLoadingRevenueCat } = useRevenueCat();
   
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -386,6 +388,19 @@ export default function Settings() {
   const handlePremium = () => {
     router.push('/premium');
   };
+  
+  // Fonction pour obtenir le type d'abonnement
+  const getSubscriptionType = () => {
+    if (!subscriptionStatus.isActive || !subscriptionStatus.productId) return '';
+    
+    // Déterminer le type d'abonnement basé sur l'ID du produit
+    if (subscriptionStatus.productId.includes('annual') || subscriptionStatus.productId.includes('yearly')) {
+      return t('settings.subscription.annual', 'Annuel');
+    } else if (subscriptionStatus.productId.includes('monthly') || subscriptionStatus.productId.includes('month')) {
+      return t('settings.subscription.monthly', 'Mensuel');
+    }
+    return t('settings.subscription.premium', 'Premium');
+  };
 
   const handlePermissions = () => {
     Alert.alert(t('settings.permissions'), t('settings.alerts.comingSoon'));
@@ -470,15 +485,7 @@ export default function Settings() {
   };
 
   const handleOpenTerms = () => {
-    Alert.alert(t('settings.termsAndConditions'), t('settings.alerts.comingSoon'));
-    // Lorsque le lien sera disponible:
-    // Linking.openURL('https://votre-site.com/terms');
-  };
-  
-  const handleOpenPrivacy = () => {
-    Alert.alert(t('settings.privacyPolicy'), t('settings.alerts.comingSoon'));
-    // Lorsque le lien sera disponible:
-    // Linking.openURL('https://votre-site.com/privacy');
+    Linking.openURL('https://www.tcmarket.app/conditions-generales');
   };
 
   const handleOpenReportModal = () => {
@@ -890,19 +897,22 @@ export default function Settings() {
           <MenuItem 
             icon="diamond" 
             iconColor="#FFD700"
-            text={t('settings.free')} 
+            text={subscriptionStatus.isActive ? t('settings.premium', 'Premium') : t('settings.free')} 
             rightComponent={
               <View style={dynamicStyles.badge}>
-                <Text style={dynamicStyles.badgeText}>{t('settings.free')}</Text>
+                <Text style={dynamicStyles.badgeText}>
+                  {subscriptionStatus.isActive ? getSubscriptionType() : t('settings.free')}
+                </Text>
               </View>
             }
-            isBorderless
+            isBorderless={!subscriptionStatus.isActive}
           />
           
           <MenuItem 
             icon="rocket" 
-            text={t('premium.whyPay', 'Pourquoi payer ?')} 
+            text={subscriptionStatus.isActive ? t('settings.manageSubscription', 'Gérer mon abonnement') : t('premium.whyPay', 'Pourquoi payer ?')} 
             onPress={handlePremium}
+            isBorderless={subscriptionStatus.isActive}
           />
         </View>
         
@@ -957,12 +967,7 @@ export default function Settings() {
             icon="document-text" 
             text={t('settings.termsAndConditions')} 
             onPress={handleOpenTerms}
-          />
-          
-          <MenuItem 
-            icon="shield" 
-            text={t('settings.privacyPolicy')} 
-            onPress={handleOpenPrivacy}
+            isBorderless
           />
         </View>
 

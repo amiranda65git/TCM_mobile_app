@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "TCMarket",
     slug: "tcmarket",
-    version: "1.0.16",  
+    version: "1.1.0",  
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "tcmarket",
@@ -18,7 +18,7 @@ export default {
     assetBundlePatterns: ["**/*"],
     ios: {
       supportsTablet: false,
-      buildNumber: "16",
+      buildNumber: "100",
       bundleIdentifier: "com.tcmarket.app",
       infoPlist: {
         NSCameraUsageDescription: "Cette application a besoin d'accéder à votre caméra pour scanner les cartes Pokémon",
@@ -37,7 +37,7 @@ export default {
     },
     android: {
       supportsTablet: false,
-      versionCode: 16,
+      versionCode: 100,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png", backgroundColor: "#FFFFFF"
       },

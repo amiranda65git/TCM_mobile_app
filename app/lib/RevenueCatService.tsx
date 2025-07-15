@@ -26,6 +26,20 @@ interface RevenueCatContextType {
   loading: boolean;
 }
 
+// 🧪 LISTE DES TESTEURS - Accès premium gratuit
+const PREMIUM_TESTERS = [
+  'amiranda65@yahoo.fr'
+  //'testeur2@example.com',
+  // Ajoutez ici les emails de vos testeurs
+];
+
+// Configuration RevenueCat
+const REVENUECAT_API_KEY = Platform.select({
+  ios: process.env.EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY || '',
+  android: process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY || '',
+  default: process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY || ''
+});
+
 // Entitlements - L'ID de votre entitlement dans RevenueCat
 const PREMIUM_ENTITLEMENT_ID = 'premium'; // À configurer dans RevenueCat dashboard
 
@@ -42,6 +56,12 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const [offerings, setOfferings] = useState<PurchasesOffering[]>([]);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fonction pour vérifier si l'utilisateur est un testeur premium
+  const isUserPremiumTester = (userEmail: string | undefined): boolean => {
+    if (!userEmail) return false;
+    return PREMIUM_TESTERS.includes(userEmail.toLowerCase());
+  };
 
   // Initialisation de RevenueCat
   useEffect(() => {
@@ -155,6 +175,33 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     try {
       setSubscriptionStatus(prev => ({ ...prev, loading: true }));
       console.log('[RevenueCat] Vérification du statut d\'abonnement...');
+
+      // 🧪 VÉRIFIER SI L'UTILISATEUR EST UN TESTEUR PREMIUM
+      const userEmail = user.email;
+      const isPremiumTester = isUserPremiumTester(userEmail);
+      
+      // 🛠️ MODE DÉVELOPPEUR - Accès premium automatique
+      if (__DEV__) {
+        console.log('[RevenueCat] 🛠️ Mode développeur - Accès premium accordé automatiquement');
+        setSubscriptionStatus({
+          isActive: true,
+          expiresAt: null, // Accès illimité en dev
+          productId: 'dev-premium',
+          loading: false
+        });
+        return;
+      }
+      
+      if (isPremiumTester) {
+        console.log('[RevenueCat] 🧪 Utilisateur testeur détecté - Accès premium accordé:', userEmail);
+        setSubscriptionStatus({
+          isActive: true,
+          expiresAt: null, // Accès illimité pour les testeurs
+          productId: 'tester-premium',
+          loading: false
+        });
+        return;
+      }
 
       const customerInfo: CustomerInfo = await Purchases.getCustomerInfo();
       console.log('[RevenueCat] Info client récupérées:', customerInfo);

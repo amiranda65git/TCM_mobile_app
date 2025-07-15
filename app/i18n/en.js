@@ -22,7 +22,8 @@ export default {
     sold: 'Sold',
     editions: 'Editions',
     cardsCategory: 'Cards',
-    news: 'News'
+    news: 'News',
+    user: 'User'
   },
   collection: {
     empty: 'Empty Collection',
@@ -82,6 +83,35 @@ export default {
     cardMarkedAsSold: "Card successfully marked as sold",
     markAsSoldError: "Error marking card as sold",
     sold: "Sold",
+    sellDetails: "Sale details",
+    receivedOffers: "Received offers",
+    noOffers: "No offers received",
+    updateSale: "Update sale",
+    cancelSale: "Cancel sale",
+    priceInvalid: "Invalid price",
+    saleUpdated: "Sale updated successfully",
+    updateError: "Error updating sale",
+    saleUpdateError: "Error updating sale",
+    cancelSaleTitle: "Cancel sale",
+    cancelSaleMessage: "Are you sure you want to remove this card from sale?",
+    saleCancelled: "Sale cancelled successfully",
+    cancelError: "Error cancelling sale",
+    sessionExpired: "Session expired, please log in again",
+    editSale: "Edit sale",
+    marketPrices: "Market prices",
+    currentPrice: "Current price",
+    currentCondition: "Current condition",
+    notSpecified: "Not specified",
+    sellingPrice: "Selling price",
+    accept: "Accept",
+    refuse: "Refuse",
+    refuseOfferTitle: "Refuse offer",
+    lowPrice: "Low price",
+    highPrice: "High price",
+    midPrice: "Mid price",
+    makeAnOffer: "Make an offer",
+    yourOffer: "Your offer",
+    sendOffer: "Send offer"
   },
   alerts: {
     title: 'Notifications',
@@ -142,13 +172,17 @@ export default {
     searchPlaceholder: 'Search for a card...',
     searching: 'Searching...',
     noResults: 'No results found',
-    scans: 'scans'
+    scans: 'scans',
+    restrictionTitle: 'Limit reached',
+    restrictionMessage: 'You have reached the limit of 10 cards. Subscribe to continue scanning.'
   },
   settings: {
     title: 'Settings',
     modifyUsername: 'Modify username',
     subscription: 'Subscription',
     free: 'Free',
+    premium: 'Premium',
+    manageSubscription: 'Manage subscription',
     upgradeToPremium: 'Upgrade to Premium',
     customization: 'Customization',
     darkTheme: 'Dark theme',
@@ -178,6 +212,11 @@ export default {
     usernamePlaceholder: 'Username',
     commentPlaceholder: 'Comment (optional)',
     reportButton: 'Report',
+    subscription: {
+      monthly: 'Monthly',
+      annual: 'Annual',
+      premium: 'Premium'
+    },
     changeUsernameModal: {
       title: 'Change username',
       placeholder: 'Enter your new username',
@@ -223,7 +262,10 @@ export default {
     error: 'Error',
     success: 'Success',
     passwordMismatch: 'Passwords do not match',
-    verificationEmailSent: 'A verification email has been sent to you. Please check your inbox.'
+    verificationEmailSent: 'A verification email has been sent to you. Please check your inbox.',
+    fillAllFields: 'Please fill in all fields',
+    genericError: 'An unexpected error occurred',
+    alreadyHaveAccount: 'Already have an account?'
   },
   forgotPassword: {
     title: 'Forgot password',
@@ -255,7 +297,10 @@ export default {
     getStarted: 'Get Started',
     all: 'All',
     ok: 'OK',
-    error: 'Error'
+    error: 'Error',
+    cancel: 'Cancel',
+    success: 'Success',
+    confirm: 'Confirm'
   },
   card: {
     buy: 'Buy',
@@ -300,7 +345,11 @@ export default {
     alreadyForSale: 'This card is already for sale',
     currentPrice: 'Current Price',
     removePriceAlert: 'Remove alert',
-    alert: 'Alert'
+    alert: 'Alert',
+    bid: 'Bid',
+    realPhoto: 'Real photo',
+    noUserPhoto: 'No user photo',
+    sellerPrice: 'Asking price'
   },
   notifications: {
     title: 'Notifications',
@@ -372,6 +421,9 @@ export default {
     success: 'Success',
     created: 'Price alert created',
     error: 'Error creating alert'
+  },
+  cards: {
+    loadError: 'Error loading cards'
   },
   premium: {
     title: 'Premium',

@@ -181,7 +181,7 @@ export default function Premium() {
       flex: 1,
       paddingHorizontal: 20,
       paddingVertical: 30,
-      paddingBottom: 140, // Augmenté pour laisser plus d'espace aux boutons
+      paddingBottom: 100, // Réduit pour laisser juste assez d'espace pour les boutons
       alignItems: 'center',
     },
     mainTitle: {
@@ -239,6 +239,7 @@ export default function Premium() {
       marginTop: 20,
       paddingHorizontal: 10,
       width: '100%',
+      marginBottom: 20, // Ajout d'une marge en bas pour éviter le chevauchement
     },
     packagesTitle: {
       fontSize: 20,
@@ -290,6 +291,7 @@ export default function Premium() {
       backgroundColor: colors.background,
       borderTopWidth: 1,
       borderTopColor: colors.border,
+      // Hauteur réduite puisqu'on a retiré le bouton debug
     },
     restoreButton: {
       paddingVertical: 12,
@@ -305,18 +307,6 @@ export default function Premium() {
     },
     subscribeButtonDisabled: {
       opacity: 0.6,
-    },
-    debugButton: {
-      backgroundColor: '#FF6B6B',
-      marginBottom: 10,
-      paddingVertical: 12,
-      paddingHorizontal: 20,
-      borderRadius: 8,
-    },
-    debugButtonText: {
-      color: 'white',
-      textAlign: 'center',
-      fontSize: 14,
     },
   });
 
@@ -403,33 +393,6 @@ export default function Premium() {
       
       {/* Boutons flottants */}
       <View style={dynamicStyles.floatingButtonContainer}>
-        
-        {/* Bouton DEBUG temporaire RevenueCat */}
-        <TouchableOpacity 
-          style={dynamicStyles.debugButton}
-          onPress={() => {
-            const debugInfo = `
-Platform: ${Platform.OS}
-Packages chargés: ${packages.length}
-État loading: ${loading}
-Package sélectionné: ${selectedPackage?.identifier || 'aucun'}
-Statut abonnement: ${subscriptionStatus.isActive ? 'actif' : 'inactif'}
-Mode DEV: ${__DEV__}
-
-Packages détaillés:
-${packages.length > 0 ? 
-  packages.map(p => `- ID: ${p.identifier}\n  Prix: ${p.product.priceString}\n  Titre: ${getPackageTitle(p)}`).join('\n\n') : 
-  'Aucun package trouvé'
-}`;
-
-            Alert.alert('🚀 DEBUG RevenueCat', debugInfo, [{ text: 'OK' }]);
-          }}
-        >
-          <Text style={dynamicStyles.debugButtonText}>
-            🚀 DEBUG RevenueCat
-          </Text>
-        </TouchableOpacity>
-        
         {/* Bouton Restaurer les achats */}
         <TouchableOpacity 
           style={[dynamicStyles.restoreButton, { backgroundColor: colors.surface }]}

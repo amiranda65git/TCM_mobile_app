@@ -139,7 +139,7 @@ export default function CardSellDetails() {
     
     const price = parseFloat(updatedPrice);
     if (isNaN(price) || price <= 0) {
-      Alert.alert(t('general.error'), 'Prix invalide');
+      Alert.alert(t('general.error'), t('market.priceInvalid'));
       return;
     }
     
@@ -155,7 +155,7 @@ export default function CardSellDetails() {
       
       if (error) throw error;
       
-      Alert.alert(t('general.success'), 'Vente mise à jour avec succès');
+      Alert.alert(t('general.success'), t('market.saleUpdated'));
       setUpdateModalVisible(false);
       await loadData(); // Recharger les données
       
@@ -164,7 +164,7 @@ export default function CardSellDetails() {
       
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
-      Alert.alert(t('general.error'), 'Erreur lors de la mise à jour');
+      Alert.alert(t('general.error'), t('market.updateError'));
     } finally {
       setIsUpdating(false);
     }
@@ -173,12 +173,12 @@ export default function CardSellDetails() {
   // Annuler la vente
   const handleCancelSale = async () => {
     Alert.alert(
-      'Annuler la vente',
-      'Êtes-vous sûr de vouloir retirer cette carte de la vente ?',
+      t('market.cancelSaleTitle'),
+      t('market.cancelSaleMessage'),
       [
-        { text: t('alerts.cancel'), style: 'cancel' },
+        { text: t('general.cancel'), style: 'cancel' },
         { 
-          text: 'Confirmer', 
+          text: t('general.confirm'), 
           style: 'destructive', 
           onPress: async () => {
             setIsUpdating(true);
@@ -193,7 +193,7 @@ export default function CardSellDetails() {
               
               if (error) throw error;
               
-              Alert.alert(t('general.success'), 'Vente annulée avec succès');
+              Alert.alert(t('general.success'), t('market.saleCancelled'));
               setUpdateModalVisible(false);
               await loadData();
               
@@ -202,7 +202,7 @@ export default function CardSellDetails() {
               
             } catch (error) {
               console.error('Erreur lors de l\'annulation:', error);
-              Alert.alert(t('general.error'), 'Erreur lors de l\'annulation');
+              Alert.alert(t('general.error'), t('market.cancelError'));
             } finally {
               setIsUpdating(false);
             }
@@ -221,7 +221,7 @@ export default function CardSellDetails() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
-        <Stack.Screen options={{ title: t('market.sellDetails', 'Détail vente'), headerShown: true }} />
+        <Stack.Screen options={{ title: t('market.sellDetails'), headerShown: true }} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -232,7 +232,7 @@ export default function CardSellDetails() {
   if (!userCard || !officialCard) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
-        <Stack.Screen options={{ title: t('market.sellDetails', 'Détail vente'), headerShown: true }} />
+        <Stack.Screen options={{ title: t('market.sellDetails'), headerShown: true }} />
         <View style={styles.errorContainer}>
           <Text style={{ color: colors.error }}>{t('card.notFound')}</Text>
         </View>
@@ -256,10 +256,10 @@ export default function CardSellDetails() {
           {userCard && !isCardSold && (
             <>
               <Text style={[styles.currentPrice, { color: colors.primary }]}>
-                Prix: {userCard.price?.toFixed(2)}€
+                {t('market.currentPrice')}: {userCard.price?.toFixed(2)}€
               </Text>
               <Text style={[styles.currentCondition, { color: colors.text.secondary }]}>
-                Condition: {userCard.condition || 'Non spécifiée'}
+                {t('market.currentCondition')}: {userCard.condition || t('market.notSpecified')}
               </Text>
             </>
           )}
@@ -269,17 +269,17 @@ export default function CardSellDetails() {
       {marketPrices && (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>
-            Prix du marché
+            {t('market.marketPrices')}
           </Text>
           <View style={styles.priceRow}>
             <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
-              Prix bas: {marketPrices.price_low ? `${marketPrices.price_low}€` : 'N/A'}
+              {t('market.lowPrice')}: {marketPrices.price_low ? `${marketPrices.price_low}€` : 'N/A'}
             </Text>
             <Text style={[styles.priceLabel, { color: '#3498db' }]}>
-              Prix moyen: {marketPrices.price_mid ? `${marketPrices.price_mid}€` : 'N/A'}
+              {t('market.midPrice')}: {marketPrices.price_mid ? `${marketPrices.price_mid}€` : 'N/A'}
             </Text>
             <Text style={[styles.priceLabel, { color: colors.text.primary }]}>
-              Prix haut: {marketPrices.price_high ? `${marketPrices.price_high}€` : 'N/A'}
+              {t('market.highPrice')}: {marketPrices.price_high ? `${marketPrices.price_high}€` : 'N/A'}
             </Text>
           </View>
         </View>
@@ -294,7 +294,7 @@ export default function CardSellDetails() {
             onPress={handleUpdatePress}
           >
             <Ionicons name="create-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={styles.updateButtonText}>Mettre à jour</Text>
+            <Text style={styles.updateButtonText}>{t('market.updateSale')}</Text>
           </TouchableOpacity>
         )}
         
@@ -311,18 +311,18 @@ export default function CardSellDetails() {
           disabled={isCardSold}
         >
           <Text style={styles.soldButtonText}>
-            {isCardSold ? t('market.sold', 'Vendu') : t('market.markAsSold')}
+            {isCardSold ? t('market.sold') : t('market.markAsSold')}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Liste des offres reçues */}
       <View style={{ marginHorizontal: 16, marginTop: 12 }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text.primary, marginBottom: 10, letterSpacing: 0.5 }}>{t('market.receivedOffers', 'Offres reçues')}</Text>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text.primary, marginBottom: 10, letterSpacing: 0.5 }}>{t('market.receivedOffers')}</Text>
       </View>
       <View style={{ marginHorizontal: 8 }}>
         {offers.length === 0 ? (
-          <Text style={{ color: colors.text.secondary, textAlign: 'center', marginVertical: 16 }}>{t('market.noOffers', 'Aucune offre reçue')}</Text>
+          <Text style={{ color: colors.text.secondary, textAlign: 'center', marginVertical: 16 }}>{t('market.noOffers')}</Text>
         ) : (
           <FlatList
             data={offers}
@@ -339,7 +339,7 @@ export default function CardSellDetails() {
                   alignItems: 'flex-start',
                   paddingLeft: 24,
                 }}>
-                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Accept</Text>
+                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{t('market.accept')}</Text>
                 </View>
               );
               const renderRightActions = (progress: any, dragX: any) => (
@@ -352,16 +352,16 @@ export default function CardSellDetails() {
                   alignItems: 'flex-end',
                   paddingRight: 24,
                 }}>
-                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Refuse</Text>
+                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{t('market.refuse')}</Text>
                 </View>
               );
               const handleRefuse = () => {
                 Alert.alert(
-                  'Refuser l\'offre',
+                  t('market.refuseOfferTitle'),
                   t('market.refuseOfferAlertMessage'),
                   [
-                    { text: 'Annuler', style: 'cancel' },
-                    { text: 'OK', style: 'destructive', onPress: async () => {
+                    { text: t('general.cancel'), style: 'cancel' },
+                    { text: t('general.ok'), style: 'destructive', onPress: async () => {
                         await refuseOffer(item.id);
                         setOffers(prev => prev.filter(o => o.id !== item.id));
                         await createRefuseOfferNotification({
@@ -386,7 +386,7 @@ export default function CardSellDetails() {
                           const { data: { session } } = await supabase.auth.getSession();
                           
                           if (!session?.access_token) {
-                            RNAlert.alert(t('general.error'), 'Session expirée, veuillez vous reconnecter');
+                            RNAlert.alert(t('general.error'), t('market.sessionExpired'));
                             return;
                           }
 
@@ -415,19 +415,19 @@ export default function CardSellDetails() {
                             EventRegister.emit('trading_data_changed');
                             
                             RNAlert.alert(
-                              t('settings.alerts.success'), 
+                              t('general.success'), 
                               `${t('market.acceptOfferSuccess')} (${result.transactionId})`
                             );
                           } else {
                             console.error('Erreur acceptation offre:', result.error);
                             RNAlert.alert(
-                              t('settings.alerts.error'), 
+                              t('general.error'), 
                               result.error || t('market.acceptOfferError')
                             );
                           }
                         } catch (error) {
                           console.error('Erreur lors de l\'acceptation de l\'offre:', error);
-                          RNAlert.alert(t('settings.alerts.error'), t('market.acceptOfferError'));
+                          RNAlert.alert(t('general.error'), t('market.acceptOfferError'));
                         }
                       }
                     },
@@ -491,7 +491,7 @@ export default function CardSellDetails() {
             {/* Header de la modale */}
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
-                Modifier la vente
+                {t('market.editSale')}
               </Text>
               <TouchableOpacity onPress={() => setUpdateModalVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.text.secondary} />
@@ -508,7 +508,7 @@ export default function CardSellDetails() {
               <View style={styles.priceRangeContainer}>
                 <View style={styles.priceColumn}>
                   <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
-                    Prix bas
+                    {t('market.lowPrice')}
                   </Text>
                   <Text style={[styles.priceValue, { color: colors.text.primary }]}>
                     {marketPrices?.price_low?.toFixed(2) || '?'} €
@@ -517,7 +517,7 @@ export default function CardSellDetails() {
                 
                 <View style={styles.priceColumn}>
                   <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
-                    Prix haut
+                    {t('market.highPrice')}
                   </Text>
                   <Text style={[styles.priceValue, { color: colors.text.primary }]}>
                     {marketPrices?.price_high?.toFixed(2) || '?'} €
@@ -528,7 +528,7 @@ export default function CardSellDetails() {
               {/* Sélection de condition */}
               <View style={styles.conditionContainer}>
                 <Text style={[styles.conditionLabel, { color: colors.text.primary }]}>
-                  Condition:
+                  {t('card.condition')}:
                 </Text>
                 <View style={styles.conditionSelector}>
                   {CONDITIONS.map((condition) => (
@@ -560,7 +560,7 @@ export default function CardSellDetails() {
               {/* Modification du prix */}
               <View style={styles.sellingPriceContainer}>
                 <Text style={[styles.sellingPriceLabel, { color: colors.text.primary }]}>
-                  Prix de vente
+                  {t('market.sellingPrice')}
                 </Text>
                 <View style={[styles.inputContainer, { borderColor: colors.border }]}>
                   <TextInput
@@ -587,7 +587,7 @@ export default function CardSellDetails() {
                     <ActivityIndicator size="small" color={colors.error} />
                   ) : (
                     <Text style={[styles.cancelButtonText, { color: colors.error }]}>
-                      Annuler la vente
+                      {t('market.cancelSale')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -607,7 +607,7 @@ export default function CardSellDetails() {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={styles.sellButtonText}>
-                      Mettre à jour
+                      {t('market.updateSale')}
                     </Text>
                   )}
                 </TouchableOpacity>

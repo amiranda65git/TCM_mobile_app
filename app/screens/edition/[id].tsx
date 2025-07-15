@@ -393,7 +393,7 @@ export default function EditionDetail() {
               <Text style={[styles.statLabel, { color: colors.text.secondary }]}>
                 {t('edition.value')}
               </Text>
-              <Text style={[styles.statValue, { color: colors.text.secondary }]}>
+              <Text style={[styles.statValue, { color: colors.text.primary }]}>
                 {totalValue.toFixed(2)} €
               </Text>
             </View>
@@ -487,7 +487,7 @@ export default function EditionDetail() {
                     <Text style={[styles.alreadyForSaleText, { color: colors.text.primary }]}>
                       {t('card.alreadyForSale')}
                     </Text>
-                    <Text style={[styles.currentPriceText, { color: colors.secondary }]}>
+                    <Text style={[styles.currentPriceText, { color: colors.text.primary }]}>
                       {t('card.currentPrice')}: {selectedCard.price?.toFixed(2)} €
                     </Text>
                     
