@@ -382,15 +382,22 @@ export default function CardSellDetails() {
                     { text: t('alerts.cancel'), style: 'cancel' },
                     { text: 'OK', style: 'default', onPress: async () => {
                         try {
+                          console.log('=== Début acceptation offre mobile ===');
+                          console.log('Offer ID:', item.id);
+                          
                           // Récupérer le token d'authentification
                           const { data: { session } } = await supabase.auth.getSession();
                           
                           if (!session?.access_token) {
+                            console.error('Pas de session active');
                             RNAlert.alert(t('general.error'), t('market.sessionExpired'));
                             return;
                           }
 
+                          console.log('Token obtenu, longueur:', session.access_token.length);
+
                           // Appel à notre backend sécurisé
+                          console.log('Appel API send-transaction-emails...');
                           const response = await fetch('https://www.tcmarket.app/api/send-transaction-emails', {
                             method: 'POST',
                             headers: { 
@@ -402,7 +409,9 @@ export default function CardSellDetails() {
                             }),
                           });
 
+                          console.log('Réponse HTTP status:', response.status);
                           const result = await response.json();
+                          console.log('Résultat:', JSON.stringify(result, null, 2));
 
                           if (result.success) {
                             // Supprimer l'offre de la liste locale
@@ -414,9 +423,14 @@ export default function CardSellDetails() {
                             // Notifier les autres écrans que les données ont changé
                             EventRegister.emit('trading_data_changed');
                             
+                            // Afficher un message différent si les emails ont partiellement échoué
+                            const successMessage = result.emailErrors 
+                              ? `${result.message} (${result.transactionId})`
+                              : `${t('market.acceptOfferSuccess')} (${result.transactionId})`;
+                            
                             RNAlert.alert(
                               t('general.success'), 
-                              `${t('market.acceptOfferSuccess')} (${result.transactionId})`
+                              successMessage
                             );
                           } else {
                             console.error('Erreur acceptation offre:', result.error);
@@ -425,9 +439,13 @@ export default function CardSellDetails() {
                               result.error || t('market.acceptOfferError')
                             );
                           }
-                        } catch (error) {
+                        } catch (error: any) {
                           console.error('Erreur lors de l\'acceptation de l\'offre:', error);
-                          RNAlert.alert(t('general.error'), t('market.acceptOfferError'));
+                          console.error('Stack:', error?.stack);
+                          RNAlert.alert(
+                            t('general.error'), 
+                            `${t('market.acceptOfferError')}\n${error?.message || 'Erreur inconnue'}`
+                          );
                         }
                       }
                     },

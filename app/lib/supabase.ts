@@ -2143,55 +2143,54 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
   }
 };
 
-// Initialisation du bucket userimages (sera créé s'il n'existe pas)
-export const initUserImagesBucket = async () => {
+// URL du backend pour l'upload d'images vers Cloudflare R2
+const BACKEND_URL = Constants.expoConfig?.extra?.BACKEND_URL || 'https://www.tcmarket.app';
+
+/**
+ * Upload une image vers Cloudflare R2 via le backend
+ * @param cardId - ID de la carte
+ * @param imageBase64 - Image en base64
+ * @returns URL publique de l'image ou null en cas d'erreur
+ */
+const uploadImageToR2 = async (cardId: string, imageBase64: string): Promise<string | null> => {
   try {
-    // Vérifier si le bucket existe
-    const { data: buckets, error: bucketsError } = await supabase
-      .storage
-      .listBuckets();
+    console.log('[uploadImageToR2] Début upload vers R2...');
     
-    if (bucketsError) {
-      console.error('Erreur lors de la vérification des buckets:', bucketsError);
-      return { error: bucketsError };
+    // Récupérer le token d'authentification
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    
+    if (!token) {
+      console.error('[uploadImageToR2] Pas de token d\'authentification');
+      return null;
     }
     
-    const userimagesBucketExists = buckets?.some(bucket => bucket.name === 'userimages');
+    // Appeler l'API backend pour uploader l'image
+    const response = await fetch(`${BACKEND_URL}/api/upload-image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        cardId,
+        imageBase64,
+      }),
+    });
     
-    // Si le bucket n'existe pas, le créer
-    if (!userimagesBucketExists) {
-      console.log('Création du bucket userimages...');
-      const { error: createError } = await supabase
-        .storage
-        .createBucket('userimages', {
-          public: true, // Rendre le bucket accessible publiquement
-        });
-      
-      if (createError) {
-        console.error('Erreur lors de la création du bucket userimages:', createError);
-        return { error: createError };
-      }
-      console.log('Bucket userimages créé avec succès');
-    } else {
-      console.log('Le bucket userimages existe déjà');
-      
-      // Mettre à jour les permissions pour être sûr
-      const { error: updateError } = await supabase
-        .storage
-        .updateBucket('userimages', {
-          public: true,
-        });
-      
-      if (updateError) {
-        console.error('Erreur lors de la mise à jour des permissions du bucket:', updateError);
-        return { error: updateError };
-      }
+    const result = await response.json();
+    
+    if (!response.ok || !result.success) {
+      console.error('[uploadImageToR2] Erreur API:', result.error);
+      return null;
     }
     
-    return { error: null };
+    console.log(`[uploadImageToR2] Upload réussi: ${result.imageUrl}`);
+    return result.imageUrl;
+    
   } catch (error) {
-    console.error('Erreur inattendue lors de l\'initialisation du bucket userimages:', error);
-    return { error };
+    console.error('[uploadImageToR2] Erreur:', error);
+    return null;
   }
 };
 
@@ -2210,43 +2209,17 @@ export const addCardToCollection = async ({
   try {
     console.log(`[addCardToCollection] Ajout de la carte ${cardId} à la collection de l'utilisateur ${userId}`);
     
-    // Initialiser le bucket userimages si besoin
-    await initUserImagesBucket();
-    
     let imageUrl = null;
     
-    // Si une image est fournie, l'enregistrer dans le bucket
+    // Si une image est fournie, l'uploader vers Cloudflare R2
     if (imageBase64) {
-      console.log('[addCardToCollection] Image fournie, enregistrement dans le bucket userimages');
+      console.log('[addCardToCollection] Image fournie, upload vers Cloudflare R2...');
+      imageUrl = await uploadImageToR2(cardId, imageBase64);
       
-      // Générer un nom de fichier unique
-      const fileName = `${userId}_${cardId}_${Date.now()}.jpg`;
-      
-      // Supprimer le préfixe data:image/jpeg;base64, s'il existe
-      const base64Data = imageBase64.includes('base64,') 
-        ? imageBase64.split('base64,')[1]
-        : imageBase64;
-      
-      // Enregistrer l'image dans le bucket
-      const { data: uploadData, error: uploadError } = await supabase
-        .storage
-        .from('userimages')
-        .upload(fileName, decode(base64Data), {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-      
-      if (uploadError) {
-        console.error('[addCardToCollection] Erreur lors de l\'upload de l\'image:', uploadError);
+      if (imageUrl) {
+        console.log(`[addCardToCollection] Image uploadée: ${imageUrl}`);
       } else {
-        // Récupérer l'URL publique de l'image
-        const { data: publicUrlData } = supabase
-          .storage
-          .from('userimages')
-          .getPublicUrl(fileName);
-        
-        imageUrl = publicUrlData?.publicUrl || null;
-        console.log(`[addCardToCollection] Image enregistrée avec succès: ${imageUrl}`);
+        console.warn('[addCardToCollection] Échec upload image, continuation sans image');
       }
     }
     
@@ -2258,7 +2231,7 @@ export const addCardToCollection = async ({
         card_id: cardId,
         condition: condition,
         is_for_sale: false,
-        image_url: imageUrl, // Ajouter l'URL de l'image
+        image_url: imageUrl, // URL Cloudflare R2 ou null
         created_at: new Date().toISOString()
       }])
       .select();
@@ -2275,16 +2248,6 @@ export const addCardToCollection = async ({
     return { data: null, error };
   }
 };
-
-// Helper function to decode base64
-function decode(base64: string): Uint8Array {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
 
 // Fonction pour récupérer le nombre de cartes de l'utilisateur qui ont au moins une offre
 export const getUserCardsWithOffersCount = async (userId: string) => {
@@ -2739,7 +2702,6 @@ const SupabaseService = {
   refuseOffer,
   createRefuseOfferNotification,
   searchOfficialCardsByDetails,
-  initUserImagesBucket,
   addCardToCollection,
   getUserCardsWithOffersCount,
   markCardAsSold,

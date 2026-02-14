@@ -143,7 +143,7 @@ export default function Premium() {
       // Utiliser le titre du produit ou un titre basé sur l'identifiant
       if (pack.product.title) {
         return pack.product.title;
-      }
+    }
       
       // Générer un titre basé sur l'identifier
       if (pack.identifier.includes('monthly') || pack.identifier.includes('month')) {
