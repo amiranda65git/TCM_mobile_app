@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext } from 'react';
+import React, { useState, useEffect, createContext, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, ActivityIndicator, FlatList, Image, TouchableOpacity, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { TabView, SceneMap, TabBar, Route } from 'react-native-tab-view';
 import { useThemeColors } from '../lib/ThemeUtils';
@@ -10,7 +10,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import LanguageFlag from '../components/LanguageFlag';
-import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 // Enum pour les options de tri
 enum SortOption {
@@ -355,7 +354,6 @@ export default function TradingScreen() {
   const colors = useThemeColors();
   const { t } = useTranslation();
   const { tab } = useLocalSearchParams();
-  const { canAccessTrading } = useSubscriptionRestrictions();
   const router = useRouter();
   
   // Déterminer l'index initial basé sur le paramètre tab
@@ -384,13 +382,6 @@ export default function TradingScreen() {
   const [tempSortOption, setTempSortOption] = useState<SortOption>(SortOption.NAME_DESC);
   const [tempSortCategory, setTempSortCategory] = useState<SortCategory>('name');
   const [tempSortDirection, setTempSortDirection] = useState<'asc' | 'desc'>('desc');
-
-  // Vérifier l'accès au trading
-  useEffect(() => {
-    if (!canAccessTrading) {
-      router.replace('/premium');
-    }
-  }, [canAccessTrading]);
 
   // Créer l'objet de contexte de filtrage à partager avec les onglets
   const filterContext = {

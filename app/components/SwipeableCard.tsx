@@ -23,6 +23,10 @@ interface CardInfo {
   edition_name?: string;
   edition_symbol_image?: string;
   lang?: string;
+  /** Photo perso (R2) — affiche un repère sur la vignette */
+  user_photo_url?: string | null;
+  /** Exemplaire collection (plusieurs cartes identiques possibles) */
+  user_card_id?: string;
 }
 
 interface SwipeableCardProps {
@@ -167,7 +171,11 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
     if (onCardPress) {
       onCardPress(card);
     } else {
-      router.push(`/screens/card/${card.id}`);
+      const q =
+        card.owned && card.user_card_id
+          ? `?userCardId=${encodeURIComponent(card.user_card_id)}`
+          : '';
+      router.push(`/screens/card/${encodeURIComponent(card.id)}${q}`);
     }
   };
   
@@ -212,11 +220,13 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
         onPress={handleCardPress}
       >
         {card.image_small ? (
-          <Image 
-            source={{ uri: card.image_small }} 
-            style={styles.cardImage} 
-            resizeMode="contain"
-          />
+          <View style={styles.cardImageWrap}>
+            <Image
+              source={{ uri: card.image_small }}
+              style={styles.cardImage}
+              resizeMode="contain"
+            />
+          </View>
         ) : (
           <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.surface }]} />
         )}
@@ -323,6 +333,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignItems: 'center',
     height: 80,
+  },
+  cardImageWrap: {
+    width: 40,
+    height: 56,
+    position: 'relative',
   },
   cardImage: {
     width: 40,

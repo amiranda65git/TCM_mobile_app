@@ -16,7 +16,6 @@ import SupabaseService from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -243,9 +242,7 @@ export default function ScanScreen() {
   const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const { canScanCard } = useSubscriptionRestrictions();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [userInventoryCount, setUserInventoryCount] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -339,21 +336,7 @@ export default function ScanScreen() {
     })();
   }, []);
 
-  // Récupérer le nombre de cartes de l'utilisateur
-  useEffect(() => {
-    const loadUserInventoryCount = async () => {
-      try {
-        const { data } = await SupabaseService.getUserCardsCount();
-        setUserInventoryCount(data || 0);
-      } catch (error) {
-        console.error('Erreur lors du chargement du nombre de cartes:', error);
-      }
-    };
-    
-    loadUserInventoryCount();
-  }, []);
-
-
+  // Ancien : chargement du nombre de cartes pour limite gratuite (canScanCard)
 
   // Fonction pour réinitialiser complètement l'état du scan
   const resetScanState = () => {
@@ -376,42 +359,25 @@ export default function ScanScreen() {
       return;
     }
 
-    // Vérifier les restrictions d'abonnement
-    const canScan = await canScanCard(userInventoryCount);
-    if (!canScan) {
-      Alert.alert(
-        t('scan.restrictionTitle', 'Limitation atteinte'),
-        t('scan.restrictionMessage', 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.'),
-        [
-          {
-            text: t('general.cancel', 'Annuler'),
-            style: 'cancel'
-          },
-          {
-            text: t('premium.subscribeButton', 'S\'abonner'),
-            onPress: () => router.push('/premium')
-          }
-        ]
-      );
-      return;
-    }
-    
-    if (isProcessing || !camera.current) return;
-    
-    setIsProcessing(true);
-    try {
-      // Prise de photo optimisée
-      const photo = await camera.current.takePhoto({ 
-        flash: 'off',
-        enableAutoRedEyeReduction: false // Désactiver la réduction yeux rouges pour plus de vitesse
-      });
-      setPhotoUri(photo.path);
-      await processImage(photo.path);
-    } catch (err) {
-      Alert.alert(t('scan.error'), t('scan.captureError'));
-      setScanError(t('scan.captureError'));
-      setIsProcessing(false);
-    }
+    const runCapture = async () => {
+      if (isProcessing || !camera.current) return;
+
+      setIsProcessing(true);
+      try {
+        const photo = await camera.current.takePhoto({
+          flash: 'off',
+          enableAutoRedEyeReduction: false,
+        });
+        setPhotoUri(photo.path);
+        await processImage(photo.path);
+      } catch (err) {
+        Alert.alert(t('scan.error'), t('scan.captureError'));
+        setScanError(t('scan.captureError'));
+        setIsProcessing(false);
+      }
+    };
+
+    await runCapture();
   };
 
   // Fonction pour rechercher les cartes correspondantes (recherche plus permissive : Nom + HP seulement)

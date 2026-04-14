@@ -316,6 +316,7 @@ export default {
     notFound: 'Carte non trouvée',
     showOfficial: 'Voir l\'officielle',
     showMine: 'Voir ma carte',
+    flipPhotoHint: 'Faites glisser sur l\'illustration pour voir la carte officielle puis votre photo',
     rarity: 'Rareté',
     edition: 'Édition',
     condition: 'État',
@@ -452,6 +453,18 @@ export default {
       scan: 'Limite de {{maxCount}} cartes atteinte. Abonnez-vous pour scanner plus de cartes.',
       market: 'Accès au marché réservé aux membres Premium.',
       trading: 'Accès au trading réservé aux membres Premium.'
+    },
+    upsell: {
+      title: 'TCMarket Premium',
+      later: 'Plus tard',
+      market:
+        'Passez Premium pour soutenir l’app et profiter d’une expérience optimale. Vous pouvez continuer à consulter le marché gratuitement.',
+      trading:
+        'Le trading est ouvert à tous pour l’instant. Premium nous aide à couvrir les coûts des services — découvrez les avantages quand vous voulez.',
+      scan:
+        'Le scan intelligent utilise des services payants. Abonnez-vous pour nous soutenir.',
+      collection:
+        'Votre collection complète est visible. Premium permet de financer les prix marché et l’IA — pensez-y quand vous le souhaitez.',
     },
     upgrade: 'Passer Premium'
   },

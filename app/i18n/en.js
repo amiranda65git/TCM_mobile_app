@@ -316,6 +316,7 @@ export default {
     notFound: 'Card not found',
     showOfficial: 'Show official',
     showMine: 'Show my card',
+    flipPhotoHint: 'Swipe on the artwork to switch between official card and your photo',
     rarity: 'Rarity',
     edition: 'Edition',
     condition: 'Condition',
@@ -452,6 +453,18 @@ export default {
       scan: 'Limit of {{maxCount}} cards reached. Subscribe to scan more cards.',
       market: 'Market access reserved for Premium members.',
       trading: 'Trading access reserved for Premium members.'
+    },
+    upsell: {
+      title: 'TCMarket Premium',
+      later: 'Not now',
+      market:
+        'Go Premium to support the app and get the best experience. You can keep browsing the market for free.',
+      trading:
+        'Trading is open to everyone for now. Premium helps cover our service costs — learn more whenever you like.',
+      scan:
+        'Smart scanning uses paid services. Subscribe to support us, or keep scanning for free.',
+      collection:
+        'Your full collection is visible. Premium funds market prices and AI features — upgrade whenever you want.',
     },
     upgrade: 'Go Premium'
   },

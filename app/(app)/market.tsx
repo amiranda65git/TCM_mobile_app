@@ -13,7 +13,6 @@ import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, se
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 // Mise à jour du composant CardListItem pour accepter des enfants (pour la différence de prix)
 const CardListItem = ({ card, colors, onPress, children }: { card: any, colors: any, onPress: () => void, children?: React.ReactNode }) => (
@@ -76,7 +75,6 @@ export default function MarketScreen() {
   const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
-  const { canAccessMarket } = useSubscriptionRestrictions();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [index, setIndex] = useState(0);
@@ -108,13 +106,6 @@ export default function MarketScreen() {
   const [filterName, setFilterName] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [isLoadingFilteredCards, setIsLoadingFilteredCards] = useState(false);
-
-  // Vérifier l'accès au market
-  useEffect(() => {
-    if (!canAccessMarket) {
-      router.replace('/premium');
-    }
-  }, [canAccessMarket]);
 
   // Écouter les changements de langue
   useEffect(() => {

@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Alert
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from './lib/ThemeContext';
@@ -20,10 +20,21 @@ import { useThemeColors } from './lib/ThemeUtils';
 import { useRevenueCat } from './lib/RevenueCatService';
 import { PurchasesPackage } from 'react-native-purchases';
 
+const PREMIUM_NAV_SOURCES = ['market', 'trading', 'collection', 'scan'] as const;
+type PremiumNavSource = (typeof PREMIUM_NAV_SOURCES)[number];
+
 export default function Premium() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const params = useLocalSearchParams<{ from?: string | string[] }>();
+  const fromRaw = params.from;
+  const fromParam =
+    typeof fromRaw === 'string' ? fromRaw : Array.isArray(fromRaw) ? fromRaw[0] : undefined;
+  const upsellFrom: PremiumNavSource | null =
+    fromParam && (PREMIUM_NAV_SOURCES as readonly string[]).includes(fromParam)
+      ? (fromParam as PremiumNavSource)
+      : null;
   const { subscriptionStatus, packages, purchaseSubscription, restorePurchases, loading } = useRevenueCat();
   
   const [selectedPackage, setSelectedPackage] = useState<PurchasesPackage | null>(null);
@@ -184,6 +195,23 @@ export default function Premium() {
       paddingBottom: 100, // Réduit pour laisser juste assez d'espace pour les boutons
       alignItems: 'center',
     },
+    contextBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      width: '100%',
+      padding: 14,
+      borderRadius: 12,
+      marginBottom: 20,
+      backgroundColor: colors.primaryLight,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    contextBannerText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 20,
+      marginLeft: 10,
+    },
     mainTitle: {
       fontSize: 28,
       fontWeight: 'bold',
@@ -322,6 +350,14 @@ export default function Premium() {
       
       <ScrollView style={dynamicStyles.container} showsVerticalScrollIndicator={false}>
         <View style={dynamicStyles.content}>
+          {upsellFrom ? (
+            <View style={dynamicStyles.contextBanner}>
+              <Ionicons name="information-circle-outline" size={22} color={colors.primary} />
+              <Text style={[dynamicStyles.contextBannerText, { color: colors.text.primary }]}>
+                {t(`premium.upsell.${upsellFrom}`)}
+              </Text>
+            </View>
+          ) : null}
           {/* Titre principal */}
           <Text style={dynamicStyles.mainTitle}>
             {t('premium.whyPay')}

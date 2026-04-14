@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions, Alert, Modal, TextInput } from 'react-native';
+import { CardImageSlider } from '../../components/CardImageSlider';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
@@ -15,6 +16,15 @@ interface CardPrice {
   market: number | null;
   lastUpdated: string | null;
 }
+
+type UserCardRow = {
+  id: string;
+  condition: string | null;
+  price: number | null;
+  is_for_sale: boolean;
+  image_url: string | null;
+  created_at: string;
+};
 
 interface CardDetails {
   id: string;
@@ -32,10 +42,22 @@ interface CardDetails {
   price?: number | null;
   is_for_sale: boolean;
   has_price_alert?: boolean;
+  /** Photo utilisateur (R2) si enregistrée sur user_cards */
+  user_photo_url?: string | null;
 }
 
 export default function CardDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id: rawCardId, userCardId: rawUserCardId } = useLocalSearchParams<{
+    id?: string | string[];
+    userCardId?: string | string[];
+  }>();
+  const cardId = rawCardId ? (Array.isArray(rawCardId) ? rawCardId[0] : rawCardId) : undefined;
+  const userCardIdParam =
+    rawUserCardId !== undefined
+      ? Array.isArray(rawUserCardId)
+        ? rawUserCardId[0]
+        : rawUserCardId
+      : undefined;
   const { user } = useAuth();
   const { t } = useTranslation();
   const router = useRouter();
@@ -62,14 +84,14 @@ export default function CardDetailScreen() {
   const CONDITIONS = Object.keys(CONDITION_COLORS);
   
   useEffect(() => {
-    if (id && user) {
+    if (cardId && user) {
       loadCardDetails();
       checkWishlist();
     }
-  }, [id, user]);
+  }, [cardId, user, userCardIdParam]);
   
   const loadCardDetails = async () => {
-    if (!id || !user) return;
+    if (!cardId || !user) return;
     
     setLoading(true);
     try {
@@ -86,25 +108,54 @@ export default function CardDetailScreen() {
           edition_id,
           editions(name)
         `)
-        .eq('id', id)
+        .eq('id', cardId)
         .single();
       
       if (cardError) throw cardError;
       
-      // 2. Vérifier si l'utilisateur possède cette carte
+      // 2. Vérifier si l'utilisateur possède cette carte (plusieurs lignes possibles : ex. une en vente sans photo, une autre avec photo R2)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
-        .select('id, condition, price, is_for_sale')
+        .select('id, condition, price, is_for_sale, image_url, created_at')
         .eq('user_id', user.id)
-        .eq('card_id', id);
-      
+        .eq('card_id', cardId)
+        .eq('is_sold', false);
+
       if (userCardError) throw userCardError;
-      
+
+      const userRows = (userCardData ?? []) as UserCardRow[];
+      const sortedByDate = [...userRows].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      let primaryUserCard: UserCardRow | null = null;
+
+      if (userCardIdParam) {
+        primaryUserCard = userRows.find((r) => r.id === userCardIdParam) ?? null;
+        if (!primaryUserCard) {
+          const { data: single } = await supabase
+            .from('user_cards')
+            .select('id, condition, price, is_for_sale, image_url, created_at, card_id')
+            .eq('id', userCardIdParam)
+            .eq('user_id', user.id)
+            .eq('is_sold', false)
+            .maybeSingle();
+          if (single && (single as { card_id: string }).card_id === cardId) {
+            primaryUserCard = single as UserCardRow;
+          }
+        }
+      }
+      if (!primaryUserCard && userRows.length > 0) {
+        primaryUserCard = sortedByDate[0];
+      }
+
+      const userPhotoUrl = primaryUserCard?.image_url ?? null;
+
       // 3. Récupérer les prix du marché actuels
       const { data: marketPriceData, error: marketPriceError } = await supabase
         .from('market_prices')
         .select('price_low, price_mid, price_high, price_market, updated_at')
-        .eq('card_id', id)
+        .eq('card_id', cardId)
         .order('date', { ascending: false })
         .limit(1);
       
@@ -113,7 +164,7 @@ export default function CardDetailScreen() {
         .from('price_alerts')
         .select('*')
         .eq('user_id', user.id)
-        .eq('card_id', id);
+        .eq('card_id', cardId);
       
       if (priceAlertError) throw priceAlertError;
       
@@ -151,12 +202,13 @@ export default function CardDetailScreen() {
         edition_id: cardData.edition_id,
         edition_name: Array.isArray(cardData.editions) ? cardData.editions[0]?.name || 'Unknown' : (cardData.editions as any).name || 'Unknown',
         prices: priceData,
-        owned: userCardData && userCardData.length > 0,
-        user_card_id: userCardData && userCardData.length > 0 ? userCardData[0].id : undefined,
-        condition: userCardData && userCardData.length > 0 ? userCardData[0].condition : undefined,
-        price: userCardData && userCardData.length > 0 ? userCardData[0].price : null,
-        is_for_sale: userCardData && userCardData.length > 0 ? userCardData[0].is_for_sale : false,
-        has_price_alert: priceAlertData && priceAlertData.length > 0
+        owned: userRows.length > 0,
+        user_card_id: primaryUserCard?.id,
+        condition: primaryUserCard?.condition ?? undefined,
+        price: primaryUserCard?.price ?? null,
+        is_for_sale: primaryUserCard?.is_for_sale ?? false,
+        has_price_alert: priceAlertData && priceAlertData.length > 0,
+        user_photo_url: userPhotoUrl,
       };
       
       setCardDetails(cardDetails);
@@ -168,9 +220,9 @@ export default function CardDetailScreen() {
   };
   
   const checkWishlist = async () => {
-    if (!user || !id) return;
+    if (!user || !cardId) return;
     const { data: wishlist } = await getUserWishlist(user.id);
-    setInWishlist((wishlist as string[]).includes(Array.isArray(id) ? id[0] : id));
+    setInWishlist((wishlist as string[]).includes(cardId));
   };
   
   // Formatter les prix
@@ -178,7 +230,7 @@ export default function CardDetailScreen() {
     if (price === null) return 'N/A';
     return `${price.toFixed(2)} €`;
   };
-  
+
   // Action lorsqu'on clique sur Acheter
   const handleBuy = () => {
     if (!cardDetails) return;
@@ -213,9 +265,9 @@ export default function CardDetailScreen() {
         // Mettre à jour l'état local
         setCardDetails({
           ...cardDetails,
-          is_for_sale: false
+          is_for_sale: false,
         });
-        
+
         console.log('Carte retirée de la vente', cardDetails?.id);
       } catch (error) {
         console.error("Erreur lors du retrait de la vente:", error);
@@ -269,9 +321,9 @@ export default function CardDetailScreen() {
         ...cardDetails,
         is_for_sale: true,
         price: price,
-        condition: selectedCondition
+        condition: selectedCondition,
       });
-      
+
       setShowSellModal(false);
       console.log('Carte mise en vente', cardDetails?.id);
     } catch (error) {
@@ -405,34 +457,50 @@ export default function CardDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Carte et badges */}
+        {/* Carte : pastilles sur l’illustration ; photo R2 = fondu (pas rotateY 3D) */}
         <View style={styles.cardSection}>
-          {/* Badge possédé */}
-          {cardDetails.owned && (
-            <View style={[styles.ownedBadge, { backgroundColor: colors.success }]}>
-              <MaterialIcons name="catching-pokemon" size={16} color="white" />
-              <Text style={styles.ownedBadgeText}>{t('card.owned')}</Text>
+          <View
+            style={[
+              styles.cardStack,
+              { width: windowWidth * 0.8, height: windowWidth * 1.1 },
+            ]}
+          >
+            <View style={styles.cardImageContainer}>
+              {cardDetails.user_photo_url ? (
+                <CardImageSlider
+                  width={windowWidth * 0.8}
+                  height={windowWidth * 1.1}
+                  officialUri={cardDetails.image_large || cardDetails.image_small}
+                  userPhotoUri={cardDetails.user_photo_url}
+                />
+              ) : (
+                <Image
+                  source={{
+                    uri: cardDetails.image_large || cardDetails.image_small,
+                  }}
+                  style={styles.cardImage}
+                  resizeMode="contain"
+                />
+              )}
             </View>
-          )}
-          
-          {/* Badge en vente */}
-          {cardDetails.owned && cardDetails.is_for_sale && (
-            <View style={[styles.forSaleBadge, { backgroundColor: '#e74c3c' }]}>
-              <Ionicons name="cash-outline" size={16} color="white" />
-              <Text style={styles.ownedBadgeText}>{t('card.forSale')}</Text>
-            </View>
-          )}
-          
-          {/* Image de la carte */}
-          <View style={[styles.cardImageContainer, { width: windowWidth * 0.8, height: windowWidth * 1.1 }]}>
-            <Image 
-              source={{ 
-                uri: cardDetails.image_large || cardDetails.image_small 
-              }} 
-              style={styles.cardImage}
-              resizeMode="contain"
-            />
+            {cardDetails.owned && (
+              <View style={[styles.ownedBadge, { backgroundColor: colors.success }]}>
+                <MaterialIcons name="catching-pokemon" size={16} color="white" />
+                <Text style={styles.ownedBadgeText}>{t('card.owned')}</Text>
+              </View>
+            )}
+            {cardDetails.owned && cardDetails.is_for_sale && (
+              <View style={[styles.forSaleBadge, { backgroundColor: '#e74c3c' }]}>
+                <Ionicons name="cash-outline" size={16} color="white" />
+                <Text style={styles.ownedBadgeText}>{t('card.forSale')}</Text>
+              </View>
+            )}
           </View>
+          {cardDetails.user_photo_url ? (
+            <Text style={[styles.flipPhotoHint, { color: colors.text.secondary }]}>
+              {t('card.flipPhotoHint')}
+            </Text>
+          ) : null}
           
           {/* Détails de la carte */}
           <View style={styles.cardInfo}>
@@ -794,11 +862,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     position: 'relative',
   },
+  /* overflow visible : un flip 3D dépasse légèrement le cadre ; hidden couperait l’animation */
+  cardStack: {
+    position: 'relative',
+    alignSelf: 'center',
+    borderRadius: 12,
+    overflow: 'visible',
+  },
   ownedBadge: {
     position: 'absolute',
     top: 10,
     right: 10,
-    zIndex: 10,
+    zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
@@ -807,9 +882,9 @@ const styles = StyleSheet.create({
   },
   forSaleBadge: {
     position: 'absolute',
-    top: 45,
+    top: 46,
     right: 10,
-    zIndex: 10,
+    zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
@@ -823,9 +898,17 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   cardImageContainer: {
+    width: '100%',
+    height: '100%',
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+  },
+  flipPhotoHint: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   cardImage: {
     width: '100%',

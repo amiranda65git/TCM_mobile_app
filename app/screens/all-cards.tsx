@@ -16,6 +16,7 @@ interface Card {
   condition: any;
   created_at: any;
   is_sold: any;
+  image_url?: string | null;
   card: {
     id: any;
     name: any;
@@ -141,6 +142,8 @@ export default function AllCardsScreen() {
     edition_name: card.card.edition_name,
     edition_symbol_image: card.card.edition_symbol_image,
     lang: card.card.lang,
+    user_photo_url: card.image_url ?? null,
+    user_card_id: card.user_card_id,
   });
 
   // Fonction pour ouvrir le modal de vente

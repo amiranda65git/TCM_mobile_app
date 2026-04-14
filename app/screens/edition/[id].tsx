@@ -28,6 +28,8 @@ interface CardInfo {
   has_wishlist: boolean;
   condition?: string;
   lang?: string;
+  user_card_id?: string;
+  user_photo_url?: string | null;
 }
 
 interface EditionDetail {
@@ -226,6 +228,10 @@ export default function EditionDetail() {
       }
       
       // Mettre à jour la carte dans la base de données
+      if (!selectedCard.user_card_id) {
+        console.error('user_card_id manquant pour la vente');
+        return;
+      }
       const { data, error } = await supabase
         .from('user_cards')
         .update({
@@ -234,7 +240,7 @@ export default function EditionDetail() {
           condition: selectedCondition
         })
         .eq('user_id', user.id)
-        .eq('card_id', selectedCard.id);
+        .eq('id', selectedCard.user_card_id);
       
       if (error) throw error;
       
@@ -255,13 +261,17 @@ export default function EditionDetail() {
     
     try {
       // Mettre à jour la carte dans la base de données
+      if (!selectedCard.user_card_id) {
+        console.error('user_card_id manquant pour annuler la vente');
+        return;
+      }
       const { data, error } = await supabase
         .from('user_cards')
         .update({
           is_for_sale: false
         })
         .eq('user_id', user.id)
-        .eq('card_id', selectedCard.id);
+        .eq('id', selectedCard.user_card_id);
       
       if (error) throw error;
       
@@ -425,7 +435,7 @@ export default function EditionDetail() {
         <View style={styles.cardsGrid}>
           {filteredCards.map(card => (
             <SwipeableCard 
-              key={card.id} 
+              key={card.user_card_id || card.id} 
               card={card} 
               colors={colors} 
               t={t} 

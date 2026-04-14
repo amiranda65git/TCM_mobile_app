@@ -1,14 +1,36 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
-import Purchases, { 
-  PurchasesOffering, 
-  PurchasesPackage, 
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useRef,
+  useCallback,
+} from 'react';
+import { Alert, Platform, AppState, AppStateStatus } from 'react-native';
+import { useRouter } from 'expo-router';
+import Purchases, {
+  PurchasesOffering,
+  PurchasesPackage,
   CustomerInfo,
-  PurchasesEntitlementInfo 
+  PurchasesEntitlementInfo,
 } from 'react-native-purchases';
 import { useAuth } from './auth';
+import Constants from 'expo-constants';
+import { ExecutionEnvironment } from 'expo-constants';
 
-// Types pour le contexte RevenueCat
+/** Expo Go n’embarque pas le natif RevenueCat → `RNPurchases` est null. */
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+async function safePurchasesIsConfigured(): Promise<boolean> {
+  try {
+    return await Purchases.isConfigured();
+  } catch {
+    return false;
+  }
+}
+
 export interface RevenueCatStatus {
   isActive: boolean;
   expiresAt: Date | null;
@@ -26,261 +48,325 @@ interface RevenueCatContextType {
   loading: boolean;
 }
 
-// 🧪 LISTE DES TESTEURS - Accès premium gratuit
-const PREMIUM_TESTERS = [
-  'amiranda65@yahoo.fr'
-  //'testeur2@example.com',
-  // Ajoutez ici les emails de vos testeurs
-];
-
-// Configuration RevenueCat
-const REVENUECAT_API_KEY = Platform.select({
-  ios: process.env.EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY || '',
-  android: process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY || '',
-  default: process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY || ''
-});
-
-// Entitlements - L'ID de votre entitlement dans RevenueCat
-const PREMIUM_ENTITLEMENT_ID = 'premium'; // À configurer dans RevenueCat dashboard
+const PREMIUM_ENTITLEMENT_ID = 'premium';
 
 const RevenueCatContext = createContext<RevenueCatContextType | null>(null);
 
+function readPremiumFromCustomerInfo(
+  customerInfo: CustomerInfo
+): Pick<RevenueCatStatus, 'isActive' | 'expiresAt' | 'productId'> {
+  const premiumEntitlement: PurchasesEntitlementInfo | undefined =
+    customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
+
+  return {
+    isActive: !!premiumEntitlement,
+    expiresAt: premiumEntitlement?.expirationDate
+      ? new Date(premiumEntitlement.expirationDate)
+      : null,
+    productId: premiumEntitlement?.productIdentifier ?? null,
+  };
+}
+
 export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth();
+  const userRef = useRef(user);
+  userRef.current = user;
+
   const [subscriptionStatus, setSubscriptionStatus] = useState<RevenueCatStatus>({
     isActive: false,
     expiresAt: null,
     productId: null,
-    loading: true
+    loading: true,
   });
   const [offerings, setOfferings] = useState<PurchasesOffering[]>([]);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fonction pour vérifier si l'utilisateur est un testeur premium
-  const isUserPremiumTester = (userEmail: string | undefined): boolean => {
-    if (!userEmail) return false;
-    return PREMIUM_TESTERS.includes(userEmail.toLowerCase());
-  };
+  const customerInfoListenerRef = useRef<
+    ((info: CustomerInfo) => void) | null
+  >(null);
 
-  // Initialisation de RevenueCat
-  useEffect(() => {
-    console.log('[RevenueCat] useEffect déclenché:', {
-      isAuthenticated,
-      userId: user?.id
+  const applyCustomerInfo = useCallback((customerInfo: CustomerInfo) => {
+    if (__DEV__) {
+      setSubscriptionStatus({
+        isActive: true,
+        expiresAt: null,
+        productId: 'dev-premium',
+        loading: false,
+      });
+      return;
+    }
+
+    const { isActive, expiresAt, productId } =
+      readPremiumFromCustomerInfo(customerInfo);
+
+    setSubscriptionStatus({
+      isActive,
+      expiresAt,
+      productId,
+      loading: false,
     });
-    
-    if (isAuthenticated) {
-      initializeRevenueCat();
-      checkSubscriptionStatus();
-    }
+  }, []);
 
-    return () => {
-      // Nettoyage si nécessaire
-    };
-  }, [isAuthenticated]);
-
-  const initializeRevenueCat = async () => {
+  const unregisterCustomerInfoListener = useCallback(() => {
+    if (!customerInfoListenerRef.current) return;
     try {
-      setLoading(true);
-      
-      console.log('[RevenueCat] Initialisation RevenueCat:', {
-        platform: Platform.OS,
-        isDev: __DEV__,
-        userId: user?.id
-      });
-      
-      // Configuration des clés API RevenueCat depuis les variables d'environnement
-      const apiKey = Platform.select({
-        ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
-        android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
-        default: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
-      });
-
-      if (!apiKey) {
-        console.error('[RevenueCat] ⚠️ CLÉS API NON CONFIGURÉES');
-        Alert.alert(
-          'Configuration RequiSE', 
-          'Les clés API RevenueCat ne sont pas configurées dans les variables d\'environnement. Veuillez ajouter EXPO_PUBLIC_REVENUECAT_IOS_API_KEY et EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY.'
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Initialiser RevenueCat
-      await Purchases.configure({ apiKey });
-      console.log('[RevenueCat] ✅ RevenueCat configuré avec succès');
-
-      // Identifier l'utilisateur (optionnel mais recommandé)
-      if (user?.id) {
-        await Purchases.logIn(user.id);
-        console.log('[RevenueCat] ✅ Utilisateur identifié:', user.id);
-      }
-
-      // Charger les offerings (produits)
-      await loadOfferings();
-      
-    } catch (error) {
-      console.error('[RevenueCat] ❌ Erreur initialisation:', error);
-      Alert.alert(
-        'Erreur de configuration',
-        'Impossible d\'initialiser RevenueCat. Vérifiez votre configuration.',
-        [{ text: 'OK' }]
+      Purchases.removeCustomerInfoUpdateListener(
+        customerInfoListenerRef.current
       );
-    } finally {
-      setLoading(false);
+    } catch {
+      /* natif absent (Expo Go) */
     }
-  };
+    customerInfoListenerRef.current = null;
+  }, []);
+
+  const registerCustomerInfoListener = useCallback(() => {
+    unregisterCustomerInfoListener();
+    if (isExpoGo) return;
+    try {
+      const listener = (info: CustomerInfo) => {
+        console.log('[RevenueCat] CustomerInfo mise à jour (listener)');
+        applyCustomerInfo(info);
+      };
+      customerInfoListenerRef.current = listener;
+      Purchases.addCustomerInfoUpdateListener(listener);
+    } catch {
+      /* natif absent */
+    }
+  }, [applyCustomerInfo, unregisterCustomerInfoListener]);
 
   const loadOfferings = async () => {
     try {
-      console.log('[RevenueCat] Chargement des offerings...');
-      
       const offerings = await Purchases.getOfferings();
-      console.log('[RevenueCat] Offerings récupérées:', offerings);
-      
       if (offerings.current) {
         const currentOffering = offerings.current;
         setOfferings([currentOffering]);
         setPackages(currentOffering.availablePackages);
-        
-        console.log('[RevenueCat] ✅ Packages disponibles:', {
-          count: currentOffering.availablePackages.length,
-          packages: currentOffering.availablePackages.map(p => ({
-            id: p.identifier,
-            productId: p.product.identifier,
-            price: p.product.priceString,
-            title: p.product.title
-          }))
-        });
-        
-        if (currentOffering.availablePackages.length === 0) {
-          console.warn('[RevenueCat] ⚠️ Aucun package trouvé dans l\'offering courante');
-        }
       } else {
-        console.warn('[RevenueCat] ⚠️ Aucune offering courante configurée');
         setOfferings([]);
         setPackages([]);
       }
     } catch (error) {
-      console.error('[RevenueCat] ❌ Erreur lors du chargement des offerings:', error);
+      console.error('[RevenueCat] Erreur offerings:', error);
       setOfferings([]);
       setPackages([]);
     }
   };
 
-  const checkSubscriptionStatus = async () => {
-    if (!user) return;
+  /** Synchronise avec Google Play / App Store puis recharge les droits (hors mode dev). */
+  const refreshEntitlementsFromStore = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    if (__DEV__) {
+      return;
+    }
 
     try {
-      setSubscriptionStatus(prev => ({ ...prev, loading: true }));
-      console.log('[RevenueCat] Vérification du statut d\'abonnement...');
+      await Purchases.syncPurchases();
+    } catch (e) {
+      console.warn('[RevenueCat] syncPurchases:', e);
+    }
+    try {
+      await Purchases.invalidateCustomerInfoCache();
+    } catch (e) {
+      console.warn('[RevenueCat] invalidateCustomerInfoCache:', e);
+    }
 
-      // 🧪 VÉRIFIER SI L'UTILISATEUR EST UN TESTEUR PREMIUM
-      const userEmail = user.email;
-      const isPremiumTester = isUserPremiumTester(userEmail);
-      
-      // 🛠️ MODE DÉVELOPPEUR - Accès premium automatique
-      if (__DEV__) {
-        console.log('[RevenueCat] 🛠️ Mode développeur - Accès premium accordé automatiquement');
-        setSubscriptionStatus({
-          isActive: true,
-          expiresAt: null, // Accès illimité en dev
-          productId: 'dev-premium',
-          loading: false
-        });
-        return;
-      }
-      
-      if (isPremiumTester) {
-        console.log('[RevenueCat] 🧪 Utilisateur testeur détecté - Accès premium accordé:', userEmail);
-        setSubscriptionStatus({
-          isActive: true,
-          expiresAt: null, // Accès illimité pour les testeurs
-          productId: 'tester-premium',
-          loading: false
-        });
-        return;
-      }
-
-      const customerInfo: CustomerInfo = await Purchases.getCustomerInfo();
-      console.log('[RevenueCat] Info client récupérées:', customerInfo);
-
-      // Vérifier l'entitlement premium
-      const premiumEntitlement: PurchasesEntitlementInfo | undefined = 
-        customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
-
-      const isActive = !!premiumEntitlement;
-      const expiresAt = premiumEntitlement?.expirationDate ? new Date(premiumEntitlement.expirationDate) : null;
-      const productId = premiumEntitlement?.productIdentifier || null;
-
-      console.log('[RevenueCat] ✅ Statut abonnement:', { 
-        isActive, 
-        expiresAt, 
-        productId,
-        entitlement: premiumEntitlement 
-      });
-
-      setSubscriptionStatus({
-        isActive,
-        expiresAt,
-        productId,
-        loading: false
-      });
-    } catch (error) {
-      console.error('[RevenueCat] ❌ Erreur lors de la vérification du statut:', error);
+    try {
+      const customerInfo = await Purchases.getCustomerInfo();
+      applyCustomerInfo(customerInfo);
+    } catch (e) {
+      console.error('[RevenueCat] getCustomerInfo après sync:', e);
       setSubscriptionStatus({
         isActive: false,
         expiresAt: null,
         productId: null,
-        loading: false
+        loading: false,
       });
     }
-  };
+  }, [applyCustomerInfo]);
 
-  const purchaseSubscription = async (packageToPurchase: PurchasesPackage): Promise<boolean> => {
+  const checkSubscriptionStatus = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+
+    try {
+      setSubscriptionStatus((prev) => ({ ...prev, loading: true }));
+
+      if (__DEV__) {
+        setSubscriptionStatus({
+          isActive: true,
+          expiresAt: null,
+          productId: 'dev-premium',
+          loading: false,
+        });
+        return;
+      }
+
+      await refreshEntitlementsFromStore();
+    } catch (error) {
+      console.error('[RevenueCat] checkSubscriptionStatus:', error);
+      setSubscriptionStatus({
+        isActive: false,
+        expiresAt: null,
+        productId: null,
+        loading: false,
+      });
+    }
+  }, [refreshEntitlementsFromStore]);
+
+  const purchasesSignOut = useCallback(async () => {
+    unregisterCustomerInfoListener();
+    try {
+      if (await safePurchasesIsConfigured()) {
+        await Purchases.logOut();
+      }
+    } catch (e) {
+      console.warn('[RevenueCat] logOut:', e);
+    }
+    setSubscriptionStatus({
+      isActive: false,
+      expiresAt: null,
+      productId: null,
+      loading: false,
+    });
+    setOfferings([]);
+    setPackages([]);
+    setLoading(false);
+  }, [unregisterCustomerInfoListener]);
+
+  const initializeRevenueCat = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser?.id) return;
+
+    setLoading(true);
+
+    const apiKey = Platform.select({
+      ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
+      android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
+      default: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
+    });
+
+    if (!apiKey) {
+      console.error('[RevenueCat] Clés API manquantes');
+      Alert.alert(
+        'Configuration',
+        'Clés RevenueCat manquantes (EXPO_PUBLIC_REVENUECAT_*_API_KEY).'
+      );
+      setLoading(false);
+      return;
+    }
+
+    if (isExpoGo) {
+      console.warn(
+        '[RevenueCat] Expo Go : pas de module natif achats. Lancez `npx expo run:android` (dev client) pour tester RevenueCat.'
+      );
+      setSubscriptionStatus({
+        isActive: __DEV__,
+        expiresAt: null,
+        productId: __DEV__ ? 'dev-expo-go' : null,
+        loading: false,
+      });
+      setOfferings([]);
+      setPackages([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const alreadyConfigured = await safePurchasesIsConfigured();
+      if (!alreadyConfigured) {
+        await Purchases.configure({ apiKey });
+      }
+
+      await Purchases.logIn(currentUser.id);
+      registerCustomerInfoListener();
+      await loadOfferings();
+      await checkSubscriptionStatus();
+    } catch (error) {
+      console.error('[RevenueCat] Initialisation:', error);
+      Alert.alert(
+        'Erreur',
+        'Impossible d’initialiser les achats in-app. Réessayez plus tard.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [checkSubscriptionStatus, registerCustomerInfoListener]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      void purchasesSignOut();
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      await initializeRevenueCat();
+      if (cancelled) return;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, user?.id, initializeRevenueCat, purchasesSignOut]);
+
+  useEffect(() => {
+    const onAppState = (next: AppStateStatus) => {
+      if (next !== 'active') return;
+      if (!isAuthenticated || !userRef.current?.id) return;
+      void checkSubscriptionStatus();
+    };
+
+    const sub = AppState.addEventListener('change', onAppState);
+    return () => sub.remove();
+  }, [isAuthenticated, checkSubscriptionStatus]);
+
+  const purchaseSubscription = async (
+    packageToPurchase: PurchasesPackage
+  ): Promise<boolean> => {
     if (!user) {
       Alert.alert('Erreur', 'Vous devez être connecté pour effectuer un achat');
       return false;
     }
 
+    if (isExpoGo) {
+      Alert.alert(
+        'Expo Go',
+        'Les achats in-app ne sont pas disponibles dans Expo Go. Utilisez un build de développement (expo run:android / run:ios).'
+      );
+      return false;
+    }
+
     try {
       setLoading(true);
-      console.log('[RevenueCat] 🛒 Achat en cours:', {
-        packageId: packageToPurchase.identifier,
-        productId: packageToPurchase.product.identifier,
-        price: packageToPurchase.product.priceString
-      });
-      
-      const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
-      console.log('[RevenueCat] ✅ Achat réussi:', customerInfo);
-      
-      // Vérifier que l'entitlement est bien actif
-      const premiumEntitlement = customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
-      
+      const { customerInfo } = await Purchases.purchasePackage(
+        packageToPurchase
+      );
+      const premiumEntitlement =
+        customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
+
       if (premiumEntitlement) {
-        console.log('[RevenueCat] ✅ Entitlement premium activé');
-        await checkSubscriptionStatus(); // Mettre à jour le statut
+        applyCustomerInfo(customerInfo);
         return true;
-      } else {
-        console.error('[RevenueCat] ❌ Entitlement premium non trouvé après achat');
-        Alert.alert('Erreur', 'L\'achat a été effectué mais l\'abonnement n\'est pas actif. Contactez le support.');
-        return false;
       }
+      Alert.alert(
+        'Erreur',
+        'L’achat semble OK mais l’abonnement n’est pas actif. Contactez le support.'
+      );
+      return false;
     } catch (error: any) {
-      console.error('[RevenueCat] ❌ Erreur lors de l\'achat:', error);
-      
-      let errorMessage = 'Une erreur est survenue lors de l\'achat.';
-      
+      let errorMessage = 'Une erreur est survenue lors de l’achat.';
       if (error.code === 'PURCHASES_ERROR_PURCHASE_CANCELLED') {
-        errorMessage = 'Achat annulé par l\'utilisateur.';
+        errorMessage = 'Achat annulé.';
       } else if (error.code === 'PURCHASES_ERROR_NETWORK_ERROR') {
-        errorMessage = 'Erreur de connexion. Vérifiez votre connexion internet.';
-      } else if (error.code === 'PURCHASES_ERROR_PRODUCT_NOT_AVAILABLE_FOR_PURCHASE') {
-        errorMessage = 'Produit non disponible pour l\'achat.';
+        errorMessage = 'Erreur réseau.';
+      } else if (
+        error.code === 'PURCHASES_ERROR_PRODUCT_NOT_AVAILABLE_FOR_PURCHASE'
+      ) {
+        errorMessage = 'Produit non disponible.';
       }
-      
-      Alert.alert('Erreur abonnement', errorMessage);
+      Alert.alert('Abonnement', errorMessage);
       return false;
     } finally {
       setLoading(false);
@@ -289,30 +375,33 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
 
   const restorePurchases = async (): Promise<boolean> => {
     if (!user) {
-      Alert.alert('Erreur', 'Vous devez être connecté pour restaurer vos achats');
+      Alert.alert('Erreur', 'Connectez-vous pour restaurer vos achats');
+      return false;
+    }
+
+    if (isExpoGo) {
+      Alert.alert(
+        'Expo Go',
+        'La restauration des achats nécessite un build avec le module natif (expo run:android / run:ios).'
+      );
       return false;
     }
 
     try {
       setLoading(true);
-      console.log('[RevenueCat] 🔄 Restauration des achats...');
-      
       const customerInfo = await Purchases.restorePurchases();
-      console.log('[RevenueCat] Achats restaurés:', customerInfo);
-      
-      const premiumEntitlement = customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
-      
-      if (premiumEntitlement) {
-        await checkSubscriptionStatus();
-        Alert.alert('Succès', 'Vos achats ont été restaurés avec succès !');
+      applyCustomerInfo(customerInfo);
+      const active =
+        !!customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID] || __DEV__;
+      if (active) {
+        Alert.alert('Succès', 'Achats restaurés.');
         return true;
-      } else {
-        Alert.alert('Information', 'Aucun abonnement actif trouvé');
-        return false;
       }
+      Alert.alert('Information', 'Aucun abonnement actif trouvé');
+      return false;
     } catch (error) {
-      console.error('[RevenueCat] ❌ Erreur lors de la restauration:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la restauration de vos achats.');
+      console.error('[RevenueCat] restore:', error);
+      Alert.alert('Erreur', 'Restauration impossible.');
       return false;
     } finally {
       setLoading(false);
@@ -320,15 +409,17 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <RevenueCatContext.Provider value={{
-      subscriptionStatus,
-      offerings,
-      packages,
-      purchaseSubscription,
-      restorePurchases,
-      checkSubscriptionStatus,
-      loading
-    }}>
+    <RevenueCatContext.Provider
+      value={{
+        subscriptionStatus,
+        offerings,
+        packages,
+        purchaseSubscription,
+        restorePurchases,
+        checkSubscriptionStatus,
+        loading,
+      }}
+    >
       {children}
     </RevenueCatContext.Provider>
   );
@@ -342,23 +433,52 @@ export function useRevenueCat() {
   return context;
 }
 
-// Hook pour vérifier les restrictions
+/** Zones de l’app où l’on affiche une incitation Premium (sans bloquer l’accès). */
+export type PremiumUpsellContext = 'market' | 'trading' | 'scan' | 'collection';
+
+export type PremiumUpsellOptions = {
+  /** Réservé aux anciens flux (scan) — ignoré, navigation vers /premium uniquement */
+  onLater?: () => void;
+};
+
+/**
+ * Restrictions payantes désactivées : tout le monde accède aux écrans.
+ * Ancienne logique (blocage) conservée en commentaire pour réactivation éventuelle.
+ */
 export function useSubscriptionRestrictions() {
   const { subscriptionStatus } = useRevenueCat();
+  const router = useRouter();
+  const isPremium = subscriptionStatus.isActive;
 
-  const canAccessMarket = subscriptionStatus.isActive;
-  const canAccessTrading = subscriptionStatus.isActive;
-  
-  const canScanCard = async (currentInventoryCount: number): Promise<boolean> => {
-    if (subscriptionStatus.isActive) return true;
-    return currentInventoryCount < 10;
-  };
+  // --- Ancienne logique de blocage (ne plus utiliser tant que les comptes gratuits sont ouverts) ---
+  // const canAccessMarket = subscriptionStatus.isActive;
+  // const canAccessTrading = subscriptionStatus.isActive;
+  // const canScanCard = async (count: number) =>
+  //   subscriptionStatus.isActive || count < 10;
+  // const getMaxCollectionCards = () =>
+  //   subscriptionStatus.isActive ? Infinity : 10;
+  // const canAccessFullCollection = subscriptionStatus.isActive;
 
-  const getMaxCollectionCards = (): number => {
-    return subscriptionStatus.isActive ? Infinity : 10;
-  };
+  const canAccessMarket = true;
+  const canAccessTrading = true;
 
-  const canAccessFullCollection = subscriptionStatus.isActive;
+  const canScanCard = async (_currentInventoryCount: number): Promise<boolean> =>
+    true;
+
+  const getMaxCollectionCards = (): number => Infinity;
+
+  const canAccessFullCollection = true;
+
+  const showPremiumUpsell = useCallback(
+    (feature: PremiumUpsellContext, options?: PremiumUpsellOptions) => {
+      if (isPremium) {
+        options?.onLater?.();
+        return;
+      }
+      router.push(`/premium?from=${feature}`);
+    },
+    [isPremium, router]
+  );
 
   return {
     canAccessMarket,
@@ -366,6 +486,7 @@ export function useSubscriptionRestrictions() {
     canScanCard,
     getMaxCollectionCards,
     canAccessFullCollection,
-    isPremium: subscriptionStatus.isActive
+    isPremium,
+    showPremiumUpsell,
   };
-} 
+}

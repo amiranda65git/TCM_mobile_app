@@ -59,7 +59,7 @@ export default function PremiumRestrictionBanner({
   };
 
   const handleUpgrade = () => {
-    router.push('/premium');
+    router.push(`/premium?from=${type}`);
   };
 
   const dynamicStyles = StyleSheet.create({

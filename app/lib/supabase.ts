@@ -142,20 +142,24 @@ export const getUserEditionsCount = async (userId: string) => {
 };
 
 // Fonction pour récupérer le nombre total de cartes de l'utilisateur
-export const getUserCardsCount = async () => {
+export const getUserCardsCount = async (userId?: string) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Utilisateur non authentifié');
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Utilisateur non authentifié');
+      resolvedUserId = user.id;
+    }
 
     const { data, error } = await supabase
-      .rpc('get_user_cards_count', { user_uuid: user.id });
+      .rpc('get_user_cards_count', { user_uuid: resolvedUserId });
 
     if (error) throw error;
 
-    return { data, error: null };
+    return { count: Number(data ?? 0), error: null };
   } catch (error) {
     console.error('Erreur lors du récupération du nombre de cartes:', error);
-    return { data: 0, error };
+    return { count: 0, error };
   }
 };
 
@@ -698,13 +702,13 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
       return { data: null, error: cardsError };
     }
     
-    // 3. Récupérer les cartes possédées par l'utilisateur
+    // 3. Récupérer les exemplaires (user_cards) — plusieurs lignes possibles par carte officielle
     const { data: userCardsData, error: userCardsError } = await supabase
       .from('user_cards')
-      .select('card_id, price, is_for_sale')
+      .select('id, card_id, price, is_for_sale, condition, image_url, created_at')
       .eq('user_id', userId)
-      .eq('is_sold', false); // Exclure les cartes vendues
-    
+      .eq('is_sold', false);
+
     if (userCardsError) {
       console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
       return { data: null, error: userCardsError };
@@ -762,51 +766,61 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
       });
     }
     
-    // Créer un Set des cartes possédées pour une recherche rapide
-    const ownedCardsSet = new Set<string>();
-    const cardPriceMap = new Map<string, number>();
-    const cardForSaleMap = new Map<string, boolean>();
-    
-    userCardsData?.forEach((card: any) => {
-      ownedCardsSet.add(card.card_id);
-      if (card.price !== null) {
-        cardPriceMap.set(card.card_id, card.price);
-      }
-      cardForSaleMap.set(card.card_id, card.is_for_sale || false);
-    });
-    
-    // Combiner les données
-    const cardsWithOwnership = cardsData.map((card: any) => {
-      const owned = ownedCardsSet.has(card.id);
-      // Priorité au prix défini par l'utilisateur, sinon on prend le prix du marché
-      const userPrice = cardPriceMap.get(card.id);
-      const marketPrice = marketPriceMap.get(card.id);
-      const price = userPrice !== undefined ? userPrice : marketPrice;
-      const isForSale = cardForSaleMap.get(card.id) || false;
-      
-      return {
+    // Une entrée par exemplaire possédé ; une entrée non possédée par carte officielle sinon
+    const cardsWithOwnership: any[] = [];
+
+    for (const card of cardsData as any[]) {
+      const exemplaires = (userCardsData || [])
+        .filter((uc: any) => uc.card_id === card.id)
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
+      const marketMid = marketPriceMidMap.get(card.id);
+      const base = {
         ...card,
-        owned,
-        price,
-        is_for_sale: isForSale,
         market_price_low: marketPriceLowMap.get(card.id),
-        market_price_mid: marketPriceMidMap.get(card.id),
-        market_price_high: marketPriceHighMap.get(card.id)
+        market_price_mid: marketMid,
+        market_price_high: marketPriceHighMap.get(card.id),
       };
-    });
-    
-    // Calculer les statistiques
-    const ownedCardsCount = cardsWithOwnership.filter((card: any) => card.owned).length;
-    
-    // Calculer la valeur totale des cartes possédées
-    const totalValue = cardsWithOwnership.reduce((total: number, card: any) => {
-      if (card.owned) {
-        if (card.price !== null && card.price !== undefined) {
-          return total + card.price;
-        } else {
-          // Si pas de prix défini, on utilise une valeur par défaut de 0
-          return total;
+
+      if (exemplaires.length === 0) {
+        cardsWithOwnership.push({
+          ...base,
+          owned: false,
+          user_card_id: undefined,
+          condition: undefined,
+          user_photo_url: undefined,
+          price: marketMid ?? null,
+          is_for_sale: false,
+        });
+      } else {
+        for (const ex of exemplaires) {
+          const userPrice = ex.price;
+          cardsWithOwnership.push({
+            ...base,
+            owned: true,
+            user_card_id: ex.id,
+            condition: ex.condition,
+            user_photo_url: ex.image_url ?? null,
+            price:
+              userPrice !== null && userPrice !== undefined
+                ? userPrice
+                : marketMid ?? null,
+            is_for_sale: !!ex.is_for_sale,
+          });
         }
+      }
+    }
+
+    const ownedCardsCount = cardsWithOwnership.filter((c: any) => c.owned).length;
+
+    const totalValue = cardsWithOwnership.reduce((total: number, card: any) => {
+      if (!card.owned) return total;
+      const p = card.price;
+      if (p !== null && p !== undefined && !Number.isNaN(Number(p))) {
+        return total + Number(p);
       }
       return total;
     }, 0);
@@ -2177,16 +2191,27 @@ const uploadImageToR2 = async (cardId: string, imageBase64: string): Promise<str
         imageBase64,
       }),
     });
-    
-    const result = await response.json();
-    
-    if (!response.ok || !result.success) {
-      console.error('[uploadImageToR2] Erreur API:', result.error);
+
+    const raw = await response.text();
+    let result: { success?: boolean; imageUrl?: string; error?: string };
+    try {
+      result = JSON.parse(raw) as typeof result;
+    } catch {
+      console.error(
+        '[uploadImageToR2] Réponse non-JSON (souvent erreur Vercel / timeout). HTTP',
+        response.status,
+        raw.slice(0, 200)
+      );
       return null;
     }
-    
+
+    if (!response.ok || !result.success) {
+      console.error('[uploadImageToR2] Erreur API:', result.error, 'HTTP', response.status);
+      return null;
+    }
+
     console.log(`[uploadImageToR2] Upload réussi: ${result.imageUrl}`);
-    return result.imageUrl;
+    return result.imageUrl ?? null;
     
   } catch (error) {
     console.error('[uploadImageToR2] Erreur:', error);
@@ -2548,6 +2573,7 @@ export const getAllUserCards = async (userId: string) => {
         card_id,
         created_at,
         is_sold,
+        image_url,
         official_cards:card_id (
           id,
           name,
@@ -2634,6 +2660,7 @@ export const getAllUserCards = async (userId: string) => {
         condition: userCard.condition,
         created_at: userCard.created_at,
         is_sold: userCard.is_sold,
+        image_url: (userCard as { image_url?: string | null }).image_url ?? null,
         card: {
           id: (cardData as any).id,
           name: (cardData as any).name,
