@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, FlatList } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ interface Card {
   condition: any;
   created_at: any;
   is_sold: any;
-  image_url?: string | null;
+  image_url: string | null;
   card: {
     id: any;
     name: any;
@@ -43,10 +43,13 @@ const CONDITION_COLORS: Record<string, string> = {
   'Played': '#F44336'
 };
 
+const PAGE_SIZE = 20;
+
 export default function AllCardsScreen() {
   const { session } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();
+  const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   
@@ -58,14 +61,24 @@ export default function AllCardsScreen() {
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [selectedCondition, setSelectedCondition] = useState<string>('');
   const [salePrice, setSalePrice] = useState<string>('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loadStartRef = useRef<number | null>(null);
+  const renderMarkedRef = useRef(false);
 
   // Charger toutes les cartes de l'utilisateur
   const loadUserCards = async () => {
     if (!session?.user?.id) return;
     
+    const loadStart = Date.now();
+    loadStartRef.current = loadStart;
+    renderMarkedRef.current = false;
+    console.log(`[all-cards] loadUserCards start: ${new Date(loadStart).toISOString()}`);
+
     setLoading(true);
     try {
+      const fetchStart = Date.now();
       const { data, error } = await getAllUserCards(session.user.id);
+      console.log(`[all-cards] getAllUserCards returned in ${Date.now() - fetchStart}ms`);
       
       if (error) {
         console.error('Erreur lors du chargement des cartes:', error);
@@ -74,7 +87,9 @@ export default function AllCardsScreen() {
       }
       
       // Filtrer les valeurs null et trier les cartes par prix descendant
-      const validCards = (data || []).filter((card): card is Card => card !== null);
+      const sortStart = Date.now();
+      const cardsWithNullable = (data || []) as Array<Card | null>;
+      const validCards = cardsWithNullable.filter((card): card is Card => card !== null);
       const sortedCards = validCards.sort((a, b) => {
         const priceA = a.card.market_price_mid || 0;
         const priceB = b.card.market_price_mid || 0;
@@ -87,14 +102,19 @@ export default function AllCardsScreen() {
         // Si les prix sont identiques, trier par nom alphabétique
         return a.card.name.localeCompare(b.card.name);
       });
+      console.log(`[all-cards] local filter+sort done in ${Date.now() - sortStart}ms (${sortedCards.length} cartes)`);
       
       setAllCards(sortedCards);
+      const filteredStart = Date.now();
       setFilteredCards(sortedCards);
+      console.log(`[all-cards] setState allCards+filteredCards triggered in ${Date.now() - filteredStart}ms`);
     } catch (error) {
       console.error('Erreur lors du chargement des cartes:', error);
       Alert.alert(t('general.error'), t('cards.loadError'));
     } finally {
+      const beforeSetLoadingFalse = Date.now();
       setLoading(false);
+      console.log(`[all-cards] setLoading(false) called after ${beforeSetLoadingFalse - loadStart}ms total`);
     }
   };
 
@@ -102,6 +122,7 @@ export default function AllCardsScreen() {
   const filterCards = (query: string) => {
     if (!query.trim()) {
       setFilteredCards(allCards);
+      setVisibleCount(PAGE_SIZE);
       return;
     }
     
@@ -110,6 +131,7 @@ export default function AllCardsScreen() {
     );
     
     setFilteredCards(filtered);
+    setVisibleCount(PAGE_SIZE);
   };
 
   // Gérer le changement de texte de recherche
@@ -121,6 +143,18 @@ export default function AllCardsScreen() {
   useEffect(() => {
     loadUserCards();
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [allCards]);
+
+  useEffect(() => {
+    if (!loading && loadStartRef.current && !renderMarkedRef.current) {
+      renderMarkedRef.current = true;
+      const elapsed = Date.now() - loadStartRef.current;
+      console.log(`[all-cards] first render after loading=false in ${elapsed}ms`);
+    }
+  }, [loading, filteredCards.length]);
 
   // Convertir Card vers CardInfo pour SwipeableCard
   const convertToCardInfo = (card: Card) => ({
@@ -183,6 +217,11 @@ export default function AllCardsScreen() {
   // Fonction pour ajouter/retirer de la wishlist (pas applicable ici mais requis par SwipeableCard)
   const handleToggleWishlist = async (cardInfo: any) => {
     // Pas applicable pour les cartes possédées
+  };
+
+  const handleLoadMoreCards = () => {
+    if (visibleCount >= filteredCards.length) return;
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredCards.length));
   };
 
   // Fonction pour confirmer la vente
@@ -270,23 +309,34 @@ export default function AllCardsScreen() {
         </View>
       </View>
 
-      {/* Cards List */}
-      <ScrollView style={styles.cardsList} showsVerticalScrollIndicator={false}>
-        {filteredCards.length > 0 ? (
-          filteredCards.map(card => (
-            <SwipeableCard
-              key={card.user_card_id}
-              card={convertToCardInfo(card)}
-              colors={colors}
-              t={t}
-              router={router}
-              onSellPress={handleSellCard}
-              onPriceAlertPress={handleCreatePriceAlert}
-              onWishlistPress={handleToggleWishlist}
-              showOwnershipIcon={false} // On sait déjà que toutes les cartes sont possédées
-            />
-          ))
-        ) : (
+      {/* Cards List (virtualisée pour éviter le rendu complet d'un coup) */}
+      <FlatList
+        data={filteredCards.slice(0, visibleCount)}
+        keyExtractor={(item) => String(item.user_card_id)}
+        style={styles.cardsList}
+        contentContainerStyle={styles.cardsListContent}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
+        updateCellsBatchingPeriod={50}
+        onEndReached={handleLoadMoreCards}
+        onEndReachedThreshold={0.4}
+        renderItem={({ item }) => (
+          <SwipeableCard
+            card={convertToCardInfo(item)}
+            colors={colors}
+            isDarkMode={isDarkMode}
+            t={t}
+            router={router}
+            onSellPress={handleSellCard}
+            onPriceAlertPress={handleCreatePriceAlert}
+            onWishlistPress={handleToggleWishlist}
+            showOwnershipIcon={false} // On sait déjà que toutes les cartes sont possédées
+          />
+        )}
+        ListEmptyComponent={
           <View style={styles.emptyState}>
             {searchQuery.length > 0 ? (
               <>
@@ -316,8 +366,8 @@ export default function AllCardsScreen() {
               </>
             )}
           </View>
-        )}
-      </ScrollView>
+        }
+      />
 
       {/* Modal de vente */}
       <Modal
@@ -450,6 +500,10 @@ const styles = StyleSheet.create({
   cardsList: {
     flex: 1,
     padding: 16,
+  },
+  cardsListContent: {
+    paddingBottom: 16,
+    flexGrow: 1,
   },
   emptyState: {
     flex: 1,

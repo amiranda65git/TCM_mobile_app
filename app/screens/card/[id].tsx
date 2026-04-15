@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions, Alert, Modal, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions, Alert, Modal, TextInput, Animated, PanResponder } from 'react-native';
 import { CardImageSlider } from '../../components/CardImageSlider';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -72,6 +72,12 @@ export default function CardDetailScreen() {
   const [showSellModal, setShowSellModal] = useState(false);
   const [sellingPrice, setSellingPrice] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingCard, setIsDeletingCard] = useState(false);
+  const [sliderTrackWidth, setSliderTrackWidth] = useState(0);
+  const sliderKnobSize = 44;
+  const sliderX = useRef(new Animated.Value(0)).current;
+  const sliderCurrentXRef = useRef(0);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS = {
@@ -339,6 +345,86 @@ export default function CardDetailScreen() {
     const price = parseFloat(sellingPrice);
     return !isNaN(price) && price > 0;
   };
+
+  const resetDeleteSlider = () => {
+    sliderCurrentXRef.current = 0;
+    sliderX.setValue(0);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    resetDeleteSlider();
+  };
+
+  const handleOpenDeleteModal = () => {
+    if (!cardDetails?.owned || !cardDetails.user_card_id) return;
+    resetDeleteSlider();
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteCard = async () => {
+    if (!cardDetails?.user_card_id || !user?.id || isDeletingCard) return;
+
+    try {
+      setIsDeletingCard(true);
+      const { error } = await supabase
+        .from('user_cards')
+        .delete()
+        .eq('id', cardDetails.user_card_id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      closeDeleteModal();
+      router.back();
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la carte:', error);
+      Alert.alert(t('general.error'), t('card.deleteError', 'Erreur lors de la suppression de la carte'));
+    } finally {
+      setIsDeletingCard(false);
+    }
+  };
+
+  const sliderPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isDeletingCard,
+      onMoveShouldSetPanResponder: () => !isDeletingCard,
+      onPanResponderGrant: () => {
+        sliderX.stopAnimation((value) => {
+          sliderCurrentXRef.current = value;
+        });
+      },
+      onPanResponderMove: (_evt, gestureState) => {
+        const maxX = Math.max(0, sliderTrackWidth - sliderKnobSize);
+        const nextX = Math.min(maxX, Math.max(0, sliderCurrentXRef.current + gestureState.dx));
+        sliderX.setValue(nextX);
+      },
+      onPanResponderRelease: (_evt, gestureState) => {
+        const maxX = Math.max(0, sliderTrackWidth - sliderKnobSize);
+        const releaseX = Math.min(maxX, Math.max(0, sliderCurrentXRef.current + gestureState.dx));
+        const reachedEnd = maxX > 0 && releaseX >= maxX * 0.9;
+
+        if (reachedEnd) {
+          Animated.timing(sliderX, {
+            toValue: maxX,
+            duration: 100,
+            useNativeDriver: false,
+          }).start(() => {
+            sliderCurrentXRef.current = maxX;
+            handleDeleteCard();
+          });
+          return;
+        }
+
+        Animated.spring(sliderX, {
+          toValue: 0,
+          useNativeDriver: false,
+        }).start(() => {
+          sliderCurrentXRef.current = 0;
+        });
+      },
+    })
+  ).current;
   
   // Action lorsqu'on clique sur Définir une alerte de prix
   const handlePriceAlert = async () => {
@@ -683,6 +769,18 @@ export default function CardDetailScreen() {
             </>
           )}
         </View>
+
+        {cardDetails.owned && cardDetails.user_card_id ? (
+          <TouchableOpacity
+            style={[styles.deleteCardButton, { borderColor: colors.error }]}
+            onPress={handleOpenDeleteModal}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.error} />
+            <Text style={[styles.deleteCardButtonText, { color: colors.error }]}>
+              {t('card.removeFromCollection', 'Supprimer')}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
       
       {/* Modal de vente */}
@@ -795,6 +893,63 @@ export default function CardDetailScreen() {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDeleteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeDeleteModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
+                {t('card.removeFromCollection', 'Supprimer')}
+              </Text>
+              <TouchableOpacity onPress={closeDeleteModal} disabled={isDeletingCard}>
+                <Ionicons name="close" size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.deleteModalText, { color: colors.text.secondary }]}>
+              {t(
+                'card.deleteConfirm',
+                'Faites glisser le bouton pour confirmer la suppression de cette carte.'
+              )}
+            </Text>
+
+            <View
+              style={[styles.deleteSliderTrack, { backgroundColor: colors.background, borderColor: colors.border }]}
+              onLayout={(event) => {
+                setSliderTrackWidth(event.nativeEvent.layout.width);
+                resetDeleteSlider();
+              }}
+            >
+              <Text style={[styles.deleteSliderHint, { color: colors.text.secondary }]}>
+                {t('card.slideToDelete', 'Glisser pour supprimer')}
+              </Text>
+
+              <Animated.View
+                style={[
+                  styles.deleteSliderKnob,
+                  {
+                    backgroundColor: colors.error,
+                    transform: [{ translateX: sliderX }],
+                    opacity: isDeletingCard ? 0.8 : 1,
+                  },
+                ]}
+                {...sliderPanResponder.panHandlers}
+              >
+                {isDeletingCard ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+                )}
+              </Animated.View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1126,5 +1281,50 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  deleteCardButton: {
+    marginTop: 14,
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  deleteCardButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  deleteModalText: {
+    fontSize: 14,
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  deleteSliderTrack: {
+    width: '100%',
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  deleteSliderHint: {
+    position: 'absolute',
+    alignSelf: 'center',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  deleteSliderKnob: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 }); 

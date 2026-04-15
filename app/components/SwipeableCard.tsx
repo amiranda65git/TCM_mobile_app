@@ -32,6 +32,7 @@ interface CardInfo {
 interface SwipeableCardProps {
   card: CardInfo;
   colors: any;
+  isDarkMode?: boolean;
   t: any;
   router: any;
   onSellPress: (card: CardInfo) => void;
@@ -44,6 +45,7 @@ interface SwipeableCardProps {
 const SwipeableCard: React.FC<SwipeableCardProps> = ({ 
   card, 
   colors, 
+  isDarkMode = false,
   t, 
   router, 
   onSellPress, 
@@ -240,14 +242,14 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
             {/* Prix aligné à droite */}
             <View style={styles.priceContainer}>
               {card.market_price_mid && (
-                <Text style={[styles.marketPrice, { color: colors.primary }]}>
+                <Text style={[styles.marketPrice, { color: isDarkMode ? '#FFFFFF' : colors.primary }]}>
                   {card.market_price_mid.toFixed(2)} €
                 </Text>
               )}
               
               {card.price && card.is_for_sale && (
-                <Text style={[styles.cardPrice, { color: colors.secondary }]}>
-                  {card.price.toFixed(2)} € <Ionicons name="pricetag" size={12} color={colors.secondary} />
+                <Text style={[styles.cardPrice, { color: isDarkMode ? '#FFFFFF' : colors.secondary }]}>
+                  {card.price.toFixed(2)} € <Ionicons name="pricetag" size={12} color={isDarkMode ? '#FFFFFF' : colors.secondary} />
                 </Text>
               )}
             </View>

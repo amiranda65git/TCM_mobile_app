@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Modal, TextInput, FlatList } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
@@ -50,11 +50,14 @@ interface UserCard {
   price: number | null;
 }
 
+const PAGE_SIZE = 30;
+
 export default function EditionDetail() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   
   const [loading, setLoading] = useState(true);
@@ -70,6 +73,8 @@ export default function EditionDetail() {
   
   // État pour le filtre des cartes possédées
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS: Record<string, string> = {
@@ -306,6 +311,25 @@ export default function EditionDetail() {
 
   // Filtrer les cartes selon l'état de showOnlyOwned
   const filteredCards = editionDetail?.cards.filter(card => !showOnlyOwned || card.owned) || [];
+  const visibleCards = filteredCards.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+    setIsLoadingMore(false);
+  }, [showOnlyOwned, editionDetail?.id]);
+
+  useEffect(() => {
+    setVisibleCount((prev) => Math.min(Math.max(prev, PAGE_SIZE), filteredCards.length || PAGE_SIZE));
+  }, [filteredCards.length]);
+
+  const handleLoadMoreCards = () => {
+    if (visibleCount >= filteredCards.length || isLoadingMore) return;
+    setIsLoadingMore(true);
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredCards.length));
+    setTimeout(() => {
+      setIsLoadingMore(false);
+    }, 250);
+  };
 
   if (loading) {
     return (
@@ -373,10 +397,19 @@ export default function EditionDetail() {
         </TouchableOpacity>
       </View>
       
-      <ScrollView 
+      <FlatList
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
-      >
+        data={visibleCards}
+        keyExtractor={(card) => card.user_card_id || card.id}
+        onEndReached={handleLoadMoreCards}
+        onEndReachedThreshold={0.4}
+        initialNumToRender={PAGE_SIZE}
+        maxToRenderPerBatch={PAGE_SIZE}
+        windowSize={7}
+        removeClippedSubviews
+        ListHeaderComponent={
+          <>
         <View style={[styles.headerContainer, { backgroundColor: colors.surface }]}>
           {editionDetail.logo_image ? (
             <Image 
@@ -431,22 +464,28 @@ export default function EditionDetail() {
             </View>
           )}
         </View>
-        
-        <View style={styles.cardsGrid}>
-          {filteredCards.map(card => (
-            <SwipeableCard 
-              key={card.user_card_id || card.id} 
-              card={card} 
-              colors={colors} 
-              t={t} 
-              router={router}
-              onSellPress={handleSellPress}
-              onPriceAlertPress={handlePriceAlert}
-              onWishlistPress={handleWishlist}
-            />
-          ))}
-        </View>
-      </ScrollView>
+          </>
+        }
+        renderItem={({ item: card }) => (
+          <SwipeableCard 
+            card={card} 
+            colors={colors} 
+            isDarkMode={isDarkMode}
+            t={t} 
+            router={router}
+            onSellPress={handleSellPress}
+            onPriceAlertPress={handlePriceAlert}
+            onWishlistPress={handleWishlist}
+          />
+        )}
+        ListFooterComponent={
+          filteredCards.length > visibleCount || isLoadingMore ? (
+            <View style={styles.loadMoreFooter}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
+      />
       
       {/* Modal de vente */}
       <Modal
@@ -728,6 +767,11 @@ const styles = StyleSheet.create({
   },
   cardsGrid: {
     width: '100%',
+  },
+  loadMoreFooter: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   customHeader: {
     flexDirection: 'row',

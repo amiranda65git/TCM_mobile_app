@@ -703,30 +703,27 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
     }
     
     // 3. Récupérer les exemplaires (user_cards) — plusieurs lignes possibles par carte officielle
+    // Optimisation: limiter aux cartes de cette édition (évite de charger toute la collection utilisateur)
+    const cardIds = cardsData.map((card: any) => card.id);
+
     const { data: userCardsData, error: userCardsError } = await supabase
       .from('user_cards')
       .select('id, card_id, price, is_for_sale, condition, image_url, created_at')
       .eq('user_id', userId)
-      .eq('is_sold', false);
+      .eq('is_sold', false)
+      .in('card_id', cardIds);
 
     if (userCardsError) {
       console.error("Erreur lors de la récupération des cartes de l'utilisateur:", userCardsError);
       return { data: null, error: userCardsError };
     }
     
-    // 4. Récupérer les prix du marché les plus récents pour les cartes de cette édition
-    // On crée une liste des IDs de cartes pour la requête
-    const cardIds = cardsData.map((card: any) => card.id);
-    
+    // 4. Récupérer les prix du marché les plus récents pour les cartes de cette édition (RPC optimisée)
     const { data: marketPricesData, error: marketPricesError } = await supabase
-      .from('market_prices')
-      .select('card_id, price_low, price_mid, price_high, date')
-      .in('card_id', cardIds)
-      .order('date', { ascending: false });
-    
+      .rpc('get_latest_market_prices_by_card_ids', { p_card_ids: cardIds });
+
     if (marketPricesError) {
       console.error("Erreur lors de la récupération des prix du marché:", marketPricesError);
-      // On continue même en cas d'erreur, on utilisera des prix par défaut
     }
     
     // Maps pour stocker les différents prix du marché pour chaque carte
@@ -735,33 +732,19 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
     const marketPriceHighMap = new Map<string, number>();
     const marketPriceMap = new Map<string, number>(); // Prix moyen par défaut
     
-    // Pour chaque carte, on ne garde que le prix le plus récent
+    // Les prix RPC sont déjà dédupliqués (dernier prix par carte)
     if (marketPricesData) {
-      // On trie d'abord par ID de carte et date (plus récent en premier)
-      marketPricesData.sort((a, b) => {
-        if (a.card_id !== b.card_id) {
-          return a.card_id.localeCompare(b.card_id);
-        }
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-      
-      // On garde le premier prix (le plus récent) pour chaque carte
-      const processedCardIds = new Set<string>();
       marketPricesData.forEach((priceData: any) => {
-        if (!processedCardIds.has(priceData.card_id)) {
-          if (priceData.price_low) {
-            marketPriceLowMap.set(priceData.card_id, parseFloat(priceData.price_low));
-          }
-          if (priceData.price_mid) {
-            marketPriceMidMap.set(priceData.card_id, parseFloat(priceData.price_mid));
-            // On utilise le prix moyen comme prix par défaut
-            marketPriceMap.set(priceData.card_id, parseFloat(priceData.price_mid));
-          }
-          if (priceData.price_high) {
-            marketPriceHighMap.set(priceData.card_id, parseFloat(priceData.price_high));
-          }
-          
-          processedCardIds.add(priceData.card_id);
+        if (priceData.price_low) {
+          marketPriceLowMap.set(priceData.card_id, parseFloat(priceData.price_low));
+        }
+        if (priceData.price_mid) {
+          marketPriceMidMap.set(priceData.card_id, parseFloat(priceData.price_mid));
+          // On utilise le prix moyen comme prix par défaut
+          marketPriceMap.set(priceData.card_id, parseFloat(priceData.price_mid));
+        }
+        if (priceData.price_high) {
+          marketPriceHighMap.set(priceData.card_id, parseFloat(priceData.price_high));
         }
       });
     }
@@ -2415,10 +2398,7 @@ export const getUserSoldCards = async (userId: string) => {
     const cardIds = data?.map(item => item.card_id) || [];
     
     const { data: marketPrices, error: pricesError } = await supabase
-      .from('market_prices')
-      .select('card_id, price_mid')
-      .in('card_id', cardIds)
-      .order('date', { ascending: false });
+      .rpc('get_latest_market_prices_by_card_ids', { p_card_ids: cardIds });
 
     if (pricesError) {
       console.warn('[getUserSoldCards] Erreur lors de la récupération des prix:', pricesError);
@@ -2428,9 +2408,7 @@ export const getUserSoldCards = async (userId: string) => {
     const priceMap = new Map();
     if (marketPrices) {
       marketPrices.forEach(price => {
-        if (!priceMap.has(price.card_id)) {
-          priceMap.set(price.card_id, price.price_mid);
-        }
+        priceMap.set(price.card_id, price.price_mid);
       });
     }
 
@@ -2608,13 +2586,10 @@ export const getAllUserCards = async (userId: string) => {
     console.log(`[getAllUserCards] ${data.length} cartes récupérées`);
 
     // Récupérer les prix du marché pour toutes les cartes
-    const cardIds = data.map(item => item.card_id);
+    const cardIds = [...new Set(data.map(item => item.card_id))];
     
     const { data: marketPrices, error: pricesError } = await supabase
-      .from('market_prices')
-      .select('card_id, price_mid')
-      .in('card_id', cardIds)
-      .order('date', { ascending: false });
+      .rpc('get_latest_market_prices_by_card_ids', { p_card_ids: cardIds });
 
     if (pricesError) {
       console.warn('[getAllUserCards] Erreur lors de la récupération des prix:', pricesError);
@@ -2624,9 +2599,7 @@ export const getAllUserCards = async (userId: string) => {
     const priceMap = new Map();
     if (marketPrices) {
       marketPrices.forEach(price => {
-        if (!priceMap.has(price.card_id)) {
-          priceMap.set(price.card_id, price.price_mid);
-        }
+        priceMap.set(price.card_id, price.price_mid);
       });
     }
 

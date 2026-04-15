@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../../lib/ThemeUtils';
+import { useTheme } from '../../lib/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import { LineChart } from 'react-native-chart-kit';
 
@@ -24,6 +25,7 @@ export default function MarketPricesScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
+  const { isDarkMode } = useTheme();
   
   const [loading, setLoading] = useState(true);
   const [cardName, setCardName] = useState('');
@@ -130,9 +132,10 @@ export default function MarketPricesScreen() {
       const record = priceHistory.find(item => item.source === source && item.date === date);
       return record?.price_mid ?? null;
     });
+    const lineColor = isDarkMode ? '#FFFFFF' : colorsPalette[idx % colorsPalette.length];
     return {
       data: data.map(v => v ?? 0),
-      color: () => colorsPalette[idx % colorsPalette.length],
+      color: () => lineColor,
       strokeWidth: 2,
       source
     };
@@ -193,12 +196,12 @@ export default function MarketPricesScreen() {
             backgroundGradientFrom: colors.background,
             backgroundGradientTo: colors.background,
             decimalPlaces: 2,
-            color: (opacity = 1) => colors.primary,
+            color: () => (isDarkMode ? '#FFFFFF' : colors.primary),
             labelColor: (opacity = 1) => colors.text.secondary,
             propsForDots: {
               r: '3',
               strokeWidth: '2',
-              stroke: colors.primary,
+              stroke: isDarkMode ? '#FFFFFF' : colors.primary,
             },
           }}
           bezier
