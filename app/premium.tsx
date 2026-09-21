@@ -338,6 +338,16 @@ export default function Premium() {
     },
   });
 
+  // PREMIUM DÉSACTIVÉ — supprimer ce bloc (useEffect + return null) pour réactiver l'écran d'abonnement
+  useEffect(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(app)/home');
+    }
+  }, []);
+  return null;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen 

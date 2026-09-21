@@ -8,14 +8,15 @@ import { useTranslation } from 'react-i18next';
 import '../i18n/i18n.config';
 import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
+// PREMIUM DÉSACTIVÉ — réactiver l’upsell onglets Marché/Trading
+// import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const segments = useSegments();
-  const { showPremiumUpsell } = useSubscriptionRestrictions();
+  // const { showPremiumUpsell } = useSubscriptionRestrictions();
   
   // Vérifier si on est sur l'écran de scan
   const isOnScanScreen = segments[segments.length - 1] === 'scan';
@@ -83,7 +84,7 @@ export default function TabNavigator() {
               <CustomTabBar
                 key={refreshKey}
                 {...props}
-                showPremiumUpsell={showPremiumUpsell}
+                // showPremiumUpsell={showPremiumUpsell}
               />
             )
       }
@@ -156,7 +157,7 @@ export default function TabNavigator() {
 }
 
 // Composant TabBar personnalisé pour avoir un bouton central spécial
-function CustomTabBar({ state, descriptors, navigation, showPremiumUpsell }: any) {
+function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const router = useRouter();
@@ -201,13 +202,14 @@ function CustomTabBar({ state, descriptors, navigation, showPremiumUpsell }: any
         }
         
         const onPress = () => {
-          if (route.name === 'market' || route.name === 'trading') {
-            if (!isFocused) {
-              navigation.navigate(route.name);
-            }
-            showPremiumUpsell(route.name);
-            return;
-          }
+          // PREMIUM DÉSACTIVÉ — réactiver l’upsell Marché/Trading
+          // if (route.name === 'market' || route.name === 'trading') {
+          //   if (!isFocused) {
+          //     navigation.navigate(route.name);
+          //   }
+          //   showPremiumUpsell(route.name);
+          //   return;
+          // }
 
           const event = navigation.emit({
             type: 'tabPress',

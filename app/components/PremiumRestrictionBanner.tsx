@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useThemeColors } from '../lib/ThemeUtils';
 
+// PREMIUM DÉSACTIVÉ — composant conservé pour réactivation (plus monté dans l’UI).
+
 interface PremiumRestrictionBannerProps {
   type: 'collection' | 'scan' | 'market' | 'trading';
   currentCount?: number;

@@ -19,6 +19,8 @@ import { useAuth } from './auth';
 import Constants from 'expo-constants';
 import { ExecutionEnvironment } from 'expo-constants';
 
+// PREMIUM DÉSACTIVÉ : SDK conservé ; restrictions et upsell commentés (réactivation plus tard).
+
 /** Expo Go n’embarque pas le natif RevenueCat → `RNPurchases` est null. */
 const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -471,11 +473,13 @@ export function useSubscriptionRestrictions() {
 
   const showPremiumUpsell = useCallback(
     (feature: PremiumUpsellContext, options?: PremiumUpsellOptions) => {
-      if (isPremium) {
-        options?.onLater?.();
-        return;
-      }
-      router.push(`/premium?from=${feature}`);
+      // PREMIUM DÉSACTIVÉ — réactiver la navigation vers /premium
+      // if (isPremium) {
+      //   options?.onLater?.();
+      //   return;
+      // }
+      // router.push(`/premium?from=${feature}`);
+      options?.onLater?.();
     },
     [isPremium, router]
   );

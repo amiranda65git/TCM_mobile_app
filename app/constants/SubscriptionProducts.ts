@@ -1,4 +1,5 @@
 // Configuration des produits d'abonnement in-app
+// PREMIUM DÉSACTIVÉ — constantes conservées pour réactivation (UI commentée).
 export const SUBSCRIPTION_PRODUCTS = {
   // Produits iOS (App Store)
   ios: [
