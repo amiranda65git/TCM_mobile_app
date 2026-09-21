@@ -45,13 +45,16 @@ export default function CardSellDetails() {
   }, [id]);
 
   const loadData = async () => {
+    const userCardId = Array.isArray(id) ? id[0] : id;
+    if (!userCardId) return;
+
     setLoading(true);
     try {
       // 1. Récupérer la carte de l'utilisateur (user_cards)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
         .select('id, card_id, price, condition, is_sold, official_cards(id, name, number, rarity, image_small, image_large)')
-        .eq('id', id)
+        .eq('id', userCardId)
         .single();
       if (userCardError) throw userCardError;
       setUserCard(userCardData);
@@ -76,7 +79,8 @@ export default function CardSellDetails() {
             id, buyer_id, proposed_price, message, created_at, status,
             users:buyer_id(username, email)
           `)
-          .eq('user_card_id', id)
+          .eq('user_card_id', userCardId)
+          .eq('seller_id', user?.id)
           .eq('status', 'pending')
           .order('created_at', { ascending: false });
         
@@ -151,7 +155,7 @@ export default function CardSellDetails() {
           price: price,
           condition: updatedCondition
         })
-        .eq('id', id);
+        .eq('id', userCard.id);
       
       if (error) throw error;
       
@@ -189,7 +193,7 @@ export default function CardSellDetails() {
                   is_for_sale: false,
                   price: null
                 })
-                .eq('id', id);
+                .eq('id', userCard.id);
               
               if (error) throw error;
               
@@ -319,6 +323,9 @@ export default function CardSellDetails() {
       {/* Liste des offres reçues */}
       <View style={{ marginHorizontal: 16, marginTop: 12 }}>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text.primary, marginBottom: 10, letterSpacing: 0.5 }}>{t('market.receivedOffers')}</Text>
+        <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 10 }}>
+          {t('market.offerSwipeHint')}
+        </Text>
       </View>
       <View style={{ marginHorizontal: 8 }}>
         {offers.length === 0 ? (
@@ -385,16 +392,23 @@ export default function CardSellDetails() {
                           console.log('=== Début acceptation offre mobile ===');
                           console.log('Offer ID:', item.id);
                           
-                          // Récupérer le token d'authentification
-                          const { data: { session } } = await supabase.auth.getSession();
+                          // Récupérer un token d'authentification valide.
+                          // Éviter de forcer refreshSession() à chaque acceptation pour limiter
+                          // les cycles d'événements auth (TOKEN_REFRESHED) inutiles.
+                          let { data: { session: currentSession } } = await supabase.auth.getSession();
+                          let accessToken = currentSession?.access_token;
+                          if (!accessToken) {
+                            const { data: refreshData } = await supabase.auth.refreshSession();
+                            accessToken = refreshData?.session?.access_token;
+                          }
                           
-                          if (!session?.access_token) {
+                          if (!accessToken) {
                             console.error('Pas de session active');
                             RNAlert.alert(t('general.error'), t('market.sessionExpired'));
                             return;
                           }
 
-                          console.log('Token obtenu, longueur:', session.access_token.length);
+                          console.log('Token obtenu, longueur:', accessToken.length);
 
                           // Appel à notre backend sécurisé
                           console.log('Appel API send-transaction-emails...');
@@ -402,7 +416,7 @@ export default function CardSellDetails() {
                             method: 'POST',
                             headers: { 
                               'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${session.access_token}`
+                              'Authorization': `Bearer ${accessToken.trim()}`
                             },
                             body: JSON.stringify({ 
                               offer_id: item.id 
@@ -423,14 +437,11 @@ export default function CardSellDetails() {
                             // Notifier les autres écrans que les données ont changé
                             EventRegister.emit('trading_data_changed');
                             
-                            // Afficher un message différent si les emails ont partiellement échoué
-                            const successMessage = result.emailErrors 
-                              ? `${result.message} (${result.transactionId})`
-                              : `${t('market.acceptOfferSuccess')} (${result.transactionId})`;
-                            
                             RNAlert.alert(
-                              t('general.success'), 
-                              successMessage
+                              result.emailErrors ? t('general.error') : t('general.success'),
+                              result.emailErrors
+                                ? t('market.acceptOfferEmailError', { id: result.transactionId })
+                                : `${t('market.acceptOfferSuccess')} (${result.transactionId})`
                             );
                           } else {
                             console.error('Erreur acceptation offre:', result.error);

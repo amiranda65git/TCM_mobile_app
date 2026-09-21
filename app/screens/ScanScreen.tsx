@@ -76,19 +76,14 @@ const normalizePokemonName = (name: string): string[] => {
   // Extraire le nom de base (sans suffixe)
   const baseName = normalizedName.replace(/\s+(ex|EX|Ex|gx|GX|Gx|v|V|vmax|VMAX|VMax|vstar|VSTAR|VStar)$/i, '');
   
-  // Si on a détecté un suffixe, créer toutes les variantes possibles
+  // Ne générer que des variantes du suffixe réellement détecté (ex ne doit pas matcher GX/VMAX)
   if (baseName !== normalizedName) {
-    // Ajouter les variations les plus courantes
-    variants.push(`${baseName} ex`);
-    variants.push(`${baseName}-EX`);
-    variants.push(`${baseName} EX`);
-    variants.push(`${baseName}-GX`);
-    variants.push(`${baseName} GX`);
-    variants.push(`${baseName} V`);
-    variants.push(`${baseName} VMAX`);
-    variants.push(`${baseName} VSTAR`);
-    
-    // Ajouter le nom de base seul aussi
+    const matched = suffixPatterns.find(({ pattern }) => pattern.test(normalizedName));
+    if (matched) {
+      matched.variants.forEach((suffix) => {
+        variants.push(`${baseName}${suffix}`);
+      });
+    }
     variants.push(baseName);
   }
   
@@ -155,12 +150,13 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
     // Étape 2: Initialiser le client OpenAI
     const clientInitStart = Date.now();
     const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
-    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-nano';
+    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-mini';
     console.log('🔍 Clé API présente:', !!apiKey, 'longueur:', apiKey.length, 'modèle:', openaiModel);
     
     const openai = new OpenAI({
       apiKey: apiKey,
-      dangerouslyAllowBrowser: true
+      dangerouslyAllowBrowser: true,
+      timeout: 15000,
     });
     const clientInitEnd = Date.now();
     console.log(`⏱️ [${new Date().toISOString()}] Client initialization completed in ${clientInitEnd - clientInitStart}ms`);
@@ -177,7 +173,7 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
           content: [
             { 
               type: "input_text", 
-              text: "Voici une photo d'une carte Pokémon. Peux-tu extraire le nom du Pokémon, ses points de vie (PV ou HP) et le numéro de la carte (format X/Y) ? Réponds uniquement sous la forme d'un objet JSON avec les clés: pokemonName, healthPoints, cardNumber."
+              text: "Voici une photo d'une carte Pokémon. Extrais le nom imprimé, les PV (nombre seul), le numéro (format X/Y si possible), le nom du set s'il est lisible, et une confiance de 0 à 1. Réponds uniquement par un JSON: {\"pokemonName\":\"...\",\"healthPoints\":\"70\",\"cardNumber\":\"25/102\",\"setName\":null,\"confidence\":0.0}"
             },
             { 
               type: "input_image",
@@ -208,6 +204,9 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
     }
     
     const json = JSON.parse(match[0]);
+    const healthPoints = json.healthPoints != null
+      ? String(json.healthPoints).match(/\d+/)?.[0] || String(json.healthPoints)
+      : null;
     const responseParseEnd = Date.now();
     console.log(`⏱️ [${new Date().toISOString()}] Response parsing completed in ${responseParseEnd - responseParseStart}ms`);
     console.log('🔍 JSON parsé:', json);
@@ -223,7 +222,7 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
     
     return {
       pokemonName: json.pokemonName || null,
-      healthPoints: json.healthPoints || null,
+      healthPoints: healthPoints,
       cardNumber: json.cardNumber || null,
       imageUri: imagePath,
     };
@@ -404,7 +403,7 @@ export default function ScanScreen() {
           const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
             pokemonName: nameVariant,
             healthPoints: scanResult.healthPoints,
-            cardNumber: null // On ignore le numéro de carte pour être plus permissif
+            cardNumber: scanResult.cardNumber
           });
           
           const variantEndTime = Date.now();
@@ -432,7 +431,7 @@ export default function ScanScreen() {
             const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
               pokemonName: baseName,
               healthPoints: scanResult.healthPoints,
-              cardNumber: null // Toujours ignorer le numéro pour plus de résultats
+              cardNumber: scanResult.cardNumber
             });
             
             const fallbackEndTime = Date.now();
@@ -451,13 +450,25 @@ export default function ScanScreen() {
           
           const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
             pokemonName: scanResult.pokemonName,
-            healthPoints: null, // Ignorer même les HP
-            cardNumber: null
+            healthPoints: null,
+            cardNumber: scanResult.cardNumber
           });
           
           const finalSearchEnd = Date.now();
           console.log(`⏱️ [${new Date().toISOString()}] Final search completed in ${finalSearchEnd - finalSearchStart}ms`);
           
+          if (!error && data) {
+            allCards = data;
+          }
+        }
+
+        // Si le numéro OCR est faux, retomber sur nom + HP
+        if (allCards.length === 0 && scanResult.cardNumber) {
+          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+            pokemonName: scanResult.pokemonName,
+            healthPoints: scanResult.healthPoints,
+            cardNumber: null
+          });
           if (!error && data) {
             allCards = data;
           }
@@ -470,7 +481,7 @@ export default function ScanScreen() {
         const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
           healthPoints: scanResult.healthPoints,
-          cardNumber: null // Plus permissif
+          cardNumber: scanResult.cardNumber
         });
         
         const classicSearchEnd = Date.now();
@@ -493,6 +504,14 @@ export default function ScanScreen() {
           
           if (aExact && !bExact) return -1;
           if (!aExact && bExact) return 1;
+
+          if (scanResult.cardNumber) {
+            const wanted = scanResult.cardNumber.split('/')[0].replace(/^0+/, '');
+            const aNum = String(a.number || '').replace(/^0+/, '') === wanted;
+            const bNum = String(b.number || '').replace(/^0+/, '') === wanted;
+            if (aNum && !bNum) return -1;
+            if (!aNum && bNum) return 1;
+          }
           
           // Prioriser les cartes qui contiennent le nom original
           const aContains = a.name.toLowerCase().includes(originalName.replace(/\s+(ex|EX|gx|GX|v|V|vmax|VMAX|vstar|VSTAR)$/i, ''));
@@ -566,25 +585,9 @@ export default function ScanScreen() {
           // Rechercher les cartes correspondantes
           await searchMatchingCards(extractedResult);
         } else {
-          // Pour la démo, on utilise des données fictives si rien n'est détecté
-          const pokemons = [
-            { name: "Pikachu", hp: "70", number: "25/102" },
-            { name: "Dracaufeu", hp: "120", number: "4/102" },
-            { name: "Bulbizarre", hp: "60", number: "1/102" },
-            { name: "Salamèche", hp: "50", number: "3/102" },
-            { name: "Mew", hp: "50", number: "8/102" },
-            { name: "Mewtwo", hp: "150", number: "10/102" }
-          ];
-          const selectedPokemon = pokemons[Math.floor(Math.random() * pokemons.length)];
-          const demoResult = {
-            pokemonName: selectedPokemon.name,
-            healthPoints: selectedPokemon.hp,
-            cardNumber: selectedPokemon.number,
-            imageUri: imagePath,
-          };
-          setScanResult(demoResult);
-          // Rechercher les cartes correspondantes
-          await searchMatchingCards(demoResult);
+          Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
+          setScanResult(null);
+          setMatchingCards([]);
         }
       } else {
         Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));

@@ -230,7 +230,8 @@ export default function CardMarketplace() {
         card_id: selectedCardForSale.card_id,
         user_card_id: selectedCardForSale.id,
         card_name: officialCard?.name || '',
-        type: 'OfferAccepted',
+        type: 'New_Offer_notification',
+        message: `Nouvelle offre reçue pour la carte ${officialCard?.name || ''}.`,
       });
       // Mettre à jour l'état local pour afficher le bouton "Offre : XX.XX"
       setUserOffers(prev => ({ ...prev, [selectedCardForSale.id]: price }));

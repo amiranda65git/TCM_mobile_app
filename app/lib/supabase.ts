@@ -92,7 +92,13 @@ export const getUserProfile = async (userId: string, fields: string = 'username,
       return { data: null, error };
     }
     
-    console.log('[getUserProfile] Données récupérées avec succès:', data);
+    // Eviter de logger le payload complet (avatar/base64 potentiellement très volumineux)
+    // pour ne pas ralentir l'application.
+    console.log('[getUserProfile] Données récupérées avec succès:', {
+      hasUsername: !!data?.username,
+      hasAvatar: !!data?.avatar_url,
+      hasEmail: !!data?.email,
+    });
     return { data, error: null };
   } catch (error) {
     console.error('[getUserProfile] Erreur inattendue lors de la récupération du profil utilisateur:', error);
@@ -1810,14 +1816,16 @@ export const createOffer = async ({ buyer_id, seller_id, user_card_id, proposed_
 };
 
 // Fonction pour créer une notification pour le vendeur
-export const createOfferNotification = async ({ seller_id, card_id, user_card_id, card_name, type = 'offer' }: {
+export const createOfferNotification = async ({ seller_id, card_id, user_card_id, card_name, type = 'New_Offer_notification', message }: {
   seller_id: string,
   card_id: string,
   user_card_id?: string,
   card_name: string,
-  type?: string
+  type?: string,
+  message?: string,
 }) => {
   try {
+    const notificationMessage = message || `Nouvelle offre reçue pour la carte ${card_name}.`;
     const { data, error } = await supabase
       .from('notifications')
       .insert([
@@ -1826,6 +1834,7 @@ export const createOfferNotification = async ({ seller_id, card_id, user_card_id
           type,
           card_id,
           user_card_id,
+          message: notificationMessage,
           is_read: false,
           data: { card: card_name },
         }
@@ -2523,15 +2532,7 @@ const normalizePokemonName = (name: string): string[] => {
   const baseName = normalizedName.replace(/\s+(ex|EX|gx|GX|v|V|vmax|VMAX|vstar|VSTAR)$/i, '');
   
   if (baseName !== normalizedName) {
-    // Variations avec espaces vs tirets
-    variants.push(`${baseName} ex`);
-    variants.push(`${baseName}-EX`);
-    variants.push(`${baseName} EX`);
-    variants.push(`${baseName}-GX`);
-    variants.push(`${baseName} GX`);
-    variants.push(`${baseName} V`);
-    variants.push(`${baseName} VMAX`);
-    variants.push(`${baseName} VSTAR`);
+    variants.push(baseName);
   }
   
   // Retirer les doublons et retourner

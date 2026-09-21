@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { getUserProfile, createUserProfile } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
@@ -23,6 +24,19 @@ const AuthContext = createContext<AuthContextType>(INITIAL_STATE);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthContextType>(INITIAL_STATE);
+
+  const ensureUserProfile = async (user: User | null) => {
+    if (!user) return;
+    try {
+      const { data: userProfile } = await getUserProfile(user.id);
+      if (!userProfile) {
+        const defaultUsername = user.email?.split('@')[0] || 'User';
+        await createUserProfile(user.id, defaultUsername, user.email || '');
+      }
+    } catch (error) {
+      console.error('[AuthContext] Erreur ensureUserProfile:', error);
+    }
+  };
 
   useEffect(() => {
     console.log('Initialisation du contexte d\'authentification...');
@@ -59,6 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Vérifier la session actuelle
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('[AuthContext] Session initiale récupérée:', session ? 'Session active' : 'Pas de session');
+      if (session?.user) {
+        ensureUserProfile(session.user);
+      }
       setState({
         session: session,
         user: session?.user || null,
@@ -70,6 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[AuthContext] Changement d\'état d\'authentification:', event);
+      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+        await ensureUserProfile(session.user);
+      }
       
       // Mise à jour de l'état avec la nouvelle session
       setState({

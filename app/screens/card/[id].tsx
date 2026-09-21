@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase, getUserWishlist, addOrRemoveFromWishlist } from '../../lib/supabase';
+import { EventRegister } from 'react-native-event-listeners';
 
 interface CardPrice {
   low: number | null;
@@ -273,6 +274,7 @@ export default function CardDetailScreen() {
           ...cardDetails,
           is_for_sale: false,
         });
+        EventRegister.emit('trading_data_changed');
 
         console.log('Carte retirée de la vente', cardDetails?.id);
       } catch (error) {
@@ -329,6 +331,7 @@ export default function CardDetailScreen() {
         price: price,
         condition: selectedCondition,
       });
+      EventRegister.emit('trading_data_changed');
 
       setShowSellModal(false);
       console.log('Carte mise en vente', cardDetails?.id);

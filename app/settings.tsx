@@ -892,7 +892,7 @@ export default function Settings() {
         </View>
         
         {/* Section Abonnement */}
-        <Text style={dynamicStyles.sectionTitle}>{t('settings.subscription')}</Text>
+        <Text style={dynamicStyles.sectionTitle}>{t('settings.subscriptionTitle')}</Text>
         <View style={dynamicStyles.section}>
           <MenuItem 
             icon="diamond" 

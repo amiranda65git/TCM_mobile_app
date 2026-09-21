@@ -11,28 +11,47 @@ import {
   Alert
 } from 'react-native';
 import { router } from 'expo-router';
+import { supabase } from '../lib/supabase';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleResetPassword = () => {
+  const getResetPasswordErrorMessage = (error: any) => {
+    const rawMessage = (error?.message || '').toLowerCase();
+    if (rawMessage.includes('demo domains can only be used to send emails to account owners')) {
+      return "Configuration email Supabase incomplète: le SMTP par défaut n'envoie qu'aux emails propriétaires du projet. Configure un SMTP custom (Resend, SendGrid...) dans Supabase Auth.";
+    }
+    return error?.message || "Impossible d'envoyer l'email de réinitialisation pour le moment.";
+  };
+
+  const handleResetPassword = async () => {
     if (!email || !email.includes('@')) {
       Alert.alert("Erreur", "Veuillez saisir une adresse email valide");
       return;
     }
 
-    setIsSubmitting(true);
-    
-    // Version simplifiée sans appel API
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      setIsSubmitting(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'tcmarket://reset-password',
+      });
+      if (error) throw error;
+
       Alert.alert(
         "Email envoyé",
-        "Un email de réinitialisation de mot de passe a été envoyé à votre adresse email."
+        "Si un compte existe avec cette adresse email, vous recevrez un lien de réinitialisation."
       );
       router.push('/(auth)/login');
-    }, 1000);
+    } catch (error: any) {
+      console.error('[ForgotPassword] Erreur resetPasswordForEmail:', error);
+      Alert.alert(
+        "Erreur",
+        getResetPasswordErrorMessage(error)
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
