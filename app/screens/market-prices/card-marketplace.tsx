@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, SafeAreaView, Linking, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, SafeAreaView, Linking, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -182,7 +182,7 @@ export default function CardMarketplace() {
   
   const handleBidPress = (cardForSale: CardForSale) => {
     setSelectedCardForSale(cardForSale);
-    setBidPrice(cardForSale.price.toFixed(2));
+    setBidPrice(cardForSale.price != null ? Number(cardForSale.price).toFixed(2) : '');
     setShowBidModal(true);
   };
   
@@ -236,6 +236,8 @@ export default function CardMarketplace() {
       // Mettre à jour l'état local pour afficher le bouton "Offre : XX.XX"
       setUserOffers(prev => ({ ...prev, [selectedCardForSale.id]: price }));
       setShowBidModal(false);
+    } else {
+      Alert.alert(t('general.error'), t('market.updateError'));
     }
   };
   
@@ -524,12 +526,12 @@ export default function CardMarketplace() {
             
             <View style={styles.buySection}>
               <Text style={[styles.priceTag, { color: colors.text.primary }]}>
-                {item.price.toFixed(2)} €
+                {item.price != null ? `${Number(item.price).toFixed(2)} €` : '-'}
               </Text>
-              {userOffers[item.id] ? (
+              {userOffers[item.id] != null ? (
                 <View style={[styles.buyButton, { backgroundColor: colors.primary, opacity: 0.7 }]}> 
                   <Text style={styles.buyButtonText}>
-                    {t('card.bid')} : {userOffers[item.id].toFixed(2)} €
+                    {t('card.bid')} : {Number(userOffers[item.id]).toFixed(2)} €
                   </Text>
                 </View>
               ) : (
@@ -568,7 +570,7 @@ export default function CardMarketplace() {
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ color: colors.text.secondary, fontSize: 13 }}>{t('card.sellerPrice')}</Text>
                 <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 22 }}>
-                  {selectedCardForSale?.price.toFixed(2)} €
+                  {selectedCardForSale?.price != null ? `${Number(selectedCardForSale.price).toFixed(2)} €` : '-'}
                 </Text>
               </View>
               <View style={{ alignItems: 'center' }}>

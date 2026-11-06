@@ -95,7 +95,6 @@ export default function WishlistScreen() {
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [languageListener, setLanguageListener] = useState<any>(null);
   const { user } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -108,17 +107,13 @@ export default function WishlistScreen() {
     const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
       if (language && typeof language === 'string') {
         console.log('Changement de langue détecté dans WishlistScreen:', language);
-        // Forcer un rafraîchissement du composant
         setRefreshKey(prev => prev + 1);
       }
     });
 
-    setLanguageListener(listener);
-
     return () => {
-      // Supprimer l'écouteur lors du démontage du composant
-      if (languageListener) {
-        EventRegister.removeEventListener(languageListener);
+      if (typeof listener === 'string') {
+        EventRegister.removeEventListener(listener);
       }
     };
   }, []);

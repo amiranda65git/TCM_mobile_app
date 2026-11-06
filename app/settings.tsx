@@ -309,8 +309,6 @@ export default function Settings() {
     }
     
     try {
-      setCheckingUsername(true);
-      
       // Vérifier si le pseudo est déjà utilisé par un autre utilisateur avec la fonction centralisée
       const { isUnique, error } = await checkUsernameUniqueApi(user.id, usernameToCheck);
       
@@ -329,8 +327,6 @@ export default function Settings() {
       console.error('Erreur lors de la vérification du pseudo:', error);
       setUsernameError(t('settings.alerts.error'));
       return false;
-    } finally {
-      setCheckingUsername(false);
     }
   };
 

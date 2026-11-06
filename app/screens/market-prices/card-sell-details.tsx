@@ -335,7 +335,10 @@ export default function CardSellDetails() {
             data={offers}
             keyExtractor={item => item.id}
             renderItem={({ item }) => {
-              const percent = priceAsked ? ((item.proposed_price - priceAsked) / priceAsked) * 100 : 0;
+              const proposedPrice = item.proposed_price == null ? null : Number(item.proposed_price);
+              const percent = priceAsked && proposedPrice != null && Number.isFinite(proposedPrice)
+                ? ((proposedPrice - priceAsked) / priceAsked) * 100
+                : 0;
               const renderLeftActions = (progress: any, dragX: any) => (
                 <View style={{
                   flex: 1,
@@ -369,7 +372,11 @@ export default function CardSellDetails() {
                   [
                     { text: t('general.cancel'), style: 'cancel' },
                     { text: t('general.ok'), style: 'destructive', onPress: async () => {
-                        await refuseOffer(item.id);
+                        const result = await refuseOffer(item.id);
+                        if (!result.success) {
+                          Alert.alert(t('general.error'), t('market.refuseOfferError'));
+                          return;
+                        }
                         setOffers(prev => prev.filter(o => o.id !== item.id));
                         await createRefuseOfferNotification({
                           buyer_id: item.buyer_id,
@@ -496,8 +503,8 @@ export default function CardSellDetails() {
                       <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{new Date(item.created_at).toLocaleDateString()}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: '#00BFFF', fontWeight: 'bold', fontSize: 16 }}>{item.proposed_price.toFixed(2)} €</Text>
-                      <Text style={{ color: percent === 0 ? colors.text.secondary : percent > 0 ? colors.success : colors.error, fontSize: 13, fontWeight: 'bold' }}>{percent > 0 ? '+' : ''}{percent.toFixed(1)}%</Text>
+                      <Text style={{ color: '#00BFFF', fontWeight: 'bold', fontSize: 16 }}>{proposedPrice != null && Number.isFinite(proposedPrice) ? `${proposedPrice.toFixed(2)} €` : '-'}</Text>
+                      <Text style={{ color: percent === 0 ? colors.text.secondary : percent > 0 ? colors.success : colors.error, fontSize: 13, fontWeight: 'bold' }}>{Number.isFinite(percent) ? `${percent > 0 ? '+' : ''}${percent.toFixed(1)}%` : ''}</Text>
                     </View>
                   </View>
                 </Swipeable>

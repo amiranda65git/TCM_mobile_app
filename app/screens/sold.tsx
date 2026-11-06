@@ -42,8 +42,9 @@ export default function SoldScreen() {
     return date.toLocaleDateString('fr-FR');
   };
 
-  const formatPrice = (price: number) => {
-    return `${price.toFixed(2)} €`;
+  const formatPrice = (price: number | null | undefined) => {
+    if (price == null || Number.isNaN(Number(price))) return '-';
+    return `${Number(price).toFixed(2)} €`;
   };
 
   const handleCardPress = (card: any) => {

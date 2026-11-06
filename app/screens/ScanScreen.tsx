@@ -242,7 +242,6 @@ export default function ScanScreen() {
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -282,17 +281,13 @@ export default function ScanScreen() {
     const listener = EventRegister.addEventListener('changeLanguage', (language: any) => {
       if (language && typeof language === 'string') {
         console.log('Changement de langue détecté dans ScanScreen:', language);
-        // Forcer un rafraîchissement du composant
         setRefreshKey(prev => prev + 1);
       }
     });
-    
-    setLanguageListener(listener);
-    
+
     return () => {
-      // Supprimer l'écouteur lors du démontage du composant
-      if (languageListener) {
-        EventRegister.removeEventListener(languageListener);
+      if (typeof listener === 'string') {
+        EventRegister.removeEventListener(listener);
       }
     };
   }, []);
@@ -586,7 +581,12 @@ export default function ScanScreen() {
           await searchMatchingCards(extractedResult);
         } else {
           Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
-          setScanResult(null);
+          setScanResult({
+            pokemonName: null,
+            healthPoints: null,
+            cardNumber: null,
+            imageUri: null,
+          });
           setMatchingCards([]);
         }
       } else {

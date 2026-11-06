@@ -108,6 +108,7 @@ export default {
     accept: "Accept",
     refuse: "Refuse",
     refuseOfferTitle: "Refuse offer",
+    refuseOfferError: "Unable to refuse this offer. Please try again.",
     lowPrice: "Low price",
     highPrice: "High price",
     midPrice: "Mid price",
@@ -250,7 +251,6 @@ export default {
     signIn: 'Sign in',
     or: 'or',
     continueWithGoogle: 'Continue with Google',
-    continueWithApple: 'Continue with Apple',
     forgotPassword: 'Forgot password?',
     createAccount: 'Create an account',
     required: 'You must be logged in to perform this action'

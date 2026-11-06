@@ -49,7 +49,8 @@ export default function NotificationIcon({ color = 'black', size = 24 }: Notific
         .from('notifications')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('is_read', false);
+        .eq('is_read', false)
+        .or('archived.is.null,archived.eq.false');
       
       if (error) throw error;
       
@@ -60,7 +61,7 @@ export default function NotificationIcon({ color = 'black', size = 24 }: Notific
   };
   
   const handlePress = () => {
-    router.push('/notifications');
+    router.push('/screens/notifications');
   };
   
   return (

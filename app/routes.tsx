@@ -6,7 +6,7 @@ export function HomeRoute() {
  
 export function SettingsRoute() {
   // Cette route sera accessible via router.push('/settings')
-  return <Redirect href="/(app)/settings" />;
+  return <Redirect href="/settings" />;
 }
 
 export function NotificationsRoute() {

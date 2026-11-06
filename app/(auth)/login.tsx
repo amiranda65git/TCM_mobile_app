@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -14,7 +14,7 @@ import {
   Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useSegments } from 'expo-router';
 import { signIn, signInWithGoogle, supabase, getUserProfile, createUserProfile } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -25,6 +25,9 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const segments = useSegments();
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
 
   // Récupérer le logo de marque depuis les variables d'environnement
   const brandLogo = process.env.EXPO_PUBLIC_BRAND_LOGO || 'pokemon';
@@ -66,62 +69,66 @@ export default function Login() {
     
     checkPendingAuth();
     
-    // S'abonner aux changements d'état de l'authentification
+    // S'abonner aux changements d'état de l'authentification.
+    // Travail async différé : un await Supabase dans le callback peut deadlock le verrou auth.
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log(`Événement d'authentification détecté: ${event}`);
-        
-        // Nettoyer le flag d'authentification en attente
-        await AsyncStorage.removeItem('@auth_oauth_pending');
-        
-        // Traiter à la fois SIGNED_IN et INITIAL_SESSION
-        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-          console.log('Utilisateur connecté avec succès, ID:', session.user?.id);
-          
-          try {
-            // Désactiver le loader immédiatement pour éviter qu'il reste bloqué
-            setIsGoogleLoading(false);
-            
-            if (session.user) {
-              const userId = session.user.id;
-              const userEmail = session.user.email || '';
-              
-              console.log(`Vérification du profil pour l'utilisateur ${userId} avec email ${userEmail}`);
-              
-              // Vérifier si l'utilisateur a un profil
-              const { data: userProfile } = await getUserProfile(userId);
-              
-              // Si aucun profil n'existe, en créer un
-              if (!userProfile) {
-                console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
-                const defaultUsername = userEmail.split('@')[0] || 'User';
-                await createUserProfile(userId, defaultUsername, userEmail);
-                console.log('Profil utilisateur créé avec succès');
-              } else {
-                console.log('Profil utilisateur existant trouvé');
+      (event, session) => {
+        setTimeout(() => {
+          void (async () => {
+            console.log(`Événement d'authentification détecté: ${event}`);
+
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+              const onLoginScreen = segmentsRef.current[segmentsRef.current.length - 1] === 'login';
+              if (!onLoginScreen) {
+                setIsGoogleLoading(false);
+                return;
               }
-              
-              // Définir le flag de redirection
-              await AsyncStorage.setItem('@auth_redirect_needed', 'true');
-              
-              // Rediriger vers la page d'accueil
-              console.log('Redirection vers la page d\'accueil depuis onAuthStateChange');
-              router.replace('/(app)/home');
+
+              await AsyncStorage.removeItem('@auth_oauth_pending');
+              console.log('Utilisateur connecté avec succès, ID:', session.user?.id);
+
+              try {
+                setIsGoogleLoading(false);
+
+                if (session.user) {
+                  const userId = session.user.id;
+                  const userEmail = session.user.email || '';
+
+                  console.log(`Vérification du profil pour l'utilisateur ${userId} avec email ${userEmail}`);
+
+                  const { data: userProfile } = await getUserProfile(userId);
+
+                  if (!userProfile) {
+                    console.log('Aucun profil utilisateur trouvé, création d\'un nouveau profil');
+                    const defaultUsername = userEmail.split('@')[0] || 'User';
+                    await createUserProfile(userId, defaultUsername, userEmail);
+                    console.log('Profil utilisateur créé avec succès');
+                  } else {
+                    console.log('Profil utilisateur existant trouvé');
+                  }
+
+                  await AsyncStorage.setItem('@auth_redirect_needed', 'true');
+
+                  console.log('Redirection vers la page d\'accueil depuis onAuthStateChange');
+                  router.replace('/(app)/home');
+                }
+              } catch (err) {
+                console.error('Erreur lors du traitement de l\'authentification:', err);
+                setIsGoogleLoading(false);
+                Alert.alert(
+                  "Erreur lors de la connexion",
+                  "Une erreur est survenue lors de la création de votre profil."
+                );
+              }
+            } else if (event === 'SIGNED_OUT') {
+              console.log('Utilisateur déconnecté');
+              await AsyncStorage.removeItem('@auth_oauth_pending');
+              setIsGoogleLoading(false);
+            } else if (event === 'USER_UPDATED') {
+              console.log('Données utilisateur mises à jour');
             }
-          } catch (err) {
-            console.error('Erreur lors du traitement de l\'authentification:', err);
-            setIsGoogleLoading(false);
-            Alert.alert(
-              "Erreur lors de la connexion", 
-              "Une erreur est survenue lors de la création de votre profil."
-            );
-          }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('Utilisateur déconnecté');
-          setIsGoogleLoading(false);
-        } else if (event === 'USER_UPDATED') {
-          console.log('Données utilisateur mises à jour');
-        }
+          })();
+        }, 0);
       }
     );
 
@@ -129,9 +136,15 @@ export default function Login() {
     const handleDeepLink = async (event: { url: string }) => {
       const url = event.url;
       console.log('Deep link reçu:', url);
-      
+
+      // Le reset mot de passe a son propre écran. Ne pas échanger son code ici,
+      // sinon l'utilisateur est connecté puis renvoyé à l'accueil sans choisir un mot de passe.
+      if (!url || url.includes('reset-password') || url.includes('type=recovery')) {
+        return;
+      }
+
       // Vérifier si le deep link contient un code d'authentification
-      if (url && (url.includes('auth/callback') || url.includes('?code='))) {
+      if (url.includes('auth/callback') || url.includes('?code=') || url.includes('&code=')) {
         setIsGoogleLoading(true);
         
         // Configurer un timeout de sécurité
@@ -144,8 +157,15 @@ export default function Login() {
         try {
           console.log('Deep link d\'authentification détecté, traitement en cours...');
           
-          // Extraire le code de l'URL
-          const code = url.split('code=')[1]?.split('&')[0];
+          const rawCode = url.split('code=')[1]?.split('&')[0]?.split('#')[0];
+          let code = rawCode;
+          if (rawCode) {
+            try {
+              code = decodeURIComponent(rawCode);
+            } catch {
+              code = rawCode;
+            }
+          }
           if (!code) {
             throw new Error('Code d\'authentification non trouvé dans le deep link');
           }
@@ -290,11 +310,6 @@ export default function Login() {
     }
   };
 
-  const handleAppleLogin = () => {
-    Alert.alert("Apple", "Connexion via Apple à implémenter");
-    // Fonctionnalité à implémenter
-  };
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -389,12 +404,7 @@ export default function Login() {
               </>
             )}
           </TouchableOpacity>
-          
-          {/* <TouchableOpacity style={styles.socialButton} onPress={handleAppleLogin}>
-            <Ionicons name="logo-apple" size={20} color="#000" />
-            <Text style={styles.socialButtonText}>Continuer avec Apple</Text>
-          </TouchableOpacity> */}
-          
+
           <View style={styles.links}>
             <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
               <Text style={styles.linkText}>Mot de passe oublié?</Text>

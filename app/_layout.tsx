@@ -100,12 +100,6 @@ function AppContent() {
             }}
           />
           <Stack.Screen
-            name="direct-scan"
-            options={{
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
             name="settings"
             options={{
               headerShown: false,

@@ -41,6 +41,31 @@ interface Notification {
   data: any;
 }
 
+/** Relation embarquée Supabase : objet (many-to-one) ou tableau selon le schéma. */
+function embeddedOne<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+/** Numéro de carte OCR (« 025/165 », « SM098 ») ramené au format stocké. */
+function normalizeCardNumberFilter(cardNumberRaw: string): string | null {
+  const numberParts = cardNumberRaw.split('/');
+  if (numberParts.length === 0) return null;
+  let cardNumber = numberParts[0].trim();
+  if (!cardNumber) return null;
+
+  if (/^\d+$/.test(cardNumber)) {
+    cardNumber = parseInt(cardNumber, 10).toString();
+  } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
+    const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
+    if (match) {
+      cardNumber = match[1] + parseInt(match[2], 10).toString();
+    }
+  }
+
+  return cardNumber;
+}
+
 // Configuration de Supabase
 const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL || '';
 const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || '';
@@ -135,8 +160,9 @@ export const getUserEditionsCount = async (userId: string) => {
     const uniqueSetIds = new Set();
     
     data?.forEach((card: any) => {
-      if (card.official_cards && card.official_cards.edition_id) {
-        uniqueSetIds.add(card.official_cards.edition_id);
+      const official = embeddedOne<{ edition_id?: string }>(card.official_cards);
+      if (official?.edition_id) {
+        uniqueSetIds.add(official.edition_id);
       }
     });
     
@@ -346,40 +372,6 @@ export const signIn = async (email: string, password: string) => {
   }
 };
 
-// Fonction pour créer un utilisateur admin (à utiliser une seule fois)
-export const createAdminUser = async () => {
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email: 'test@tcmarket.fr',
-      password: 'TCMarket2024!',
-      options: {
-        emailRedirectTo: undefined,
-        data: {
-          is_admin: true,
-          email_confirmed: true
-        }
-      }
-    });
-
-    if (error) throw error;
-    
-    // Initialiser le bucket avatar
-    await initAvatarBucket();
-    
-    // Connexion immédiate
-    if (data.user) {
-      return await supabase.auth.signInWithPassword({
-        email: 'test@tcmarket.fr',
-        password: 'TCMarket2024!'
-      });
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    return { data: null, error };
-  }
-};
-
 // Fonction pour vérifier si un pseudo est unique
 export const checkUsernameUnique = async (userId: string, usernameToCheck: string) => {
   try {
@@ -388,20 +380,14 @@ export const checkUsernameUnique = async (userId: string, usernameToCheck: strin
       .select('id')
       .eq('username', usernameToCheck)
       .neq('id', userId)
-      .single();
-    
-    if (error && error.code === 'PGRST116') {
-      // Code d'erreur PGRST116 signifie qu'aucune ligne n'a été trouvée,
-      // ce qui est bon dans notre cas
-      return { isUnique: true, error: null };
+      .limit(1);
+
+    if (error) {
+      console.error('Erreur lors de la vérification du pseudo:', error);
+      return { isUnique: false, error };
     }
-    
-    if (data) {
-      // Le pseudo est déjà utilisé
-      return { isUnique: false, error: null };
-    }
-    
-    return { isUnique: true, error: null };
+
+    return { isUnique: !data || data.length === 0, error: null };
   } catch (error) {
     console.error('Erreur lors de la vérification du pseudo:', error);
     return { isUnique: false, error };
@@ -577,8 +563,9 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
     const editionIds = new Set<string>();
     const cardIds = new Set<string>();
     data?.forEach((card: any) => {
-      if (card.official_cards && card.official_cards.edition_id) {
-        editionIds.add(card.official_cards.edition_id);
+      const official = embeddedOne<{ edition_id?: string }>(card.official_cards);
+      if (official?.edition_id) {
+        editionIds.add(official.edition_id);
       }
       if (card.card_id) {
         cardIds.add(card.card_id);
@@ -626,9 +613,16 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
     const groupedCards: Record<string, any> = {};
     
     data?.forEach((card: any) => {
-      if (!card.official_cards || !card.official_cards.edition_id) return;
-      
-      const editionId = card.official_cards.edition_id;
+      const official = embeddedOne<{
+        edition_id?: string;
+        name?: string;
+        image_large?: string;
+        image_small?: string;
+        rarity?: string;
+      }>(card.official_cards);
+      if (!official?.edition_id) return;
+
+      const editionId = official.edition_id;
       const editionData = editionsMap[editionId];
       
       if (!editionData) return; // Si l'édition n'existe pas dans la table editions
@@ -654,9 +648,9 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
       groupedCards[editionId].cards.push({
         id: card.id,
         card_id: card.card_id,
-        card_name: card.official_cards.name,
-        card_image: card.official_cards.image_large || card.official_cards.image_small,
-        rarity: card.official_cards.rarity,
+        card_name: official.name,
+        card_image: official.image_large || official.image_small,
+        rarity: official.rarity,
         quantity: 1, // Par défaut, nous supposons que l'utilisateur possède 1 exemplaire
         condition: card.condition,
         is_for_sale: card.is_for_sale || false,
@@ -1371,13 +1365,16 @@ export const getTopCards = async () => {
       `)
       .order('price_mid', { ascending: false })
       .limit(100);
-  
-    
+
+    if (error) {
+      console.error('Erreur lors de la récupération des top cartes:', error);
+      return { data: [], error };
+    }
+
     // Transformation des données pour ajouter l'image_small
     const transformedData = data?.map(card => {
-      // Extraire les données de official_cards de manière sûre
-      const officialCard = card.official_cards as unknown as OfficialCard;
-      
+      const officialCard = embeddedOne<OfficialCard>(card.official_cards as unknown as OfficialCard | OfficialCard[]);
+
       return {
         card_id: card.card_id,
         card_name: card.card_name,
@@ -1386,8 +1383,8 @@ export const getTopCards = async () => {
         edition_name: officialCard?.editions?.name
       };
     });
-    
-    return { data: transformedData, error: null };
+
+    return { data: transformedData ?? [], error: null };
   } catch (error) {
     console.error('Erreur lors de la récupération des top cartes:', error);
     return { data: [], error };
@@ -1854,6 +1851,7 @@ export const getUserNotifications = async (userId: string) => {
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
+      .or('archived.is.null,archived.eq.false')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return { data, error: null };
@@ -1885,7 +1883,7 @@ export const markAllNotificationsAsRead = async (userId: string) => {
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', userId)
-      .eq('archived', false);
+      .or('archived.is.null,archived.eq.false');
     if (error) throw error;
     return { success: true };
   } catch (error) {
@@ -1994,26 +1992,8 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
         }
         
         if (details.cardNumber) {
-          // Extraire juste le numéro de la carte sans le dénominateur
-          const numberParts = details.cardNumber.split('/');
-          if (numberParts.length > 0) {
-            let cardNumber = numberParts[0].trim();
-            
-            // Traitement pour retirer les zéros en début si c'est un nombre pur
-            // Mais garder les préfixes comme "SM", "XY", etc.
-            if (/^\d+$/.test(cardNumber)) {
-              // Si c'est uniquement des chiffres, retirer les zéros en début
-              cardNumber = parseInt(cardNumber, 10).toString();
-            } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
-              // Si c'est un format comme "SM098", garder le préfixe et retirer les zéros du nombre
-              const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
-              if (match) {
-                const prefix = match[1];
-                const number = parseInt(match[2], 10).toString();
-                cardNumber = prefix + number;
-              }
-            }
-            
+          const cardNumber = normalizeCardNumberFilter(details.cardNumber);
+          if (cardNumber) {
             console.log(`Numéro original: "${details.cardNumber}" -> Numéro traité: "${cardNumber}"`);
             query = query.eq('number', cardNumber);
           }
@@ -2063,21 +2043,8 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
       }
       
       if (details.cardNumber) {
-        const numberParts = details.cardNumber.split('/');
-        if (numberParts.length > 0) {
-          let cardNumber = numberParts[0].trim();
-          
-          if (/^\d+$/.test(cardNumber)) {
-            cardNumber = parseInt(cardNumber, 10).toString();
-          } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
-            const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
-            if (match) {
-              const prefix = match[1];
-              const number = parseInt(match[2], 10).toString();
-              cardNumber = prefix + number;
-            }
-          }
-          
+        const cardNumber = normalizeCardNumberFilter(details.cardNumber);
+        if (cardNumber) {
           query = query.eq('number', cardNumber);
         }
       }
@@ -2667,7 +2634,6 @@ const SupabaseService = {
   supabase,
   signUp,
   signIn,
-  createAdminUser,
   initAvatarBucket,
   updateUserAvatar,
   getUserAvatar,

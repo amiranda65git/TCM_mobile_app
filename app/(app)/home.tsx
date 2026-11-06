@@ -38,7 +38,6 @@ export default function HomeScreen() {
   const [cardsCount, setCardsCount] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [valueVariation, setValueVariation] = useState(0);
-  const [languageListener, setLanguageListener] = useState<any>(null);
   const [wishlistCount, setWishlistCount] = useState(0);
   const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
@@ -55,13 +54,10 @@ export default function HomeScreen() {
         setRefreshKey(prev => prev + 1);
       }
     });
-    
-    setLanguageListener(listener);
-    
+
     return () => {
-      // Supprimer l'écouteur lors du démontage du composant
-      if (languageListener) {
-        EventRegister.removeEventListener(languageListener as string);
+      if (listener) {
+        EventRegister.removeEventListener(listener);
       }
     };
   }, []);
@@ -195,9 +191,10 @@ export default function HomeScreen() {
             const { count: notificationsCount, error: notificationsError } = 
               await supabase
                 .from('notifications')
-                .select('*', { count: 'exact' })
+                .select('*', { count: 'exact', head: true })
                 .eq('user_id', user.id)
-                .eq('is_read', false);
+                .eq('is_read', false)
+                .or('archived.is.null,archived.eq.false');
             
             if (!notificationsError) {
               setUnreadNotificationsCount(notificationsCount || 0);

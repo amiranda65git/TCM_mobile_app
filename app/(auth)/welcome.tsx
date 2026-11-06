@@ -62,11 +62,11 @@ export default function WelcomeScreen() {
       // Marquer l'onboarding comme terminé
       await AsyncStorage.setItem('@onboarding_completed', 'true');
       // Rediriger vers la page de connexion
-      router.replace('/login');
+      router.replace('/(auth)/login');
     } catch (error) {
       console.error('Erreur lors de la sauvegarde de l\'état d\'onboarding:', error);
       // En cas d'erreur, on continue quand même vers la page de connexion
-      router.replace('/login');
+      router.replace('/(auth)/login');
     }
   };
 

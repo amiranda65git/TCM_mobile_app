@@ -5,42 +5,40 @@ import { supabase } from './lib/supabase';
 import { Colors } from './constants/Colors';
 import { useTranslation } from 'react-i18next';
 
+const firstParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 export default function ConfirmEmail() {
   const { t } = useTranslation();
-  const { token, type } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const tokenHash = firstParam(params.token_hash ?? params.token);
+  const otpType = firstParam(params.type);
 
   useEffect(() => {
-    if (!token) {
-      router.replace('/login');
+    if (!tokenHash) {
+      router.replace('/(auth)/login');
       return;
     }
 
     const handleEmailConfirmation = async () => {
       try {
-        if (type === 'signup') {
+        if (otpType === 'signup' || otpType === 'recovery') {
           const { error } = await supabase.auth.verifyOtp({
-            token: token as string,
-            type: 'signup',
-          });
-          if (error) throw error;
-        } else if (type === 'recovery') {
-          const { error } = await supabase.auth.verifyOtp({
-            token: token as string,
-            type: 'recovery',
+            token_hash: tokenHash,
+            type: otpType,
           });
           if (error) throw error;
         }
-        
-        // Redirection après confirmation
-        router.replace('/login');
+
+        router.replace('/(auth)/login');
       } catch (error) {
         console.error('Erreur lors de la confirmation:', error);
-        router.replace('/login');
+        router.replace('/(auth)/login');
       }
     };
 
     handleEmailConfirmation();
-  }, [token, type]);
+  }, [tokenHash, otpType]);
 
   return (
     <View style={styles.container}>

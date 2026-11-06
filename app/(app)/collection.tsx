@@ -57,7 +57,6 @@ export default function CollectionScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [languageListener, setLanguageListener] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editions, setEditions] = useState<EditionProps[]>([]);
   const [filteredEditions, setFilteredEditions] = useState<EditionProps[]>([]);
@@ -89,17 +88,13 @@ export default function CollectionScreen() {
     const listener: any = EventRegister.addEventListener('changeLanguage', (language: any) => {
       if (language && typeof language === 'string') {
         console.log('Changement de langue détecté dans CollectionScreen:', language);
-        // Forcer un rafraîchissement du composant
         setRefreshKey(prev => prev + 1);
       }
     });
-    
-    setLanguageListener(listener);
-    
+
     return () => {
-      // Supprimer l'écouteur lors du démontage du composant
-      if (languageListener) {
-        EventRegister.removeEventListener(languageListener as string);
+      if (listener) {
+        EventRegister.removeEventListener(listener);
       }
     };
   }, []);

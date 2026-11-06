@@ -84,32 +84,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
-    // Écouter les changements d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Changement d\'état d\'authentification:', event);
-      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
-        await ensureUserProfile(session.user);
-      }
-      
-      // Mise à jour de l'état avec la nouvelle session
-      setState({
-        session: session,
-        user: session?.user || null,
-        loading: false,
-        isAuthenticated: !!session && !!session.user
-      });
-      
-      // Si l'utilisateur vient de se connecter, vérifier s'il faut rediriger
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session) {
-        const needsRedirect = await AsyncStorage.getItem('@auth_redirect_needed');
-        
-        if (needsRedirect === 'true') {
-          console.log('[AuthContext] Redirection nécessaire détectée après', event);
-          
-          // La redirection sera gérée dans l'index ou le composant de login
-          // Nous ne supprimons pas le flag ici, il sera supprimé après la redirection
-        }
-      }
+    // Écouter les changements d'authentification.
+    // Le callback ne doit pas await d'appels Supabase : le client tient un verrou
+    // pendant onAuthStateChange, et un appel imbriqué peut bloquer la session.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => {
+        void (async () => {
+          console.log('[AuthContext] Changement d\'état d\'authentification:', event);
+          if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+            await ensureUserProfile(session.user);
+          }
+
+          setState({
+            session: session,
+            user: session?.user || null,
+            loading: false,
+            isAuthenticated: !!session && !!session.user
+          });
+
+          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session) {
+            const needsRedirect = await AsyncStorage.getItem('@auth_redirect_needed');
+            if (needsRedirect === 'true') {
+              console.log('[AuthContext] Redirection nécessaire détectée après', event);
+            }
+          }
+        })();
+      }, 0);
     });
 
     return () => subscription.unsubscribe();
