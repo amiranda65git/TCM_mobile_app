@@ -274,7 +274,7 @@ export default function MarketScreen() {
               <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -319,7 +319,7 @@ export default function MarketScreen() {
               <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -387,7 +387,7 @@ export default function MarketScreen() {
               <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
@@ -457,7 +457,7 @@ export default function MarketScreen() {
               <Text style={{ color: 'white', flex: 1, fontWeight: 'bold' }}>
                 {t('market.filteredBy')}: {filterName}
               </Text>
-              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton}>
+              <TouchableOpacity onPress={clearFilter} style={styles.clearFilterButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>

@@ -75,7 +75,7 @@ export default function ForgotPassword() {
           <TextInput
             style={styles.input}
             placeholder="Email"
-            placeholderTextColor="#777"
+            placeholderTextColor="#B0B9C6"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"

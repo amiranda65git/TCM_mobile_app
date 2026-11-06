@@ -565,7 +565,10 @@ export default function CollectionScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <Text style={[styles.title, { color: colors.text.primary }]}>{t('home.collection')}</Text>
-        <TouchableOpacity onPress={() => setFilterModalVisible(true)}>
+        <TouchableOpacity
+          onPress={() => setFilterModalVisible(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Ionicons name="options-outline" size={24} color={colors.text.secondary} />
         </TouchableOpacity>
       </View>
@@ -716,6 +719,12 @@ export default function CollectionScreen() {
           <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
             {t('collection.emptyText')}
           </Text>
+          <TouchableOpacity
+            style={[styles.resetFiltersButton, { backgroundColor: colors.primary, marginTop: 24 }]}
+            onPress={() => router.push('/scan')}
+          >
+            <Text style={styles.resetFiltersButtonText}>{t('scan.scan')}</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>

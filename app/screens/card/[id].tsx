@@ -731,7 +731,7 @@ export default function CardDetailScreen() {
           {cardDetails.owned ? (
             <>
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: cardDetails.is_for_sale ? '#27ae60' : '#e74c3c' }]}
+                style={[styles.actionButton, { backgroundColor: colors.primary }]}
                 onPress={handleSell}
               >
                 <Ionicons name={cardDetails.is_for_sale ? "close-circle-outline" : "cash-outline"} size={24} color="white" />
@@ -741,7 +741,7 @@ export default function CardDetailScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: cardDetails.has_price_alert ? '#2980b9' : '#3498db' }]}
+                style={[styles.actionButton, { backgroundColor: colors.primary }]}
                 onPress={handlePriceAlert}
               >
                 <Ionicons name={cardDetails.has_price_alert ? "notifications" : "notifications-outline"} size={24} color="white" />
@@ -753,7 +753,7 @@ export default function CardDetailScreen() {
           ) : (
             <>
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#2ecc71' }]}
+                style={[styles.actionButton, { backgroundColor: colors.primary }]}
                 onPress={handleBuy}
               >
                 <Ionicons name="cart-outline" size={24} color="white" />
@@ -761,11 +761,11 @@ export default function CardDetailScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#f1c40f' }]}
+                style={[styles.actionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary, elevation: 0, shadowOpacity: 0 }]}
                 onPress={handleWishlist}
               >
-                <Ionicons name={inWishlist ? "star" : "star-outline"} size={24} color="white" />
-                <Text style={styles.actionButtonText}>
+                <Ionicons name={inWishlist ? "star" : "star-outline"} size={24} color={colors.primary} />
+                <Text style={[styles.actionButtonText, { color: colors.primary }]}>
                   {inWishlist ? t('wishlist.removeCard') : t('card.addToWishlist')}
                 </Text>
               </TouchableOpacity>

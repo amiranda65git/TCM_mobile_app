@@ -27,7 +27,7 @@ export default {
   },
   collection: {
     empty: 'Collection vide',
-    emptyText: 'Ajoutez vos premières cartes en utilisant l\'onglet Scan ou le bouton Ajouter ci-dessus.'
+    emptyText: 'Ajoutez vos premières cartes avec le bouton Scanner.'
   },
   edition: {
     details: 'Détails de l\'édition',

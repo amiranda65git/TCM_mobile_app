@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { Colors } from '../constants/Colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -54,6 +55,7 @@ export default function WelcomeScreen() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(0);
   const carouselRef = useRef(null);
 
@@ -114,13 +116,21 @@ export default function WelcomeScreen() {
         onSnapToItem={setActiveIndex}
       />
       
-      <View style={styles.pagination}>
+      <TouchableOpacity
+        onPress={handleSkip}
+        style={styles.skipButton}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Text style={styles.skipText}>{t('general.skip')}</Text>
+      </TouchableOpacity>
+
+      <View style={[styles.pagination, { bottom: 24 + insets.bottom }]}>
         {welcomeSteps.map((_, i) => (
           <View
             key={i}
             style={[
               styles.paginationDot,
-              { backgroundColor: i === activeIndex ? Colors.primary : 'rgba(255, 255, 255, 0.5)' }
+              { backgroundColor: i === activeIndex ? Colors.primary : 'rgba(30, 47, 77, 0.35)' }
             ]}
           />
         ))}
@@ -167,11 +177,21 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+  skipButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 20,
+  },
+  skipText: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
     position: 'absolute',
-    bottom: 50,
     left: 0,
     right: 0,
   },

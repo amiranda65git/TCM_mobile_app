@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons, FontAwesome6 } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { useThemeColors } from '../lib/ThemeUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import '../i18n/i18n.config';
@@ -13,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TabNavigator() {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { t, i18n } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const segments = useSegments();
@@ -61,12 +63,12 @@ export default function TabNavigator() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarActiveTintColor: Colors.secondary,
-        tabBarInactiveTintColor: Colors.text.secondary,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.text.secondary,
         tabBarStyle: isOnScanScreen ? { display: 'none' } : {
-          backgroundColor: Colors.surface,
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: Colors.border,
+          borderTopColor: colors.border,
           height: 70 + insets.bottom,
           paddingBottom: insets.bottom,
           paddingTop: 10,
@@ -159,6 +161,7 @@ export default function TabNavigator() {
 // Composant TabBar personnalisé pour avoir un bouton central spécial
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const colors = useThemeColors();
   const { t } = useTranslation();
   const router = useRouter();
   
@@ -171,7 +174,12 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   return (
     <View style={[
       styles.tabBarContainer, 
-      { paddingBottom: insets.bottom, height: 70 + insets.bottom }
+      {
+        paddingBottom: insets.bottom,
+        height: 70 + insets.bottom,
+        backgroundColor: colors.surface,
+        borderTopColor: colors.border,
+      }
     ]}>
       {state.routes.map((route: any, index: number) => {
         const { options } = descriptors[route.key];
@@ -196,7 +204,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
               <View style={styles.scanButtonContainer}>
                 <Ionicons name="camera" size={28} color="#FFFFFF" />
               </View>
-              <Text style={styles.scanButtonLabel}>{t(`navigation.${route.name}`)}</Text>
+              <Text style={[styles.scanButtonLabel, { color: isFocused ? colors.primary : colors.text.secondary }]}>{t(`navigation.${route.name}`)}</Text>
             </TouchableOpacity>
           );
         }
@@ -231,12 +239,12 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           >
             {options.tabBarIcon && options.tabBarIcon({
               focused: isFocused,
-              color: isFocused ? Colors.secondary : Colors.text.secondary,
+              color: isFocused ? colors.primary : colors.text.secondary,
               size: 24,
             })}
             <Text style={[
               styles.tabLabel,
-              { color: isFocused ? Colors.secondary : Colors.text.secondary }
+              { color: isFocused ? colors.primary : colors.text.secondary }
             ]}>
               {t(`navigation.${route.name}`)}
             </Text>

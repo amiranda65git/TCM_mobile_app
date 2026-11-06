@@ -30,8 +30,8 @@ import {
 } from './lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors } from './constants/Colors';
 import * as FileSystem from 'expo-file-system';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage } from './i18n/i18n.config';
 import { EventRegister } from 'react-native-event-listeners';
@@ -68,6 +68,7 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const { isDarkMode, toggleTheme } = useTheme();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   // const { subscriptionStatus, loading: isLoadingRevenueCat } = useRevenueCat();
   
   const [loading, setLoading] = useState(false);
@@ -859,7 +860,11 @@ export default function Settings() {
         <View style={{ width: 44 }} />
       </View>
       
-      <ScrollView style={dynamicStyles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={dynamicStyles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Section Profil */}
         <View style={dynamicStyles.section}>
           <TouchableOpacity style={dynamicStyles.userInfoContainer} onPress={handleAvatarChange}>
@@ -928,7 +933,7 @@ export default function Settings() {
               <Switch
                 value={isDarkMode}
                 onValueChange={toggleTheme}
-                trackColor={{ false: '#767577', true: Colors.primary }}
+                trackColor={{ false: '#767577', true: colors.primary }}
                 thumbColor="#f4f3f4"
                 ios_backgroundColor="#767577"
                 style={dynamicStyles.themeSwitch}
