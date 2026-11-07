@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIn
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
+import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
@@ -55,6 +56,7 @@ const PAGE_SIZE = 30;
 export default function EditionDetail() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
+  const { canUsePriceAlerts, showPremiumUpsell } = useSubscriptionRestrictions();
   const { t } = useTranslation();
   const router = useRouter();
   const { isDarkMode } = useTheme();
@@ -184,6 +186,11 @@ export default function EditionDetail() {
         throw checkError;
       }
       
+      if (!existingAlert && !canUsePriceAlerts) {
+        showPremiumUpsell('alerts');
+        return;
+      }
+
       if (existingAlert) {
         // Si une alerte existe déjà, la supprimer (toggle)
         const { error: deleteError } = await supabase

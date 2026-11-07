@@ -18,9 +18,9 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
 import { useRevenueCat } from './lib/RevenueCatService';
-import { PurchasesPackage } from 'react-native-purchases';
+import { PACKAGE_TYPE, PurchasesPackage } from 'react-native-purchases';
 
-const PREMIUM_NAV_SOURCES = ['market', 'trading', 'collection', 'scan'] as const;
+const PREMIUM_NAV_SOURCES = ['market', 'trading', 'collection', 'scan', 'alerts'] as const;
 type PremiumNavSource = (typeof PREMIUM_NAV_SOURCES)[number];
 
 export default function Premium() {
@@ -61,8 +61,10 @@ export default function Premium() {
     
     if (Array.isArray(packages) && packages.length > 0 && !selectedPackage) {
       try {
-        // Sélectionner le premier package disponible
-        const firstPackage = packages[0];
+        const yearlyPackage = packages.find(
+          (pack) => pack.packageType === PACKAGE_TYPE.ANNUAL
+        );
+        const firstPackage = yearlyPackage ?? packages[0];
         setSelectedPackage(firstPackage);
         console.log('[Premium] Package sélectionné automatiquement:', firstPackage.identifier);
       } catch (error) {
@@ -142,10 +144,10 @@ export default function Premium() {
 
   const formatPrice = (pack: PurchasesPackage): string => {
     try {
-      return pack.product.priceString || '2.99 CHF';
+      return pack.product.priceString || '3.99 CHF';
     } catch (error) {
       console.error('Erreur formatage prix:', error);
-      return '2.99 CHF';
+      return '3.99 CHF';
     }
   };
 
@@ -338,16 +340,6 @@ export default function Premium() {
     },
   });
 
-  // PREMIUM DÉSACTIVÉ — supprimer ce bloc (useEffect + return null) pour réactiver l'écran d'abonnement
-  useEffect(() => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(app)/home');
-    }
-  }, []);
-  return null;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack.Screen 
@@ -401,8 +393,20 @@ export default function Premium() {
             </Text>
           </View>
 
+          {subscriptionStatus.isActive ? (
+            <Text style={dynamicStyles.explanationText}>
+              {t('premium.alreadySubscribed.message')}
+            </Text>
+          ) : null}
+
+          {!loading && !subscriptionStatus.isActive && (!Array.isArray(packages) || packages.length === 0) && (
+            <Text style={dynamicStyles.explanationText}>
+              {t('premium.noProducts')}
+            </Text>
+          )}
+
           {/* Sélection des packages RevenueCat */}
-          {!loading && Array.isArray(packages) && packages.length > 0 && (
+          {!loading && !subscriptionStatus.isActive && Array.isArray(packages) && packages.length > 0 && (
             <View style={dynamicStyles.packagesContainer}>
               <Text style={dynamicStyles.packagesTitle}>
                 {t('premium.choosePlan', 'Choisissez votre plan')}
@@ -438,6 +442,7 @@ export default function Premium() {
       </ScrollView>
       
       {/* Boutons flottants */}
+      {!subscriptionStatus.isActive && (
       <View style={dynamicStyles.floatingButtonContainer}>
         {/* Bouton Restaurer les achats */}
         <TouchableOpacity 
@@ -479,6 +484,7 @@ export default function Premium() {
           )}
         </TouchableOpacity>
       </View>
+      )}
     </SafeAreaView>
   );
 } 
