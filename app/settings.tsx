@@ -38,8 +38,7 @@ import { EventRegister } from 'react-native-event-listeners';
 import { useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
 import Constants from 'expo-constants';
-// PREMIUM DÉSACTIVÉ — réactiver l’entrée Réglages → abonnement
-// import { useRevenueCat } from './lib/RevenueCatService';
+import { useRevenueCat } from './lib/RevenueCatService';
 
 // Configuration statique pour masquer l'en-tête d'Expo Router
 export const unstable_settings = {
@@ -68,7 +67,7 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const { isDarkMode, toggleTheme } = useTheme();
   const colors = useThemeColors();
-  // const { subscriptionStatus, loading: isLoadingRevenueCat } = useRevenueCat();
+  const { subscriptionStatus } = useRevenueCat();
   
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -386,22 +385,33 @@ export default function Settings() {
     );
   };
 
-  // PREMIUM DÉSACTIVÉ — réactiver la navigation vers /premium
-  // const handlePremium = () => {
-  //   router.push('/premium');
-  // };
-  
-  // Fonction pour obtenir le type d'abonnement
-  // const getSubscriptionType = () => {
-  //   if (!subscriptionStatus.isActive || !subscriptionStatus.productId) return '';
-  //   
-  //   if (subscriptionStatus.productId.includes('annual') || subscriptionStatus.productId.includes('yearly')) {
-  //     return t('settings.subscription.annual', 'Annuel');
-  //   } else if (subscriptionStatus.productId.includes('monthly') || subscriptionStatus.productId.includes('month')) {
-  //     return t('settings.subscription.monthly', 'Mensuel');
-  //   }
-  //   return t('settings.subscription.premium', 'Premium');
-  // };
+  const handlePremium = () => {
+    if (subscriptionStatus.isActive) {
+      Linking.openURL(
+        'https://play.google.com/store/account/subscriptions?package=com.tcmarket.app'
+      );
+      return;
+    }
+    router.push('/premium');
+  };
+
+  const getSubscriptionType = () => {
+    if (!subscriptionStatus.isActive || !subscriptionStatus.productId) return '';
+
+    if (
+      subscriptionStatus.productId.includes('annual') ||
+      subscriptionStatus.productId.includes('yearly')
+    ) {
+      return t('settings.subscription.annual', 'Annuel');
+    }
+    if (
+      subscriptionStatus.productId.includes('monthly') ||
+      subscriptionStatus.productId.includes('month')
+    ) {
+      return t('settings.subscription.monthly', 'Mensuel');
+    }
+    return t('settings.subscription.premium', 'Premium');
+  };
 
   const handlePermissions = () => {
     Alert.alert(t('settings.permissions'), t('settings.alerts.comingSoon'));
@@ -892,7 +902,6 @@ export default function Settings() {
           />
         </View>
         
-        {/* PREMIUM DÉSACTIVÉ — réactiver la section Abonnement
         <Text style={dynamicStyles.sectionTitle}>{t('settings.subscriptionTitle')}</Text>
         <View style={dynamicStyles.section}>
           <MenuItem 
@@ -916,7 +925,6 @@ export default function Settings() {
             isBorderless={subscriptionStatus.isActive}
           />
         </View>
-        */}
         
         {/* Section Personnalisation */}
         <Text style={dynamicStyles.sectionTitle}>{t('settings.customization')}</Text>

@@ -10,6 +10,8 @@ import { EventRegister } from 'react-native-event-listeners';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
+import { FREE_MONTHLY_SCANS, incrementMonthlyScanCount } from '../lib/scanQuota';
 import Constants from 'expo-constants';
 import OpenAI from 'openai';
 import SupabaseService from '../lib/supabase';
@@ -241,6 +243,7 @@ export default function ScanScreen() {
   const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const { canScanCard, isPremium } = useSubscriptionRestrictions();
   const [refreshKey, setRefreshKey] = useState(0);
   const [languageListener, setLanguageListener] = useState<any>(null);
   const [hasPermission, setHasPermission] = useState(false);
@@ -335,8 +338,6 @@ export default function ScanScreen() {
     })();
   }, []);
 
-  // Ancien : chargement du nombre de cartes pour limite gratuite (canScanCard)
-
   // Fonction pour réinitialiser complètement l'état du scan
   const resetScanState = () => {
     setPhotoUri(null);
@@ -355,6 +356,19 @@ export default function ScanScreen() {
     // Si on a une erreur ou une photo, on réinitialise pour un nouveau scan
     if (scanError || photoUri) {
       resetScanState();
+      return;
+    }
+
+    const allowed = await canScanCard();
+    if (!allowed) {
+      Alert.alert(
+        t('scan.restrictionTitle'),
+        t('scan.restrictionMessage', { maxCount: FREE_MONTHLY_SCANS }),
+        [
+          { text: t('premium.upsell.later'), style: 'cancel' },
+          { text: t('premium.upgrade'), onPress: () => router.push('/premium?from=scan') },
+        ]
+      );
       return;
     }
 
@@ -546,6 +560,13 @@ export default function ScanScreen() {
   // Analyse OCR de l'image capturée
   const processImage = async (imagePath: string) => {
     try {
+      if (!isPremium) {
+        const { data } = await SupabaseService.supabase.auth.getUser();
+        const userId = data.user?.id;
+        if (userId) {
+          await incrementMonthlyScanCount(userId);
+        }
+      }
       // 1. Essayer avec OpenAI Vision
       const aiResult = await analyzeCardWithOpenAI(imagePath);
       if (aiResult && (aiResult.pokemonName || aiResult.cardNumber)) {

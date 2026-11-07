@@ -175,8 +175,8 @@ export default {
     searchPlaceholder: 'Rechercher une carte...',
     searching: 'Recherche en cours...',
     noResults: 'Aucun résultat trouvé',
-    restrictionTitle: 'Limitation atteinte',
-    restrictionMessage: 'Vous avez atteint la limite de 10 cartes. Souscrivez à un abonnement pour continuer à scanner.'
+    restrictionTitle: 'Limite atteinte',
+    restrictionMessage: 'Vous avez utilisé vos {{maxCount}} scans gratuits ce mois-ci. Passez Premium pour continuer.'
   },
   settings: {
     title: 'Paramètres',
@@ -433,8 +433,8 @@ export default {
     whyPay: 'Pourquoi payer ?',
     explanation1: 'TCMarket fait appel à des services externes pour traiter vos images de cartes et récupérer les prix du marché en temps réel.',
     explanation2: 'Ces services ont un coût, et votre abonnement nous permet de couvrir ces frais tout en continuant à améliorer l\'application.',
-    explanation3: 'En devenant membre Premium, vous soutenez le développement de TCMarket et bénéficiez d\'une expérience optimale !',
-    subscribeButton: 'Je m\'abonne pour seulement 3.- par mois',
+    explanation3: 'Premium débloque les scans illimités et les alertes de prix. La collection, le marché et les échanges restent gratuits.',
+    subscribeButton: 'Je m\'abonne pour 3.99 CHF par mois',
     alreadySubscribed: {
       title: 'Déjà abonné',
       message: 'Vous êtes déjà abonné à TCMarket Premium !'
@@ -451,22 +451,25 @@ export default {
     restore: 'Restaurer les achats',
     processing: 'Traitement en cours...',
     restrictions: {
-      collection: 'Vous ne voyez que {{maxCount}} cartes. Abonnez-vous pour voir toute votre collection.',
-      scan: 'Limite de {{maxCount}} cartes atteinte. Abonnez-vous pour scanner plus de cartes.',
-      market: 'Accès au marché réservé aux membres Premium.',
-      trading: 'Accès au trading réservé aux membres Premium.'
+      collection: 'Votre collection reste visible. Premium débloque les scans illimités et les alertes de prix.',
+      scan: 'Vous avez utilisé vos {{maxCount}} scans gratuits ce mois-ci. Passez Premium pour scanner sans limite.',
+      market: 'Le marché reste gratuit. Premium débloque les scans illimités et les alertes de prix.',
+      trading: 'Les échanges restent gratuits. Premium débloque les scans illimités et les alertes de prix.',
+      alerts: 'Les alertes de prix sont réservées aux membres Premium.'
     },
     upsell: {
       title: 'TCMarket Premium',
       later: 'Plus tard',
       market:
-        'Passez Premium pour soutenir l’app et profiter d’une expérience optimale. Vous pouvez continuer à consulter le marché gratuitement.',
+        'Le marché reste gratuit. Premium débloque les scans illimités et les alertes de prix.',
       trading:
-        'Le trading est ouvert à tous pour l’instant. Premium nous aide à couvrir les coûts des services — découvrez les avantages quand vous voulez.',
+        'Les échanges restent gratuits. Premium débloque les scans illimités et les alertes de prix.',
       scan:
-        'Le scan intelligent utilise des services payants. Abonnez-vous pour nous soutenir.',
+        'Le scan intelligent utilise un service payant. Le compte gratuit inclut 20 scans par mois.',
       collection:
-        'Votre collection complète est visible. Premium permet de financer les prix marché et l’IA — pensez-y quand vous le souhaitez.',
+        'Votre collection reste visible. Premium débloque les scans illimités et les alertes de prix.',
+      alerts:
+        'Les alertes de prix sont réservées aux membres Premium. La collection, le marché et les échanges restent gratuits.',
     },
     upgrade: 'Passer Premium'
   },

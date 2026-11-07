@@ -4,6 +4,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
+import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
@@ -47,6 +48,7 @@ const PAGE_SIZE = 20;
 
 export default function AllCardsScreen() {
   const { session } = useAuth();
+  const { canUsePriceAlerts, showPremiumUpsell } = useSubscriptionRestrictions();
   const router = useRouter();
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
@@ -194,6 +196,10 @@ export default function AllCardsScreen() {
 
   // Fonction pour créer une alerte de prix
   const handleCreatePriceAlert = async (cardInfo: any) => {
+    if (!canUsePriceAlerts) {
+      showPremiumUpsell('alerts');
+      return;
+    }
     try {
       const { error } = await supabase
         .from('price_alerts')

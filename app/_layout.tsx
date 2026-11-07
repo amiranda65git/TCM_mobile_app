@@ -13,8 +13,7 @@ import { ThemeProvider, useTheme } from './lib/ThemeContext';
 import { useThemeColors } from './lib/ThemeUtils';
 import { RevenueCatProvider } from './lib/RevenueCatService';
 
-// PREMIUM DÉSACTIVÉ : le provider RevenueCat reste monté (UI commentée ailleurs).
-// Pour couper aussi l’init SDK, commenter <RevenueCatProvider> autour de <AppContent />.
+// RevenueCat reste monté : l’abonnement Premium passe par Google Play.
 
 // Composant pour le contenu de l'application
 function AppContent() {

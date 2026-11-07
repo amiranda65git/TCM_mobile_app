@@ -18,8 +18,8 @@ import Purchases, {
 import { useAuth } from './auth';
 import Constants from 'expo-constants';
 import { ExecutionEnvironment } from 'expo-constants';
-
-// PREMIUM DÉSACTIVÉ : SDK conservé ; restrictions et upsell commentés (réactivation plus tard).
+import { FREE_MONTHLY_SCANS } from '../constants/SubscriptionProducts';
+import { getMonthlyScanCount } from './scanQuota';
 
 /** Expo Go n’embarque pas le natif RevenueCat → `RNPurchases` est null. */
 const isExpoGo =
@@ -89,16 +89,6 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   >(null);
 
   const applyCustomerInfo = useCallback((customerInfo: CustomerInfo) => {
-    if (__DEV__) {
-      setSubscriptionStatus({
-        isActive: true,
-        expiresAt: null,
-        productId: 'dev-premium',
-        loading: false,
-      });
-      return;
-    }
-
     const { isActive, expiresAt, productId } =
       readPremiumFromCustomerInfo(customerInfo);
 
@@ -159,9 +149,6 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const refreshEntitlementsFromStore = useCallback(async () => {
     const currentUser = userRef.current;
     if (!currentUser) return;
-    if (__DEV__) {
-      return;
-    }
 
     try {
       await Purchases.syncPurchases();
@@ -194,17 +181,6 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
 
     try {
       setSubscriptionStatus((prev) => ({ ...prev, loading: true }));
-
-      if (__DEV__) {
-        setSubscriptionStatus({
-          isActive: true,
-          expiresAt: null,
-          productId: 'dev-premium',
-          loading: false,
-        });
-        return;
-      }
-
       await refreshEntitlementsFromStore();
     } catch (error) {
       console.error('[RevenueCat] checkSubscriptionStatus:', error);
@@ -264,9 +240,9 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
         '[RevenueCat] Expo Go : pas de module natif achats. Lancez `npx expo run:android` (dev client) pour tester RevenueCat.'
       );
       setSubscriptionStatus({
-        isActive: __DEV__,
+        isActive: false,
         expiresAt: null,
-        productId: __DEV__ ? 'dev-expo-go' : null,
+        productId: null,
         loading: false,
       });
       setOfferings([]);
@@ -394,7 +370,7 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
       const customerInfo = await Purchases.restorePurchases();
       applyCustomerInfo(customerInfo);
       const active =
-        !!customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID] || __DEV__;
+        !!customerInfo.entitlements.active[PREMIUM_ENTITLEMENT_ID];
       if (active) {
         Alert.alert('Succès', 'Achats restaurés.');
         return true;
@@ -435,51 +411,44 @@ export function useRevenueCat() {
   return context;
 }
 
-/** Zones de l’app où l’on affiche une incitation Premium (sans bloquer l’accès). */
-export type PremiumUpsellContext = 'market' | 'trading' | 'scan' | 'collection';
+/** Écrans qui mènent vers l’abonnement. Marché, collection et trading restent ouverts. */
+export type PremiumUpsellContext = 'market' | 'trading' | 'scan' | 'collection' | 'alerts';
 
 export type PremiumUpsellOptions = {
-  /** Réservé aux anciens flux (scan) — ignoré, navigation vers /premium uniquement */
   onLater?: () => void;
 };
 
 /**
- * Restrictions payantes désactivées : tout le monde accède aux écrans.
- * Ancienne logique (blocage) conservée en commentaire pour réactivation éventuelle.
+ * Le marché, la collection et les échanges restent ouverts.
+ * Le gratuit a FREE_MONTHLY_SCANS scans par mois. Les alertes de prix sont Premium.
  */
 export function useSubscriptionRestrictions() {
   const { subscriptionStatus } = useRevenueCat();
+  const { user } = useAuth();
   const router = useRouter();
   const isPremium = subscriptionStatus.isActive;
 
-  // --- Ancienne logique de blocage (ne plus utiliser tant que les comptes gratuits sont ouverts) ---
-  // const canAccessMarket = subscriptionStatus.isActive;
-  // const canAccessTrading = subscriptionStatus.isActive;
-  // const canScanCard = async (count: number) =>
-  //   subscriptionStatus.isActive || count < 10;
-  // const getMaxCollectionCards = () =>
-  //   subscriptionStatus.isActive ? Infinity : 10;
-  // const canAccessFullCollection = subscriptionStatus.isActive;
-
   const canAccessMarket = true;
   const canAccessTrading = true;
-
-  const canScanCard = async (_currentInventoryCount: number): Promise<boolean> =>
-    true;
+  const canAccessFullCollection = true;
+  const canUsePriceAlerts = isPremium || subscriptionStatus.loading;
 
   const getMaxCollectionCards = (): number => Infinity;
 
-  const canAccessFullCollection = true;
+  const canScanCard = useCallback(async (): Promise<boolean> => {
+    if (subscriptionStatus.loading || subscriptionStatus.isActive) return true;
+    if (!user?.id) return true;
+    const count = await getMonthlyScanCount(user.id);
+    return count < FREE_MONTHLY_SCANS;
+  }, [subscriptionStatus.loading, subscriptionStatus.isActive, user?.id]);
 
   const showPremiumUpsell = useCallback(
     (feature: PremiumUpsellContext, options?: PremiumUpsellOptions) => {
-      // PREMIUM DÉSACTIVÉ — réactiver la navigation vers /premium
-      // if (isPremium) {
-      //   options?.onLater?.();
-      //   return;
-      // }
-      // router.push(`/premium?from=${feature}`);
-      options?.onLater?.();
+      if (isPremium) {
+        options?.onLater?.();
+        return;
+      }
+      router.push(`/premium?from=${feature}`);
     },
     [isPremium, router]
   );
@@ -488,6 +457,7 @@ export function useSubscriptionRestrictions() {
     canAccessMarket,
     canAccessTrading,
     canScanCard,
+    canUsePriceAlerts,
     getMaxCollectionCards,
     canAccessFullCollection,
     isPremium,
