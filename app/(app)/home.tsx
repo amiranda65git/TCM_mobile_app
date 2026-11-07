@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Linking, SafeAreaView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Linking, SafeAreaView, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -302,7 +302,7 @@ export default function HomeScreen() {
         <Text style={[styles.value, { color: colors.text.primary }]}>
           {hideValues ? "******" : formatCurrency(totalValue || 0)}
         </Text>
-        <View style={[styles.badge, { backgroundColor: colors.surface }]}>
+        <View style={[styles.badge, { backgroundColor: colors.primaryLight }]}>
           <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
         </View>
       </View>
@@ -325,20 +325,19 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const ListItem = ({ icon, title, count, onPress, showBadge = false }: any) => (
+  const ListItem = ({ icon, title, count, badgeCount = 0, onPress, showBadge = false }: any) => (
     <TouchableOpacity style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={onPress}>
       <View style={styles.listItemLeft}>
         {icon}
         <Text style={[styles.listItemTitle, { color: colors.text.primary }]}>{title}</Text>
       </View>
       <View style={styles.listItemRight}>
-        {showBadge && count > 0 ? (
+        {showBadge && badgeCount > 0 ? (
           <View style={[styles.notificationBadge, { backgroundColor: colors.secondary }]}>
-            <Text style={styles.notificationBadgeText}>{count}</Text>
+            <Text style={styles.notificationBadgeText}>{badgeCount}</Text>
           </View>
-        ) : (
-          <Text style={[styles.listItemCount, { color: colors.text.secondary }]}>{count}</Text>
-        )}
+        ) : null}
+        <Text style={[styles.listItemCount, { color: colors.text.secondary }]}>{count}</Text>
         <Ionicons name="chevron-forward" size={24} color={colors.text.secondary} />
       </View>
     </TouchableOpacity>
@@ -401,7 +400,10 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => router.push('../settings')}>
+          <TouchableOpacity
+            onPress={() => router.push('../settings')}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Ionicons name="settings-outline" size={24} color={colors.text.secondary} />
           </TouchableOpacity>
         </View>
@@ -438,6 +440,7 @@ export default function HomeScreen() {
           icon={<Ionicons name="notifications" size={24} color={colors.secondary} />}
           title={t('home.alerts')}
           count={`${unreadNotificationsCount} ${t('home.alerts')}`}
+          badgeCount={unreadNotificationsCount}
           showBadge={true}
           onPress={() => router.push('/screens/notifications')}
         />
@@ -466,7 +469,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 25 : 0, // Espace pour la barre d'état
   },
   container: {
     flex: 1,
@@ -475,7 +477,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
   },
   userInfo: {
     flexDirection: 'row',
@@ -652,7 +656,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   footer: {
-    height: 80,  // Augmentation de l'espace en bas pour éviter que la barre de navigation ne cache le contenu
+    height: 120,
   },
   notificationBadge: {
     width: 20,

@@ -12,6 +12,7 @@ import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { FREE_MONTHLY_SCANS, incrementMonthlyScanCount } from '../lib/scanQuota';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import OpenAI from 'openai';
 import SupabaseService from '../lib/supabase';
@@ -244,6 +245,7 @@ export default function ScanScreen() {
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
   const { canScanCard, isPremium } = useSubscriptionRestrictions();
+  const insets = useSafeAreaInsets();
   const [refreshKey, setRefreshKey] = useState(0);
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1017,7 +1019,7 @@ export default function ScanScreen() {
 
       {/* Bouton de scan circulaire centré */}
       {!photoUri && !scanError && (
-        <View style={styles.circularButtonContainer}>
+        <View style={[styles.circularButtonContainer, { bottom: 16 + insets.bottom }]}>
           <TouchableOpacity 
             style={[styles.circularButton, { backgroundColor: colors.primary }]} 
             onPress={handleStartScan}
@@ -1035,7 +1037,7 @@ export default function ScanScreen() {
       
       {/* Bouton pour réessayer en cas d'erreur */}
       {(photoUri && scanError) && (
-        <View style={styles.circularButtonContainer}>
+        <View style={[styles.circularButtonContainer, { bottom: 16 + insets.bottom }]}>
           <TouchableOpacity 
             style={[styles.circularButton, { backgroundColor: colors.error || '#e53935' }]} 
             onPress={resetScanState}
@@ -1048,7 +1050,7 @@ export default function ScanScreen() {
 
       {/* Bouton pour scanner à nouveau */}
       {(photoUri && !scanError && !isLoadingCards) && (
-        <View style={styles.circularButtonContainer}>
+        <View style={[styles.circularButtonContainer, { bottom: 16 + insets.bottom }]}>
           <TouchableOpacity 
             style={[styles.circularButton, { backgroundColor: colors.secondary }]} 
             onPress={resetScanState}
@@ -1825,7 +1827,6 @@ const styles = StyleSheet.create({
   },
   circularButtonContainer: {
     position: 'absolute',
-    bottom: 50,
     left: 0,
     right: 0,
     alignItems: 'center',

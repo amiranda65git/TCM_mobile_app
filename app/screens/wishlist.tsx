@@ -222,7 +222,7 @@ export default function WishlistScreen() {
 
       {/* Contenu */}
       <View style={[styles.content, { backgroundColor: colors.background }]}>
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
           <Ionicons name="search" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
           <TextInput
             style={[styles.searchInput, { color: colors.text.primary }]}
@@ -245,7 +245,10 @@ export default function WishlistScreen() {
               {t('wishlist.emptyText')}
             </Text>
 
-            <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.secondary }]}>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: colors.secondary }]}
+              onPress={() => router.push('/market')}
+            >
               <Ionicons name="add" size={24} color="#FFFFFF" />
               <Text style={styles.addButtonText}>{t('wishlist.addCard')}</Text>
             </TouchableOpacity>
@@ -300,7 +303,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F0F0',
     borderRadius: 8,
     marginHorizontal: 16,
     marginVertical: 12,

@@ -65,7 +65,7 @@ export default function SignUp() {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor="#777"
+              placeholderTextColor="#B0B9C6"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -78,12 +78,12 @@ export default function SignUp() {
             <TextInput
               style={styles.input}
               placeholder="Mot de passe"
-              placeholderTextColor="#777"
+              placeholderTextColor="#B0B9C6"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons 
                 name={showPassword ? "eye-outline" : "eye-off-outline"} 
                 size={20} 
@@ -97,7 +97,7 @@ export default function SignUp() {
             <TextInput
               style={styles.input}
               placeholder="Confirmer le mot de passe"
-              placeholderTextColor="#777"
+              placeholderTextColor="#B0B9C6"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showPassword}

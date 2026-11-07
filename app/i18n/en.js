@@ -27,7 +27,7 @@ export default {
   },
   collection: {
     empty: 'Empty Collection',
-    emptyText: 'Add your first cards using the Scan tab or the Add button above.'
+    emptyText: 'Add your first cards with the Scan button.'
   },
   edition: {
     details: 'Edition Details',

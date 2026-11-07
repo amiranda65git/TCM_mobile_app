@@ -17,8 +17,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useSegments } from 'expo-router';
 import { signIn, signInWithGoogle, supabase, getUserProfile, createUserProfile } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Login() {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -315,7 +317,7 @@ export default function Login() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: insets.bottom + 16 }]}>
         {/* Logo de marque (affiché seulement si disponible) */}
         {(() => {
           const logoSource = getLogoSource();
@@ -344,7 +346,7 @@ export default function Login() {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor="#777"
+              placeholderTextColor="#B0B9C6"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -357,12 +359,12 @@ export default function Login() {
             <TextInput
               style={styles.input}
               placeholder="Mot de passe"
-              placeholderTextColor="#777"
+              placeholderTextColor="#B0B9C6"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Ionicons 
                 name={showPassword ? "eye-outline" : "eye-off-outline"} 
                 size={20} 

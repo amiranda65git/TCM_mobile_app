@@ -343,7 +343,7 @@ export default function CardSellDetails() {
                 <View style={{
                   flex: 1,
                   height: '100%',
-                  backgroundColor: 'green',
+                  backgroundColor: colors.success,
                   borderRadius: 16,
                   justifyContent: 'center',
                   alignItems: 'flex-start',
@@ -356,7 +356,7 @@ export default function CardSellDetails() {
                 <View style={{
                   flex: 1,
                   height: '100%',
-                  backgroundColor: 'red',
+                  backgroundColor: colors.error,
                   borderRadius: 16,
                   justifyContent: 'center',
                   alignItems: 'flex-end',
@@ -492,7 +492,7 @@ export default function CardSellDetails() {
                     overflow: 'hidden',
                   }}>
                     {item.users?.avatar_url ? (
-                      <Image source={{ uri: item.users.avatar_url }} style={styles.avatar} />
+                      <Image source={{ uri: item.users.avatar_url }} style={[styles.avatar, { backgroundColor: colors.border }]} />
                     ) : (
                       <View style={[styles.avatar, { backgroundColor: colors.border, justifyContent: 'center', alignItems: 'center' }]}> 
                         <Text style={{ color: colors.text.secondary, fontWeight: 'bold' }}>{item.users?.username?.[0]?.toUpperCase() || '?'}</Text>
@@ -503,7 +503,7 @@ export default function CardSellDetails() {
                       <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{new Date(item.created_at).toLocaleDateString()}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: '#00BFFF', fontWeight: 'bold', fontSize: 16 }}>{proposedPrice != null && Number.isFinite(proposedPrice) ? `${proposedPrice.toFixed(2)} €` : '-'}</Text>
+                      <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 16 }}>{proposedPrice != null && Number.isFinite(proposedPrice) ? `${proposedPrice.toFixed(2)} €` : '-'}</Text>
                       <Text style={{ color: percent === 0 ? colors.text.secondary : percent > 0 ? colors.success : colors.error, fontSize: 13, fontWeight: 'bold' }}>{Number.isFinite(percent) ? `${percent > 0 ? '+' : ''}${percent.toFixed(1)}%` : ''}</Text>
                     </View>
                   </View>
@@ -677,8 +677,8 @@ const styles = StyleSheet.create({
   midPriceColumn: { flex: 1.2, marginHorizontal: 8, paddingBottom: 4 },
   midPriceValue: { fontSize: 20, fontWeight: 'bold' },
   offersContainer: { padding: 16, borderRadius: 12, margin: 16, marginTop: 0 },
-  offerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee' },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ccc' },
+  offerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
   section: { 
     padding: 16, 
     borderRadius: 12, 

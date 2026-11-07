@@ -42,7 +42,7 @@ const darkTheme: ColorScheme = {
     secondary: '#B0B9C6'
   },
   border: '#374869',
-  primary: '#1E2F4D',
+  primary: '#4A90E2',
   primaryLight: '#344973',
   secondary: '#4A90E2',
   success: '#4CAF50',
