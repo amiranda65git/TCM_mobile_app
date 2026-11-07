@@ -176,7 +176,7 @@ export default {
     noResults: 'No results found',
     scans: 'scans',
     restrictionTitle: 'Limit reached',
-    restrictionMessage: 'You have reached the limit of 10 cards. Subscribe to continue scanning.'
+    restrictionMessage: 'You have used your {{maxCount}} free scans this month. Go Premium to continue.'
   },
   settings: {
     title: 'Settings',
@@ -433,8 +433,8 @@ export default {
     whyPay: 'Why pay?',
     explanation1: 'TCMarket uses external services to process your card images and retrieve real-time market prices.',
     explanation2: 'These services have a cost, and your subscription allows us to cover these fees while continuing to improve the application.',
-    explanation3: 'By becoming a Premium member, you support TCMarket\'s development and enjoy an optimal experience!',
-    subscribeButton: 'Subscribe for only $3 per month',
+    explanation3: 'Premium unlocks unlimited scans and price alerts. Your collection, the market and trading stay free.',
+    subscribeButton: 'Subscribe for 3.99 CHF per month',
     alreadySubscribed: {
       title: 'Already subscribed',
       message: 'You already have an active TCMarket Premium subscription!'
@@ -451,22 +451,25 @@ export default {
     restore: 'Restore purchases',
     processing: 'Processing...',
     restrictions: {
-      collection: 'You only see {{maxCount}} cards. Subscribe to see your entire collection.',
-      scan: 'Limit of {{maxCount}} cards reached. Subscribe to scan more cards.',
-      market: 'Market access reserved for Premium members.',
-      trading: 'Trading access reserved for Premium members.'
+      collection: 'Your collection stays visible. Premium unlocks unlimited scans and price alerts.',
+      scan: 'You have used your {{maxCount}} free scans this month. Go Premium to scan without a limit.',
+      market: 'The market stays free. Premium unlocks unlimited scans and price alerts.',
+      trading: 'Trading stays free. Premium unlocks unlimited scans and price alerts.',
+      alerts: 'Price alerts are reserved for Premium members.'
     },
     upsell: {
       title: 'TCMarket Premium',
       later: 'Not now',
       market:
-        'Go Premium to support the app and get the best experience. You can keep browsing the market for free.',
+        'The market stays free. Premium unlocks unlimited scans and price alerts.',
       trading:
-        'Trading is open to everyone for now. Premium helps cover our service costs — learn more whenever you like.',
+        'Trading stays free. Premium unlocks unlimited scans and price alerts.',
       scan:
-        'Smart scanning uses paid services. Subscribe to support us, or keep scanning for free.',
+        'Smart scanning uses a paid service. The free account includes 20 scans per month.',
       collection:
-        'Your full collection is visible. Premium funds market prices and AI features — upgrade whenever you want.',
+        'Your collection stays visible. Premium unlocks unlimited scans and price alerts.',
+      alerts:
+        'Price alerts are reserved for Premium members. Your collection, the market and trading stay free.',
     },
     upgrade: 'Go Premium'
   },

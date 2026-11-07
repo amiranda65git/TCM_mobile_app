@@ -4,6 +4,7 @@ import { CardImageSlider } from '../../components/CardImageSlider';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../lib/auth';
+import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
@@ -60,6 +61,7 @@ export default function CardDetailScreen() {
         : rawUserCardId
       : undefined;
   const { user } = useAuth();
+  const { canUsePriceAlerts, showPremiumUpsell } = useSubscriptionRestrictions();
   const { t } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
@@ -449,6 +451,11 @@ export default function CardDetailScreen() {
         throw checkError;
       }
       
+      if (!existingAlert && !canUsePriceAlerts) {
+        showPremiumUpsell('alerts');
+        return;
+      }
+
       if (existingAlert) {
         // Si une alerte existe déjà, la supprimer (toggle)
         const { error: deleteError } = await supabase
