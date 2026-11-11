@@ -153,7 +153,7 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
     // Étape 2: Initialiser le client OpenAI
     const clientInitStart = Date.now();
     const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
-    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-mini';
+    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-6-luna';
     console.log('🔍 Clé API présente:', !!apiKey, 'longueur:', apiKey.length, 'modèle:', openaiModel);
     
     const openai = new OpenAI({
