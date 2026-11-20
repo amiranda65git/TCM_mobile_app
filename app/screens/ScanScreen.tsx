@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, LayoutChangeEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -12,6 +12,8 @@ import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { FREE_MONTHLY_SCANS, incrementMonthlyScanCount } from '../lib/scanQuota';
+import { useStableAutoCapture } from '../lib/useStableAutoCapture';
+import { cropPhotoToCardGuide } from '../lib/cropToCardGuide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import OpenAI from 'openai';
@@ -19,6 +21,7 @@ import SupabaseService from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as Haptics from 'expo-haptics';
 
 type ScanResult = {
   pokemonName: string | null;
@@ -277,6 +280,12 @@ export default function ScanScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
+  // Auto-capture
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [cameraViewSize, setCameraViewSize] = useState({ width: 0, height: 0 });
+  const captureInFlightRef = useRef(false);
+  const isProcessingRef = useRef(false);
+
   // Récupérer la caméra arrière
   const device = useCameraDevice('back');
 
@@ -335,8 +344,12 @@ export default function ScanScreen() {
     })();
   }, []);
 
+  const processImageRef = useRef<(imagePath: string) => Promise<void>>(async () => {});
+  const markCooldownRef = useRef<() => void>(() => {});
+  const runCaptureRef = useRef<() => Promise<void>>(async () => {});
+
   // Fonction pour réinitialiser complètement l'état du scan
-  const resetScanState = () => {
+  const resetScanState = useCallback(() => {
     setPhotoUri(null);
     setScanResult({
       pokemonName: null,
@@ -344,50 +357,122 @@ export default function ScanScreen() {
       cardNumber: null,
       imageUri: null
     });
+    setMatchingCards([]);
+    isProcessingRef.current = false;
     setIsProcessing(false);
     setScanError(null);
-  };
+    captureInFlightRef.current = false;
+    markCooldownRef.current();
+  }, []);
 
-  // Capture manuelle
+  const runCapture = useCallback(async () => {
+    if (captureInFlightRef.current || isProcessingRef.current || !camera.current) {
+      return;
+    }
+
+    markCooldownRef.current();
+    captureInFlightRef.current = true;
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+
+    try {
+      const allowed = await canScanCard();
+      if (!allowed) {
+        Alert.alert(
+          t('scan.restrictionTitle'),
+          t('scan.restrictionMessage', { maxCount: FREE_MONTHLY_SCANS }),
+          [
+            { text: t('premium.upsell.later'), style: 'cancel' },
+            { text: t('premium.upgrade'), onPress: () => router.push('/premium?from=scan') },
+          ]
+        );
+        isProcessingRef.current = false;
+        setIsProcessing(false);
+        captureInFlightRef.current = false;
+        return;
+      }
+
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } catch {
+        // Haptics optionnel
+      }
+
+      const photo = await camera.current.takePhoto({
+        flash: 'off',
+        enableAutoRedEyeReduction: false,
+      });
+
+      let imagePath = photo.path.startsWith('file://')
+        ? photo.path
+        : `file://${photo.path}`;
+
+      try {
+        if (cameraViewSize.width > 0 && cameraViewSize.height > 0) {
+          imagePath = await cropPhotoToCardGuide({
+            photoPath: photo.path,
+            photoWidth: photo.width,
+            photoHeight: photo.height,
+            viewWidth: cameraViewSize.width,
+            viewHeight: cameraViewSize.height,
+            guideWidth: CARD_WIDTH,
+            guideHeight: CARD_HEIGHT,
+          });
+        }
+      } catch (cropError) {
+        console.warn('[Scan] Crop guide échoué, image plein cadre:', cropError);
+      }
+
+      // Quota après capture/crop accepté, avant analyse
+      if (!isPremium) {
+        const { data } = await SupabaseService.supabase.auth.getUser();
+        const userId = data.user?.id;
+        if (userId) {
+          await incrementMonthlyScanCount(userId);
+        }
+      }
+
+      setPhotoUri(imagePath);
+      await processImageRef.current(imagePath);
+    } catch (err) {
+      console.error('[Scan] Capture failed:', err);
+      Alert.alert(t('scan.error'), t('scan.captureError'));
+      setScanError(t('scan.captureError'));
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+    } finally {
+      captureInFlightRef.current = false;
+    }
+  }, [canScanCard, cameraViewSize, isPremium, router, t]);
+
+  runCaptureRef.current = runCapture;
+
+  const { isStable, isReady, markCooldown } = useStableAutoCapture({
+    enabled:
+      autoCaptureEnabled &&
+      !photoUri &&
+      !scanError &&
+      !isProcessing &&
+      hasPermission &&
+      !!device,
+    onCapture: () => {
+      void runCaptureRef.current();
+    },
+  });
+  markCooldownRef.current = markCooldown;
+
+  // Capture manuelle (ou reset si déjà une photo/erreur)
   const handleStartScan = async () => {
-    // Si on a une erreur ou une photo, on réinitialise pour un nouveau scan
     if (scanError || photoUri) {
       resetScanState();
       return;
     }
-
-    const allowed = await canScanCard();
-    if (!allowed) {
-      Alert.alert(
-        t('scan.restrictionTitle'),
-        t('scan.restrictionMessage', { maxCount: FREE_MONTHLY_SCANS }),
-        [
-          { text: t('premium.upsell.later'), style: 'cancel' },
-          { text: t('premium.upgrade'), onPress: () => router.push('/premium?from=scan') },
-        ]
-      );
-      return;
-    }
-
-    const runCapture = async () => {
-      if (isProcessing || !camera.current) return;
-
-      setIsProcessing(true);
-      try {
-        const photo = await camera.current.takePhoto({
-          flash: 'off',
-          enableAutoRedEyeReduction: false,
-        });
-        setPhotoUri(photo.path);
-        await processImage(photo.path);
-      } catch (err) {
-        Alert.alert(t('scan.error'), t('scan.captureError'));
-        setScanError(t('scan.captureError'));
-        setIsProcessing(false);
-      }
-    };
-
     await runCapture();
+  };
+
+  const handleCameraLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setCameraViewSize({ width, height });
   };
 
   // Fonction pour rechercher les cartes correspondantes (recherche plus permissive : Nom + HP seulement)
@@ -554,16 +639,9 @@ export default function ScanScreen() {
     }
   };
 
-  // Analyse OCR de l'image capturée
+  // Analyse OCR de l'image capturée (quota déjà compté après capture/crop)
   const processImage = async (imagePath: string) => {
     try {
-      if (!isPremium) {
-        const { data } = await SupabaseService.supabase.auth.getUser();
-        const userId = data.user?.id;
-        if (userId) {
-          await incrementMonthlyScanCount(userId);
-        }
-      }
       // 1. Essayer avec OpenAI Vision
       const aiResult = await analyzeCardWithOpenAI(imagePath);
       if (aiResult && (aiResult.pokemonName || aiResult.cardNumber)) {
@@ -578,9 +656,11 @@ export default function ScanScreen() {
         await searchMatchingCards(aiResult);
         return;
       }
+      console.warn('[Scan] OpenAI sans nom/numéro, fallback OCR:', aiResult);
       // 2. Fallback local (OCR ML Kit)
       const result = await TextRecognition.recognize(imagePath);
       if (result && result.text) {
+        console.log('[Scan] OCR texte brut:', result.text.substring(0, 200));
         // Extraction des infos via regex
         const pokemonNameRegex = /([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*(?:PV|HP)\s*(\d+)/i;
         const cardNumberRegex = /(\d+)\/(\d+)/;
@@ -603,6 +683,7 @@ export default function ScanScreen() {
           // Rechercher les cartes correspondantes
           await searchMatchingCards(extractedResult);
         } else {
+          console.warn('[Scan] OCR sans match nom/PV/HP');
           Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
           setScanResult({
             pokemonName: null,
@@ -613,15 +694,19 @@ export default function ScanScreen() {
           setMatchingCards([]);
         }
       } else {
+        console.warn('[Scan] OCR sans texte détecté');
         Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
       }
     } catch (e) {
+      console.error('[Scan] processImage failed:', e);
       Alert.alert(t('scan.error'), t('scan.imageAnalysisError'));
       setScanError(t('scan.imageAnalysisError'));
     } finally {
+      isProcessingRef.current = false;
       setIsProcessing(false);
     }
   };
+  processImageRef.current = processImage;
 
   // Sélectionner une carte et ouvrir le modal
   const handleCardPress = (card: OfficialCard) => {
@@ -838,17 +923,43 @@ export default function ScanScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text.primary }]}>{t('scan.scanCard')}</Text>
-        <TouchableOpacity 
-          style={styles.headerCameraButton} 
-          onPress={handleStartScan}
-          disabled={isProcessing}
-        >
-          <Ionicons 
-            name="camera" 
-            size={24} 
-            color={isProcessing ? colors.text.secondary : colors.primary} 
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {!photoUri && !scanError && (
+            <TouchableOpacity
+              style={[
+                styles.autoToggle,
+                {
+                  backgroundColor: autoCaptureEnabled
+                    ? colors.primary + '22'
+                    : colors.surface,
+                  borderColor: autoCaptureEnabled ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setAutoCaptureEnabled((v) => !v)}
+              disabled={isProcessing}
+            >
+              <Text
+                style={[
+                  styles.autoToggleText,
+                  { color: autoCaptureEnabled ? colors.primary : colors.text.secondary },
+                ]}
+              >
+                {autoCaptureEnabled ? t('scan.autoMode') : t('scan.manualMode')}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.headerCameraButton}
+            onPress={handleStartScan}
+            disabled={isProcessing}
+          >
+            <Ionicons
+              name="camera"
+              size={24}
+              color={isProcessing ? colors.text.secondary : colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Alerte de succès */}
@@ -999,7 +1110,7 @@ export default function ScanScreen() {
             )}
           </View>
         ) : (
-          <View style={styles.cameraWrapper}>
+          <View style={styles.cameraWrapper} onLayout={handleCameraLayout}>
             <Camera
               ref={camera}
               style={styles.camera}
@@ -1010,8 +1121,24 @@ export default function ScanScreen() {
             />
             
             {/* Guide de placement de carte */}
-            <View style={styles.cardGuideOverlay}>
-              <View style={styles.cardGuide} />
+            <View style={styles.cardGuideOverlay} pointerEvents="none">
+              <View
+                style={[
+                  styles.cardGuide,
+                  autoCaptureEnabled && isReady && styles.cardGuideReady,
+                  autoCaptureEnabled && isStable && !isReady && styles.cardGuideStable,
+                  !autoCaptureEnabled && styles.cardGuideManual,
+                ]}
+              />
+              {autoCaptureEnabled && (
+                <Text style={styles.guideHint}>
+                  {isReady
+                    ? t('scan.readyToCapture')
+                    : isStable
+                      ? t('scan.holdSteady')
+                      : t('scan.placeCard')}
+                </Text>
+              )}
             </View>
           </View>
         )}
@@ -1230,6 +1357,21 @@ const styles = StyleSheet.create({
   headerCameraButton: {
     padding: 8,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  autoToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  autoToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -1255,13 +1397,41 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderWidth: 3,
-    borderColor: '#4CAF50',
+    borderColor: '#FFFFFFAA',
     borderRadius: 8,
-    shadowColor: "#4CAF50",
+  },
+  cardGuideStable: {
+    borderColor: '#FFC107',
+    shadowColor: '#FFC107',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.6,
     shadowRadius: 10,
     elevation: 5,
+  },
+  cardGuideReady: {
+    borderColor: '#4CAF50',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  cardGuideManual: {
+    borderColor: '#4CAF50',
+  },
+  guideHint: {
+    position: 'absolute',
+    bottom: '12%',
+    alignSelf: 'center',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   photoContainer: {
     flex: 1,
