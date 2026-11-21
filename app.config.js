@@ -2,8 +2,9 @@ export default {
   expo: {
     name: "TCMarket",
     slug: "tcmarket",
-    version: "1.1.7",  
-    orientation: "portrait",
+    version: "1.1.8",
+    // default = pas de lock orientation (exigence Play / grands écrans Android 16+)
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: "tcmarket",
     userInterfaceStyle: "automatic",
@@ -18,7 +19,7 @@ export default {
     assetBundlePatterns: ["**/*"],
     ios: {
       supportsTablet: false,
-      buildNumber: "117",
+      buildNumber: "118",
       bundleIdentifier: "com.tcmarket.app",
       infoPlist: {
         NSCameraUsageDescription: "Cette application a besoin d'accéder à votre caméra pour scanner les cartes Pokémon",
@@ -37,7 +38,7 @@ export default {
     },
     android: {
       supportsTablet: false,
-      versionCode: 117,
+      versionCode: 118,
       edgeToEdgeEnabled: true,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png", backgroundColor: "#FFFFFF"
@@ -48,6 +49,11 @@ export default {
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "com.android.vending.BILLING"
+      ],
+      // expo-sensors (Pedometer) injecte ACTIVITY_RECOGNITION → Play Console "applis de santé".
+      // On n'utilise que l'accéléromètre pour l'auto-scan : bloquer cette permission.
+      blockedPermissions: [
+        "android.permission.ACTIVITY_RECOGNITION"
       ],
       intentFilters: [{
         action: "VIEW",
@@ -81,10 +87,13 @@ export default {
           android: {
             compileSdkVersion: 36,
             targetSdkVersion: 36,
-            buildToolsVersion: "36.0.0"
+            buildToolsVersion: "36.0.0",
+            enableProguardInReleaseBuilds: true,
+            enableShrinkResourcesInReleaseBuilds: true
           }
         }
-      ]
+      ],
+      "react-native-edge-to-edge"
     ],
     experiments: {
       tsconfigPaths: true,
