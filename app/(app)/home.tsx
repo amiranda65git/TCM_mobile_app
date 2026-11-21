@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Linking, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, SafeAreaView, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -342,26 +342,6 @@ export default function HomeScreen() {
       </View>
     </TouchableOpacity>
   );
-
-  // const NewsSection = () => (
-  //   <View style={styles.section}>
-  //     <View style={styles.sectionHeader}>
-  //       <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.news')}</Text>
-  //     </View>
-  //     <TouchableOpacity 
-  //       style={styles.bannerContainer}
-  //       onPress={() => Linking.openURL('https://www.gamezest.ch/fr/')}
-  //     >
-  //       <View style={[styles.bannerBackground, { backgroundColor: colors.primary }]}>
-  //         <MaterialCommunityIcons name="cards" size={48} color={colors.text.primary} style={styles.bannerIcon} />
-  //       </View>
-  //       <View style={styles.bannerOverlay}>
-  //         <Text style={[styles.bannerText, { color: colors.text.primary }]}>Découvrez les dernières cartes Pokémon</Text>
-  //         <Text style={[styles.bannerSubText, { color: colors.text.secondary }]}>Visitez GameZest.ch</Text>
-  //       </View>
-  //     </TouchableOpacity>
-  //   </View>
-  // );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>

@@ -53,7 +53,6 @@ export default {
     cardsForSale: 'Cards for sale by the community',
     noCardsForSale: 'No cards for sale at the moment',
     unknownSeller: 'Seller name unavailable',
-    buyOnGamezest: 'Buy on GameZest.ch',
     tabs: {
       all: 'All',
       gainers: 'Gainers',

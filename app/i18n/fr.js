@@ -53,7 +53,6 @@ export default {
     cardsForSale: 'Cartes en vente par la communauté',
     noCardsForSale: 'Aucune carte en vente actuellement',
     unknownSeller: 'Nom du vendeur indisponible',
-    buyOnGamezest: 'Acheter sur GameZest.ch',
     tabs: {
       all: 'Toutes',
       gainers: 'Hausses',

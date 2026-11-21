@@ -109,7 +109,8 @@ export default {
       SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
       API_OPENAI: process.env.API_OPENAI_KEY,
-      OPENAI_MODEL: process.env.EXPO_PUBLIC_OPENAI_MODEL || 'gpt-6-luna'
+      OPENAI_MODEL: process.env.EXPO_PUBLIC_OPENAI_MODEL || 'gpt-6-luna',
+      PREMIUM_TESTER_EMAILS: process.env.EXPO_PUBLIC_PREMIUM_TESTER_EMAILS || ''
     },
      newArchEnabled: true
      

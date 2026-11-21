@@ -97,148 +97,105 @@ const normalizePokemonName = (name: string): string[] => {
   return [...new Set(variants)];
 };
 
-// Fonction optimisée pour traiter et compresser l'image avant envoi à OpenAI
+let openAIClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI | null {
+  const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
+  if (!apiKey) return null;
+  if (!openAIClient) {
+    openAIClient = new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true,
+      timeout: 12000,
+    });
+  }
+  return openAIClient;
+}
+
+// Image plus légère = upload + vision plus rapides (le crop guide est déjà fait en amont)
 async function optimizeImageForAPI(imagePath: string): Promise<string> {
-  const optimizeStart = Date.now();
-  console.log(`🕐 [${new Date().toISOString()}] Image optimization STARTED for: ${imagePath}`);
-  
+  const manipulatedImage = await ImageManipulator.manipulateAsync(
+    imagePath,
+    [{ resize: { width: 768 } }],
+    {
+      compress: 0.55,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    }
+  );
+  return `data:image/jpeg;base64,${manipulatedImage.base64}`;
+}
+
+function parseScanJson(text: string, imagePath: string): ScanResult | null {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  const json = JSON.parse(match[0]);
+  const healthPoints = json.healthPoints != null
+    ? String(json.healthPoints).match(/\d+/)?.[0] || String(json.healthPoints)
+    : null;
+  return {
+    pokemonName: json.pokemonName || null,
+    healthPoints,
+    cardNumber: json.cardNumber || null,
+    imageUri: imagePath,
+  };
+}
+
+async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | null> {
+  const startTime = Date.now();
   try {
-    // Étape 1: Redimensionner l'image pour réduire la taille
-    const resizeStart = Date.now();
-    console.log(`🔄 [${new Date().toISOString()}] Resizing image...`);
-    
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
-      imagePath,
-      [
-        // Redimensionner à maximum 1024px de largeur (conserve le ratio)
-        { resize: { width: 1024 } }
-      ],
-      {
-        // Compression JPEG aggressive pour réduire la taille
-        compress: 0.7, // 70% de qualité (bon compromis qualité/taille)
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: true, // Obtenir directement le base64
-      }
-    );
-    
-    const resizeEnd = Date.now();
-    console.log(`⏱️ [${new Date().toISOString()}] Image optimization completed in ${resizeEnd - resizeStart}ms`);
-    console.log(`📊 Optimization stats:
-      - Original path: ${imagePath}
-      - New dimensions: ${manipulatedImage.width}x${manipulatedImage.height}
-      - Base64 length: ${manipulatedImage.base64?.length || 0}
-      - Estimated size: ${Math.round((manipulatedImage.base64?.length || 0) * 0.75 / 1024)}KB`);
-    
-    const optimizeEnd = Date.now();
-    console.log(`🏁 [${new Date().toISOString()}] Total optimization time: ${optimizeEnd - optimizeStart}ms`);
-    
-    return `data:image/jpeg;base64,${manipulatedImage.base64}`;
-    
-  } catch (error) {
-    console.error(`🔴 [${new Date().toISOString()}] Image optimization failed:`, error);
-    // Fallback: utiliser l'image originale si l'optimisation échoue
-    throw error;
+    const openai = getOpenAIClient();
+    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-4.1-mini';
+    if (!openai) {
+      console.error('[Scan] Clé OpenAI manquante');
+      return null;
+    }
+
+    const base64Image = await optimizeImageForAPI(imagePath);
+    console.log(`[Scan] OpenAI start model=${openaiModel} b64=${base64Image.length}`);
+
+    const completion = await openai.responses.create({
+      model: openaiModel,
+      max_output_tokens: 120,
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'Carte Pokémon. JSON only: {"pokemonName":"Name","healthPoints":"70","cardNumber":"25/102","confidence":0.9}. Null si illisible.',
+            },
+            {
+              type: 'input_image',
+              image_url: base64Image,
+              detail: 'low',
+            } as any,
+          ],
+        },
+      ] as any,
+    });
+
+    const text = completion.output_text || '';
+    console.log(`[Scan] OpenAI done in ${Date.now() - startTime}ms:`, text.substring(0, 120));
+    return parseScanJson(text, imagePath);
+  } catch (e) {
+    console.error(`[Scan] OpenAI failed after ${Date.now() - startTime}ms:`, e);
+    return null;
   }
 }
 
-// Fonction d'appel à l'API OpenAI images-vision optimisée
-async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | null> {
-  const startTime = Date.now();
-  console.log(`🕐 [${new Date().toISOString()}] OpenAI Analysis STARTED for: ${imagePath}`);
-  
-  try {
-    console.log('🔍 analyzeCardWithOpenAI - Début avec image:', imagePath);
-    
-    // Étape 1: Optimiser l'image (redimensionner + compresser + base64)
-    const base64Image = await optimizeImageForAPI(imagePath);
-    console.log(`✅ Image optimized, base64 length: ${base64Image.length}`);
-
-    // Étape 2: Initialiser le client OpenAI
-    const clientInitStart = Date.now();
-    const apiKey = Constants.expoConfig?.extra?.API_OPENAI || '';
-    const openaiModel = Constants.expoConfig?.extra?.OPENAI_MODEL || 'gpt-6-luna';
-    console.log('🔍 Clé API présente:', !!apiKey, 'longueur:', apiKey.length, 'modèle:', openaiModel);
-    
-    const openai = new OpenAI({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true,
-      timeout: 15000,
-    });
-    const clientInitEnd = Date.now();
-    console.log(`⏱️ [${new Date().toISOString()}] Client initialization completed in ${clientInitEnd - clientInitStart}ms`);
-
-    // Étape 3: Appel à l'API OpenAI
-    const apiCallStart = Date.now();
-    console.log(`🕐 [${new Date().toISOString()}] OpenAI API call STARTED`);
-    
-    const completion = await openai.responses.create({
-      model: openaiModel,
-      input: [
-        {
-          role: "user",
-          content: [
-            { 
-              type: "input_text", 
-              text: "Voici une photo d'une carte Pokémon. Extrais le nom imprimé, les PV (nombre seul), le numéro (format X/Y si possible), le nom du set s'il est lisible, et une confiance de 0 à 1. Réponds uniquement par un JSON: {\"pokemonName\":\"...\",\"healthPoints\":\"70\",\"cardNumber\":\"25/102\",\"setName\":null,\"confidence\":0.0}"
-            },
-            { 
-              type: "input_image",
-              image_url: base64Image
-            }
-          ]
-        }
-      ] as any
-    });
-    
-    const apiCallEnd = Date.now();
-    console.log(`⏱️ [${new Date().toISOString()}] OpenAI API call completed in ${apiCallEnd - apiCallStart}ms`);
-
-    // Étape 4: Parser la réponse
-    const responseParseStart = Date.now();
-    console.log(`🕐 [${new Date().toISOString()}] Response parsing STARTED`);
-    
-    const text = completion.output_text || '';
-    console.log('🔍 Texte de sortie:', text.substring(0, 100));
-    
-    const match = text.match(/\{[\s\S]*\}/);
-    console.log('🔍 Match JSON trouvé:', !!match);
-    
-    if (!match) {
-      const responseParseEnd = Date.now();
-      console.log(`⏱️ [${new Date().toISOString()}] Response parsing failed in ${responseParseEnd - responseParseStart}ms`);
-      return null;
-    }
-    
-    const json = JSON.parse(match[0]);
-    const healthPoints = json.healthPoints != null
-      ? String(json.healthPoints).match(/\d+/)?.[0] || String(json.healthPoints)
-      : null;
-    const responseParseEnd = Date.now();
-    console.log(`⏱️ [${new Date().toISOString()}] Response parsing completed in ${responseParseEnd - responseParseStart}ms`);
-    console.log('🔍 JSON parsé:', json);
-    
-    const endTime = Date.now();
-    const totalTime = endTime - startTime;
-    console.log(`🏁 [${new Date().toISOString()}] OpenAI Analysis COMPLETED in ${totalTime}ms total`);
-    console.log(`📊 Performance breakdown:
-      - Image optimization: ${apiCallStart - startTime}ms
-      - API call: ${apiCallEnd - apiCallStart}ms
-      - Response parsing: ${responseParseEnd - responseParseStart}ms
-      - Total: ${totalTime}ms`);
-    
-    return {
-      pokemonName: json.pokemonName || null,
-      healthPoints: healthPoints,
-      cardNumber: json.cardNumber || null,
-      imageUri: imagePath,
-    };
-    
-  } catch (e) {
-    const errorTime = Date.now();
-    console.error(`🔴 [${new Date().toISOString()}] OpenAI Vision failed after ${errorTime - startTime}ms:`, e);
-    console.error('🔴 Détails erreur:', JSON.stringify(e, Object.getOwnPropertyNames(e)));
-    return null;
-  }
+function extractScanFromOcrText(text: string, imagePath: string): ScanResult | null {
+  const pokemonNameRegex = /([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*(?:PV|HP)\s*(\d+)/i;
+  const cardNumberRegex = /(\d+)\/(\d+)/;
+  const nameMatch = text.match(pokemonNameRegex);
+  const numberMatch = text.match(cardNumberRegex);
+  if (!nameMatch && !numberMatch) return null;
+  return {
+    pokemonName: nameMatch?.[1] ?? null,
+    healthPoints: nameMatch?.[2] ?? null,
+    cardNumber: numberMatch ? numberMatch[0] : null,
+    imageUri: imagePath,
+  };
 }
 
 export default function ScanScreen() {
@@ -485,107 +442,34 @@ export default function ScanScreen() {
       console.log('Recherche de cartes correspondantes avec:', scanResult);
       
       let allCards: OfficialCard[] = [];
-      
-      // Si on a un nom de Pokémon, essayer différentes variantes avec Nom + HP seulement
-      if (scanResult.pokemonName) {
-        const nameVariants = normalizePokemonName(scanResult.pokemonName);
-        console.log(`Tentative de recherche avec ${nameVariants.length} variantes (Nom + HP seulement):`, nameVariants);
-        
-        // Essayer chaque variante avec Nom + HP seulement (plus permissif)
-        for (const nameVariant of nameVariants) {
-          const variantStartTime = Date.now();
-          console.log(`🔍 [${new Date().toISOString()}] Searching variant: "${nameVariant}" + HP`);
-          
-          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
-            pokemonName: nameVariant,
-            healthPoints: scanResult.healthPoints,
-            cardNumber: scanResult.cardNumber
-          });
-          
-          const variantEndTime = Date.now();
-          console.log(`⏱️ [${new Date().toISOString()}] Variant "${nameVariant}" search completed in ${variantEndTime - variantStartTime}ms`);
-          
-          if (!error && data && data.length > 0) {
-            console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}" + HP`);
-            
-            // Ajouter les nouvelles cartes en évitant les doublons
-            const newCards = data.filter(newCard => 
-              !allCards.some(existingCard => existingCard.id === newCard.id)
-            );
-            allCards.push(...newCards);
-          }
-        }
-        
-        // Si aucune variante n'a donné de résultat, essayer une recherche encore plus large (nom de base + HP)
-        if (allCards.length === 0) {
-          const baseName = scanResult.pokemonName.replace(/\s+(ex|EX|Ex|gx|GX|Gx|v|V|vmax|VMAX|VMax|vstar|VSTAR|VStar)$/i, '');
-          
-          if (baseName !== scanResult.pokemonName) {
-            console.log(`Recherche de secours avec le nom de base + HP: "${baseName}"`);
-            const fallbackStartTime = Date.now();
-            
-            const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
-              pokemonName: baseName,
-              healthPoints: scanResult.healthPoints,
-              cardNumber: scanResult.cardNumber
-            });
-            
-            const fallbackEndTime = Date.now();
-            console.log(`⏱️ [${new Date().toISOString()}] Fallback search completed in ${fallbackEndTime - fallbackStartTime}ms`);
-            
-            if (!error && data) {
-              allCards = data;
-            }
-          }
-        }
-        
-        // Dernier recours : recherche avec nom seulement si toujours aucun résultat
-        if (allCards.length === 0) {
-          console.log(`Recherche finale avec nom seulement: "${scanResult.pokemonName}"`);
-          const finalSearchStart = Date.now();
-          
-          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
-            pokemonName: scanResult.pokemonName,
-            healthPoints: null,
-            cardNumber: scanResult.cardNumber
-          });
-          
-          const finalSearchEnd = Date.now();
-          console.log(`⏱️ [${new Date().toISOString()}] Final search completed in ${finalSearchEnd - finalSearchStart}ms`);
-          
-          if (!error && data) {
-            allCards = data;
-          }
-        }
 
-        // Si le numéro OCR est faux, retomber sur nom + HP
-        if (allCards.length === 0 && scanResult.cardNumber) {
-          const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
-            pokemonName: scanResult.pokemonName,
-            healthPoints: scanResult.healthPoints,
-            cardNumber: null
-          });
-          if (!error && data) {
-            allCards = data;
-          }
-        }
-      } else {
-        // Pas de nom, recherche avec HP seulement si disponible
-        const classicSearchStart = Date.now();
-        console.log(`🔍 [${new Date().toISOString()}] Classic search (no name) STARTED`);
-        
-        const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+      // Une seule passe : searchOfficialCardsByDetails gère déjà les variantes de nom
+      const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
+        pokemonName: scanResult.pokemonName,
+        healthPoints: scanResult.healthPoints,
+        cardNumber: scanResult.cardNumber,
+      });
+      if (!error && data) {
+        allCards = data;
+      }
+
+      // Fallbacks uniquement si vide (évite 10–15 requêtes séquentielles)
+      if (allCards.length === 0 && scanResult.pokemonName && scanResult.cardNumber) {
+        const { data: withoutNumber } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
           healthPoints: scanResult.healthPoints,
-          cardNumber: scanResult.cardNumber
+          cardNumber: null,
         });
-        
-        const classicSearchEnd = Date.now();
-        console.log(`⏱️ [${new Date().toISOString()}] Classic search completed in ${classicSearchEnd - classicSearchStart}ms`);
-        
-        if (!error && data) {
-          allCards = data;
-        }
+        if (withoutNumber?.length) allCards = withoutNumber;
+      }
+
+      if (allCards.length === 0 && scanResult.pokemonName && scanResult.healthPoints) {
+        const { data: nameOnly } = await SupabaseService.searchOfficialCardsByDetails({
+          pokemonName: scanResult.pokemonName,
+          healthPoints: null,
+          cardNumber: null,
+        });
+        if (nameOnly?.length) allCards = nameOnly;
       }
       
       console.log(`Total de ${allCards.length} cartes trouvées après toutes les recherches`);
@@ -639,64 +523,46 @@ export default function ScanScreen() {
     }
   };
 
-  // Analyse OCR de l'image capturée (quota déjà compté après capture/crop)
+  // Analyse : OpenAI + OCR en parallèle (OCR local souvent prêt avant la vision)
   const processImage = async (imagePath: string) => {
     try {
-      // 1. Essayer avec OpenAI Vision
-      const aiResult = await analyzeCardWithOpenAI(imagePath);
-      if (aiResult && (aiResult.pokemonName || aiResult.cardNumber)) {
-        console.log('🔍 Nom détecté par OpenAI:', aiResult.pokemonName);
-        if (aiResult.pokemonName) {
-          const variants = normalizePokemonName(aiResult.pokemonName);
-          console.log('🔍 Variantes générées pour OpenAI:', variants);
-        }
-        
-        setScanResult(aiResult);
-        // Rechercher les cartes correspondantes
-        await searchMatchingCards(aiResult);
+      const ocrPromise = TextRecognition.recognize(imagePath)
+        .then((result) => (result?.text ? extractScanFromOcrText(result.text, imagePath) : null))
+        .catch((e) => {
+          console.warn('[Scan] OCR failed:', e);
+          return null;
+        });
+
+      const aiPromise = analyzeCardWithOpenAI(imagePath);
+
+      const [ocrResult, aiResult] = await Promise.all([ocrPromise, aiPromise]);
+
+      const chosen =
+        aiResult && (aiResult.pokemonName || aiResult.cardNumber)
+          ? aiResult
+          : ocrResult && (ocrResult.pokemonName || ocrResult.cardNumber)
+            ? ocrResult
+            : null;
+
+      console.log('[Scan] Résultat choisi:', {
+        source: chosen === aiResult ? 'openai' : chosen === ocrResult ? 'ocr' : 'none',
+        chosen,
+      });
+
+      if (chosen) {
+        setScanResult(chosen);
+        await searchMatchingCards(chosen);
         return;
       }
-      console.warn('[Scan] OpenAI sans nom/numéro, fallback OCR:', aiResult);
-      // 2. Fallback local (OCR ML Kit)
-      const result = await TextRecognition.recognize(imagePath);
-      if (result && result.text) {
-        console.log('[Scan] OCR texte brut:', result.text.substring(0, 200));
-        // Extraction des infos via regex
-        const pokemonNameRegex = /([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*(?:PV|HP)\s*(\d+)/i;
-        const cardNumberRegex = /(\d+)\/(\d+)/;
-        const nameMatch = result.text.match(pokemonNameRegex);
-        const numberMatch = result.text.match(cardNumberRegex);
-        if (nameMatch) {
-          const extractedResult = {
-            pokemonName: nameMatch[1],
-            healthPoints: nameMatch[2],
-            cardNumber: numberMatch ? numberMatch[0] : null,
-            imageUri: imagePath,
-          };
-          
-          // Test de la normalisation
-          console.log('🔍 Nom détecté par OCR:', nameMatch[1]);
-          const variants = normalizePokemonName(nameMatch[1]);
-          console.log('🔍 Variantes générées:', variants);
-          
-          setScanResult(extractedResult);
-          // Rechercher les cartes correspondantes
-          await searchMatchingCards(extractedResult);
-        } else {
-          console.warn('[Scan] OCR sans match nom/PV/HP');
-          Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
-          setScanResult({
-            pokemonName: null,
-            healthPoints: null,
-            cardNumber: null,
-            imageUri: null,
-          });
-          setMatchingCards([]);
-        }
-      } else {
-        console.warn('[Scan] OCR sans texte détecté');
-        Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
-      }
+
+      Alert.alert(t('scan.noTextDetected'), t('scan.tryBetterLighting'));
+      setScanResult({
+        pokemonName: null,
+        healthPoints: null,
+        cardNumber: null,
+        imageUri: null,
+      });
+      setMatchingCards([]);
     } catch (e) {
       console.error('[Scan] processImage failed:', e);
       Alert.alert(t('scan.error'), t('scan.imageAnalysisError'));

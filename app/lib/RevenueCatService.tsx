@@ -52,6 +52,23 @@ interface RevenueCatContextType {
 
 const PREMIUM_ENTITLEMENT_ID = 'premium';
 
+/** Emails testeurs (test fermé) → Premium sans achat. Liste séparée par des virgules. */
+function getPremiumTesterEmails(): string[] {
+  const raw =
+    process.env.EXPO_PUBLIC_PREMIUM_TESTER_EMAILS ||
+    (Constants.expoConfig?.extra?.PREMIUM_TESTER_EMAILS as string | undefined) ||
+    '';
+  return raw
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isPremiumTesterEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return getPremiumTesterEmails().includes(email.trim().toLowerCase());
+}
+
 const RevenueCatContext = createContext<RevenueCatContextType | null>(null);
 
 function readPremiumFromCustomerInfo(
@@ -386,16 +403,26 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const testerPremium = isPremiumTesterEmail(user?.email);
+  const effectiveSubscriptionStatus: RevenueCatStatus = testerPremium
+    ? {
+        ...subscriptionStatus,
+        isActive: true,
+        productId: subscriptionStatus.productId ?? 'tester_premium',
+        loading: false,
+      }
+    : subscriptionStatus;
+
   return (
     <RevenueCatContext.Provider
       value={{
-        subscriptionStatus,
+        subscriptionStatus: effectiveSubscriptionStatus,
         offerings,
         packages,
         purchaseSubscription,
         restorePurchases,
         checkSubscriptionStatus,
-        loading,
+        loading: testerPremium ? false : loading,
       }}
     >
       {children}
@@ -426,6 +453,7 @@ export function useSubscriptionRestrictions() {
   const { subscriptionStatus } = useRevenueCat();
   const { user } = useAuth();
   const router = useRouter();
+  // subscriptionStatus inclut déjà le bypass testeurs (emails allowlist)
   const isPremium = subscriptionStatus.isActive;
 
   const canAccessMarket = true;
@@ -436,11 +464,11 @@ export function useSubscriptionRestrictions() {
   const getMaxCollectionCards = (): number => Infinity;
 
   const canScanCard = useCallback(async (): Promise<boolean> => {
-    if (subscriptionStatus.loading || subscriptionStatus.isActive) return true;
+    if (subscriptionStatus.loading || isPremium) return true;
     if (!user?.id) return true;
     const count = await getMonthlyScanCount(user.id);
     return count < FREE_MONTHLY_SCANS;
-  }, [subscriptionStatus.loading, subscriptionStatus.isActive, user?.id]);
+  }, [subscriptionStatus.loading, isPremium, user?.id]);
 
   const showPremiumUpsell = useCallback(
     (feature: PremiumUpsellContext, options?: PremiumUpsellOptions) => {

@@ -2003,17 +2003,9 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
         const { data, error } = await query.order('name').limit(10);
         
         if (!error && data && data.length > 0) {
-          // Ajouter les résultats en évitant les doublons
-          const newResults = data.filter(newCard => 
-            !allResults.some(existingCard => existingCard.id === newCard.id)
-          );
-          allResults.push(...newResults);
-          
-          console.log(`Trouvé ${newResults.length} nouvelles cartes avec la variante "${nameVariant}"`);
-        }
-        
-        // Si on a trouvé suffisamment de résultats, s'arrêter
-        if (allResults.length >= 10) {
+          // Première variante qui matche suffit (évite N requêtes séquentielles)
+          allResults = data;
+          console.log(`Trouvé ${data.length} cartes avec la variante "${nameVariant}"`);
           break;
         }
       }

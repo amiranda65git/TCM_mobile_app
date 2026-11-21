@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, SafeAreaView, Linking, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, SafeAreaView, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -164,13 +164,6 @@ export default function CardMarketplace() {
   const filteredCards = selectedCondition 
     ? cardsForSale.filter(card => card.condition === selectedCondition)
     : cardsForSale;
-    
-  // Rediriger vers gamezest.ch si aucune carte n'est en vente
-  const handleBuyFromExternalShop = () => {
-    const cardName = officialCard?.name || '';
-    const url = `https://www.gamezest.ch/search?type=product&options%5Bprefix%5D=last&q=${encodeURIComponent(cardName)}`;
-    Linking.openURL(url);
-  };
     
   // Demander à acheter une carte
   const handleBuyRequest = (cardForSale: CardForSale) => {
@@ -439,14 +432,6 @@ export default function CardMarketplace() {
             <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
               {t('market.noCardsForSale')}
             </Text>
-            <TouchableOpacity 
-              style={[styles.externalShopButton, { backgroundColor: colors.primary }]}
-              onPress={handleBuyFromExternalShop}
-            >
-              <Text style={styles.externalShopButtonText}>
-                {t('market.buyOnGamezest')}
-              </Text>
-            </TouchableOpacity>
           </View>
         )}
         renderItem={({ item }) => (
@@ -827,17 +812,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   buyButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  externalShopButton: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  externalShopButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',

@@ -81,6 +81,9 @@ export default function CardDetailScreen() {
   const sliderKnobSize = 44;
   const sliderX = useRef(new Animated.Value(0)).current;
   const sliderCurrentXRef = useRef(0);
+  const sliderTrackWidthRef = useRef(0);
+  const isDeletingCardRef = useRef(false);
+  const handleDeleteCardRef = useRef<() => void>(() => {});
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS = {
@@ -368,9 +371,10 @@ export default function CardDetailScreen() {
   };
 
   const handleDeleteCard = async () => {
-    if (!cardDetails?.user_card_id || !user?.id || isDeletingCard) return;
+    if (!cardDetails?.user_card_id || !user?.id || isDeletingCardRef.current) return;
 
     try {
+      isDeletingCardRef.current = true;
       setIsDeletingCard(true);
       const { error } = await supabase
         .from('user_cards')
@@ -386,26 +390,31 @@ export default function CardDetailScreen() {
       console.error('Erreur lors de la suppression de la carte:', error);
       Alert.alert(t('general.error'), t('card.deleteError', 'Erreur lors de la suppression de la carte'));
     } finally {
+      isDeletingCardRef.current = false;
       setIsDeletingCard(false);
     }
   };
+  handleDeleteCardRef.current = handleDeleteCard;
 
   const sliderPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isDeletingCard,
-      onMoveShouldSetPanResponder: () => !isDeletingCard,
+      onStartShouldSetPanResponder: () => !isDeletingCardRef.current,
+      onMoveShouldSetPanResponder: (_evt, gestureState) =>
+        !isDeletingCardRef.current && Math.abs(gestureState.dx) > 2,
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
         sliderX.stopAnimation((value) => {
           sliderCurrentXRef.current = value;
         });
       },
       onPanResponderMove: (_evt, gestureState) => {
-        const maxX = Math.max(0, sliderTrackWidth - sliderKnobSize);
+        const maxX = Math.max(0, sliderTrackWidthRef.current - sliderKnobSize);
         const nextX = Math.min(maxX, Math.max(0, sliderCurrentXRef.current + gestureState.dx));
         sliderX.setValue(nextX);
       },
       onPanResponderRelease: (_evt, gestureState) => {
-        const maxX = Math.max(0, sliderTrackWidth - sliderKnobSize);
+        const maxX = Math.max(0, sliderTrackWidthRef.current - sliderKnobSize);
         const releaseX = Math.min(maxX, Math.max(0, sliderCurrentXRef.current + gestureState.dx));
         const reachedEnd = maxX > 0 && releaseX >= maxX * 0.9;
 
@@ -416,7 +425,7 @@ export default function CardDetailScreen() {
             useNativeDriver: false,
           }).start(() => {
             sliderCurrentXRef.current = maxX;
-            handleDeleteCard();
+            handleDeleteCardRef.current();
           });
           return;
         }
@@ -934,11 +943,16 @@ export default function CardDetailScreen() {
             <View
               style={[styles.deleteSliderTrack, { backgroundColor: colors.background, borderColor: colors.border }]}
               onLayout={(event) => {
-                setSliderTrackWidth(event.nativeEvent.layout.width);
+                const width = event.nativeEvent.layout.width;
+                sliderTrackWidthRef.current = width;
+                setSliderTrackWidth(width);
                 resetDeleteSlider();
               }}
             >
-              <Text style={[styles.deleteSliderHint, { color: colors.text.secondary }]}>
+              <Text
+                pointerEvents="none"
+                style={[styles.deleteSliderHint, { color: colors.text.secondary }]}
+              >
                 {t('card.slideToDelete', 'Glisser pour supprimer')}
               </Text>
 
