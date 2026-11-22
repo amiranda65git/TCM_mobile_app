@@ -105,6 +105,8 @@ export default function MarketScreen() {
   const [filterName, setFilterName] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [isLoadingFilteredCards, setIsLoadingFilteredCards] = useState(false);
+  const [onlyMyCards, setOnlyMyCards] = useState(false);
+  const [ownedCardIds, setOwnedCardIds] = useState<Set<string>>(new Set());
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -201,6 +203,42 @@ export default function MarketScreen() {
     }
   }, [index, refreshKey, user?.id]);
 
+  // IDs des cartes de la collection (pour le filtre « Seulement mes cartes »)
+  useEffect(() => {
+    if (!user?.id) {
+      setOwnedCardIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('user_cards')
+        .select('card_id')
+        .eq('user_id', user.id)
+        .eq('is_sold', false);
+      if (cancelled) return;
+      if (error || !data) {
+        setOwnedCardIds(new Set());
+        return;
+      }
+      setOwnedCardIds(new Set(data.map((row: { card_id: string }) => row.card_id).filter(Boolean)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, refreshKey]);
+
+  const applyMarketFilters = useCallback(
+    (list: any[]) => {
+      let result = list;
+      if (onlyMyCards) {
+        result = result.filter((item) => ownedCardIds.has(item.card_id));
+      }
+      return result;
+    },
+    [onlyMyCards, ownedCardIds]
+  );
+
   // Nouvel effet pour la recherche
   useEffect(() => {
     const delaySearch = setTimeout(async () => {
@@ -278,7 +316,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={isFiltering ? filteredCards : allCards}
+              data={applyMarketFilters(isFiltering ? filteredCards : allCards)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -289,9 +327,11 @@ export default function MarketScreen() {
               )}
               contentContainerStyle={{ paddingBottom: 120 }}
               ListEmptyComponent={
-                isFiltering ? (
+                isFiltering || onlyMyCards ? (
                   <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                    {t('market.noFilterResults')}
+                    {onlyMyCards && !isFiltering
+                      ? t('market.noOwnedInMarket')
+                      : t('market.noFilterResults')}
                   </Text>
                 ) : null
               }
@@ -323,7 +363,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={isFiltering ? filteredCards : gainers}
+              data={applyMarketFilters(isFiltering ? filteredCards : gainers)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -357,9 +397,11 @@ export default function MarketScreen() {
               )}
               contentContainerStyle={{ paddingBottom: 120 }}
               ListEmptyComponent={
-                isFiltering ? (
+                isFiltering || onlyMyCards ? (
                   <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                    {t('market.noFilterResults')}
+                    {onlyMyCards && !isFiltering
+                      ? t('market.noOwnedInMarket')
+                      : t('market.noFilterResults')}
                   </Text>
                 ) : null
               }
@@ -391,7 +433,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={isFiltering ? filteredCards : losers}
+              data={applyMarketFilters(isFiltering ? filteredCards : losers)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -425,9 +467,11 @@ export default function MarketScreen() {
               )}
               contentContainerStyle={{ paddingBottom: 120 }}
               ListEmptyComponent={
-                isFiltering ? (
+                isFiltering || onlyMyCards ? (
                   <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                    {t('market.noFilterResults')}
+                    {onlyMyCards && !isFiltering
+                      ? t('market.noOwnedInMarket')
+                      : t('market.noFilterResults')}
                   </Text>
                 ) : null
               }
@@ -442,7 +486,7 @@ export default function MarketScreen() {
     <View style={{ flex: 1, padding: 8 }}>
       {watchedLoading ? (
         <ActivityIndicator size="large" color={colors.primary} />
-      ) : watched.length === 0 && !isFiltering ? (
+      ) : watched.length === 0 && !isFiltering && !onlyMyCards ? (
         <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 32 }}>{t('market.noWatched')}</Text>
       ) : (
         <>
@@ -461,7 +505,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={isFiltering ? filteredCards : watched}
+              data={applyMarketFilters(isFiltering ? filteredCards : watched)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -472,9 +516,11 @@ export default function MarketScreen() {
               )}
               contentContainerStyle={{ paddingBottom: 120 }}
               ListEmptyComponent={
-                isFiltering ? (
+                isFiltering || onlyMyCards ? (
                   <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
-                    {t('market.noFilterResults')}
+                    {onlyMyCards && !isFiltering
+                      ? t('market.noOwnedInMarket')
+                      : t('market.noFilterResults')}
                   </Text>
                 ) : null
               }
@@ -517,6 +563,35 @@ export default function MarketScreen() {
         />
 
       </View>
+
+      <TouchableOpacity
+        style={[
+          styles.onlyMyCardsChip,
+          {
+            backgroundColor: onlyMyCards ? colors.primary : colors.surface,
+            borderColor: onlyMyCards ? colors.primary : colors.border,
+          },
+        ]}
+        onPress={() => setOnlyMyCards((v) => !v)}
+        activeOpacity={0.8}
+        disabled={!user?.id}
+      >
+        <Ionicons
+          name={onlyMyCards ? 'checkbox' : 'square-outline'}
+          size={18}
+          color={onlyMyCards ? '#FFFFFF' : colors.text.secondary}
+          style={{ marginRight: 8 }}
+        />
+        <Text
+          style={{
+            color: onlyMyCards ? '#FFFFFF' : colors.text.primary,
+            fontWeight: '600',
+            fontSize: 13,
+          }}
+        >
+          {t('market.onlyMyCards')}
+        </Text>
+      </TouchableOpacity>
       
       {/* Suggestions de recherche */}
       {showSuggestions && searchResults.length > 0 ? (
@@ -611,10 +686,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     margin: 16,
     marginTop: 0,
-    marginBottom: 16,
+    marginBottom: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  onlyMyCardsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   searchInput: {
     flex: 1,

@@ -385,6 +385,11 @@ export default function CardDetailScreen() {
       if (error) throw error;
 
       closeDeleteModal();
+      EventRegister.emit('collection_data_changed', {
+        type: 'deleted',
+        user_card_id: cardDetails.user_card_id,
+        card_id: cardDetails.id,
+      });
       router.back();
     } catch (error) {
       console.error('Erreur lors de la suppression de la carte:', error);

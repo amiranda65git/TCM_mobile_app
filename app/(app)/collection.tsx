@@ -304,6 +304,15 @@ export default function CollectionScreen() {
       loadCollectionData();
     }, [loadCollectionData, refreshKey])
   );
+
+  useEffect(() => {
+    const listener: any = EventRegister.addEventListener('collection_data_changed', () => {
+      void loadCollectionData();
+    });
+    return () => {
+      if (listener) EventRegister.removeEventListener(listener);
+    };
+  }, [loadCollectionData]);
   
   // Calculer la valeur totale d'une édition
   const calculateEditionValue = (cards: CardProps[]) => {

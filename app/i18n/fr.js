@@ -68,6 +68,8 @@ export default {
     noPriceYet: 'Pas de prix',
     filteredBy: 'Filtré par',
     noFilterResults: 'Aucune carte ne correspond à ce filtre',
+    onlyMyCards: 'Seulement mes cartes',
+    noOwnedInMarket: 'Aucune de vos cartes n’apparaît dans cette liste',
     typeToSearch: 'Tapez pour rechercher',
     refuseOfferAlertMessage: "Nous allons informer le membre que vous refusez son offre. Il pourra vous proposer une nouvelle offre.",
     acceptOfferAlertTitle: "Accepter l'offre",
@@ -182,6 +184,15 @@ export default {
     noResults: 'Aucun résultat trouvé',
     restrictionTitle: 'Limite atteinte',
     restrictionMessage: 'Vous avez utilisé vos {{maxCount}} scans gratuits ce mois-ci. Passez Premium pour continuer.'
+  },
+  rateApp: {
+    title: 'Vous aimez TCMarket ?',
+    message: 'Votre avis nous aide beaucoup. Notez l’appli en quelques secondes.',
+    stars: 'étoiles',
+    submit: 'Envoyer',
+    later: 'Plus tard',
+    thanksTitle: 'Merci pour votre retour',
+    thanksMessage: 'On travaille chaque jour pour améliorer l’expérience.',
   },
   settings: {
     title: 'Paramètres',

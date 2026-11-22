@@ -68,6 +68,8 @@ export default {
     noPriceYet: 'No price yet',
     filteredBy: 'Filtered by',
     noFilterResults: 'No cards match this filter',
+    onlyMyCards: 'Only my cards',
+    noOwnedInMarket: 'None of your cards appear in this list',
     typeToSearch: 'Type to search',
     refuseOfferAlertMessage: "We will inform the member that you have refused their offer. They will be able to make you a new offer.",
     acceptOfferAlertTitle: "Accept offer",
@@ -182,6 +184,15 @@ export default {
     scans: 'scans',
     restrictionTitle: 'Limit reached',
     restrictionMessage: 'You have used your {{maxCount}} free scans this month. Go Premium to continue.'
+  },
+  rateApp: {
+    title: 'Enjoying TCMarket?',
+    message: 'Your feedback helps a lot. Rate the app in a few seconds.',
+    stars: 'stars',
+    submit: 'Submit',
+    later: 'Maybe later',
+    thanksTitle: 'Thanks for your feedback',
+    thanksMessage: 'We’re working every day to improve the experience.',
   },
   settings: {
     title: 'Settings',

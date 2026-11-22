@@ -12,8 +12,10 @@ import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { FREE_MONTHLY_SCANS, incrementMonthlyScanCount } from '../lib/scanQuota';
+import { recordScanAndShouldPromptRate } from '../lib/rateAppPrompt';
 import { useStableAutoCapture } from '../lib/useStableAutoCapture';
 import { cropPhotoToCardGuide } from '../lib/cropToCardGuide';
+import RateAppModal from '../components/RateAppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import OpenAI from 'openai';
@@ -242,6 +244,8 @@ export default function ScanScreen() {
   const [cameraViewSize, setCameraViewSize] = useState({ width: 0, height: 0 });
   const captureInFlightRef = useRef(false);
   const isProcessingRef = useRef(false);
+  const pendingRatePromptRef = useRef(false);
+  const [showRateModal, setShowRateModal] = useState(false);
 
   // Récupérer la caméra arrière
   const device = useCameraDevice('back');
@@ -387,6 +391,12 @@ export default function ScanScreen() {
         if (userId) {
           await incrementMonthlyScanCount(userId);
         }
+      }
+
+      try {
+        pendingRatePromptRef.current = await recordScanAndShouldPromptRate();
+      } catch {
+        pendingRatePromptRef.current = false;
       }
 
       setPhotoUri(imagePath);
@@ -570,6 +580,10 @@ export default function ScanScreen() {
     } finally {
       isProcessingRef.current = false;
       setIsProcessing(false);
+      if (pendingRatePromptRef.current) {
+        pendingRatePromptRef.current = false;
+        setTimeout(() => setShowRateModal(true), 700);
+      }
     }
   };
   processImageRef.current = processImage;
@@ -983,6 +997,7 @@ export default function ScanScreen() {
               device={device}
               isActive={!photoUri}
               photo={true}
+              outputOrientation="preview"
               enableZoomGesture
             />
             
@@ -1192,6 +1207,11 @@ export default function ScanScreen() {
           </View>
         </View>
       </Modal>
+
+      <RateAppModal
+        visible={showRateModal}
+        onClose={() => setShowRateModal(false)}
+      />
     </SafeAreaView>
   );
 }

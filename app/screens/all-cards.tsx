@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, FlatList } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { supabase, addOrRemoveFromWishlist, getAllUserCards, markCardAsSold } from '../lib/supabase';
+import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../components/SwipeableCard';
 import LanguageFlag from '../components/LanguageFlag';
 
@@ -142,8 +143,31 @@ export default function AllCardsScreen() {
     filterCards(text);
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      void loadUserCards();
+    }, [session?.user?.id])
+  );
+
   useEffect(() => {
-    loadUserCards();
+    const listener: any = EventRegister.addEventListener(
+      'collection_data_changed',
+      (payload: any) => {
+        if (payload?.type === 'deleted' && payload.user_card_id) {
+          setAllCards((prev) =>
+            prev.filter((c) => c.user_card_id !== payload.user_card_id)
+          );
+          setFilteredCards((prev) =>
+            prev.filter((c) => c.user_card_id !== payload.user_card_id)
+          );
+          return;
+        }
+        void loadUserCards();
+      }
+    );
+    return () => {
+      if (listener) EventRegister.removeEventListener(listener);
+    };
   }, [session?.user?.id]);
 
   useEffect(() => {

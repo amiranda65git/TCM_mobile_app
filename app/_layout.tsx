@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import './i18n/i18n.config';
-import { useColorScheme, Platform, StatusBar as RNStatusBar, View, StyleSheet } from 'react-native';
+import { useColorScheme, Platform, StatusBar as RNStatusBar, View, StyleSheet, BackHandler } from 'react-native';
 import { Colors } from './constants/Colors';
 import { AuthProvider } from './lib/auth';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +21,7 @@ function AppContent() {
   const { i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const colors = useThemeColors();
+  const router = useRouter();
 
   // Pas de prévention du masquage du splash screen
   // SplashScreen.preventAutoHideAsync();
@@ -32,6 +33,19 @@ function AppContent() {
       RNStatusBar.setBackgroundColor('transparent');
     }
   }, []);
+
+  // Bouton/geste retour → écran précédent (évite de quitter l'app trop tôt)
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [router]);
 
   useEffect(() => {
     // Écouter l'événement de changement de langue

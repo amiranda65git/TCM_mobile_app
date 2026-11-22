@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Modal, TextInput, FlatList } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase, getEditionDetails, addOrRemoveFromWishlist } from '../../lib/supabase';
+import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../../components/SwipeableCard';
 import NotificationIcon from '../../components/NotificationIcon';
 import LanguageFlag from '../../components/LanguageFlag';
@@ -88,14 +89,14 @@ export default function EditionDetail() {
   
   const CONDITIONS = Object.keys(CONDITION_COLORS);
 
-  useEffect(() => {
-    loadEditionDetails();
-  }, [id, user?.id]);
+  const hasLoadedRef = useRef(false);
 
-  const loadEditionDetails = async () => {
+  const loadEditionDetails = useCallback(async (silent = false) => {
     if (!id || !user) return;
     
-    setLoading(true);
+    if (!silent || !hasLoadedRef.current) {
+      setLoading(true);
+    }
     try {
       const { data: editionData, error } = await getEditionDetails(id.toString(), user.id);
       
@@ -134,13 +135,30 @@ export default function EditionDetail() {
         } as EditionDetail);
         setTotalValue(editionData.totalValue || 0);
         setOwnedCards(editionData.ownedCards || 0);
+        hasLoadedRef.current = true;
       }
     } catch (error) {
       console.error("Erreur lors du chargement des détails de l'édition:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user]);
+
+  // Recharger au retour (ex. après suppression d'une carte)
+  useFocusEffect(
+    useCallback(() => {
+      void loadEditionDetails(hasLoadedRef.current);
+    }, [loadEditionDetails])
+  );
+
+  useEffect(() => {
+    const listener: any = EventRegister.addEventListener('collection_data_changed', () => {
+      void loadEditionDetails(true);
+    });
+    return () => {
+      if (listener) EventRegister.removeEventListener(listener);
+    };
+  }, [loadEditionDetails]);
 
   // Gérer l'ouverture du modal de vente
   const handleSellPress = (card: CardInfo) => {
