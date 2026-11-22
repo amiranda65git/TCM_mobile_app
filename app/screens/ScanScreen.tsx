@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, LayoutChangeEvent, Keyboard, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
@@ -308,6 +308,7 @@ export default function ScanScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
   // Auto-capture
@@ -390,11 +391,29 @@ export default function ScanScreen() {
       imageUri: null
     });
     setMatchingCards([]);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSuggestions(false);
+    setSearchFocused(false);
     isProcessingRef.current = false;
     setIsProcessing(false);
     setScanError(null);
     captureInFlightRef.current = false;
     markCooldownRef.current();
+  }, []);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+      setSearchFocused(false);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   const runCapture = useCallback(async () => {
@@ -832,6 +851,7 @@ export default function ScanScreen() {
   const handleCardSelectFromSearch = async (card: any) => {
     setShowSuggestions(false);
     setSearchQuery('');
+    Keyboard.dismiss();
     
     // Créer un objet carte compatible avec le modal de sélection
     const selectedCardData: OfficialCard = {
@@ -853,6 +873,92 @@ export default function ScanScreen() {
     // Définir la carte sélectionnée et ouvrir le modal
     setSelectedCard(selectedCardData);
     setModalVisible(true);
+  };
+
+  const renderManualSearchInput = () => (
+    <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+      <Ionicons name="search-outline" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+      <TextInput
+        ref={searchInputRef}
+        style={[styles.searchInput, { color: colors.text.primary }]}
+        placeholder={t('scan.searchPlaceholder') || "Rechercher une carte..."}
+        placeholderTextColor={colors.text.secondary}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        autoCapitalize="none"
+        autoCorrect={false}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
+      />
+      {searchQuery.length > 0 && (
+        <TouchableOpacity
+          onPress={() => {
+            setSearchQuery('');
+            setSearchResults([]);
+            setShowSuggestions(false);
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="close-circle" size={20} color={colors.text.secondary} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const renderManualSearchResults = () => {
+    if (!showSuggestions) return null;
+
+    return (
+      <View
+        style={[
+          styles.suggestionsContainer,
+          { backgroundColor: colors.background },
+          isKeyboardVisible ? styles.suggestionsContainerCompact : styles.suggestionsContainerExpanded,
+        ]}
+      >
+        {searchResults.length > 0 ? (
+          <FlatList
+            data={searchResults}
+            keyExtractor={item => item.card_id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.suggestionItem, { borderBottomColor: colors.border }]}
+                onPress={() => handleCardSelectFromSearch(item)}
+              >
+                <View style={styles.suggestionContent}>
+                  {item.image_small ? (
+                    <Image source={{ uri: item.image_small }} style={styles.suggestionImage} resizeMode="contain" />
+                  ) : (
+                    <View style={[styles.suggestionImagePlaceholder, { backgroundColor: colors.surface }]} />
+                  )}
+                  <View style={styles.suggestionTextContainer}>
+                    <Text style={[styles.suggestionTitle, { color: colors.text.primary }]}>{item.card_name}</Text>
+                    {item.edition_name && (
+                      <Text style={[styles.suggestionSubtitle, { color: colors.text.secondary }]}>{item.edition_name}</Text>
+                    )}
+                  </View>
+                  <Ionicons name="add-circle" size={24} color={colors.primary} />
+                </View>
+              </TouchableOpacity>
+            )}
+            style={styles.suggestionsList}
+            contentContainerStyle={styles.suggestionsListContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          />
+        ) : searchQuery.trim().length >= 2 ? (
+          <View style={styles.noResultsContainer}>
+            <Text style={[styles.noResultsText, { color: colors.text.secondary }]}>
+              {isSearching ? (t('scan.searching') || 'Recherche en cours...') : (t('scan.noResults') || 'Aucun résultat trouvé')}
+            </Text>
+            {isSearching && <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />}
+          </View>
+        ) : null}
+      </View>
+    );
   };
 
   if (!device || !hasPermission) {
@@ -962,22 +1068,37 @@ export default function ScanScreen() {
             {!isProcessing && !scanError && (
               <>
                 {matchingCards.length > 0 ? (
-                  // Cartes correspondantes trouvées
-                  <View style={styles.resultsContainer}>
+                  // Cartes correspondantes + recherche manuelle si absente de la liste
+                  <View style={[
+                    styles.resultsContainer,
+                    (searchFocused || isKeyboardVisible || showSuggestions) && styles.resultsContainerExpanded,
+                  ]}>
                     <View style={styles.matchingCardsSection}>
                       <View style={[styles.matchingCardsHeader, { backgroundColor: colors.surface + 'F0' }]}>
                         <Text style={[styles.matchingCardsTitle, { color: colors.text.primary }]}>{t('scan.matchingCards')}</Text>
                         {isLoadingCards && <ActivityIndicator size="small" color={colors.primary} />}
                       </View>
-                      
-                      <FlatList
-                        data={matchingCards}
-                        renderItem={renderCardItem}
-                        keyExtractor={(item) => item.id}
-                        style={styles.cardsList}
-                        contentContainerStyle={styles.cardsListContent}
-                        showsVerticalScrollIndicator={false}
-                      />
+
+                      <View style={styles.matchingSearchBlock}>
+                        <Text style={[styles.matchingSearchHint, { color: colors.text.secondary }]}>
+                          {t('scan.notInListSearch')}
+                        </Text>
+                        {renderManualSearchInput()}
+                      </View>
+
+                      {showSuggestions ? (
+                        renderManualSearchResults()
+                      ) : (
+                        <FlatList
+                          data={matchingCards}
+                          renderItem={renderCardItem}
+                          keyExtractor={(item) => item.id}
+                          style={styles.cardsList}
+                          contentContainerStyle={styles.cardsListContent}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator={false}
+                        />
+                      )}
                     </View>
                   </View>
                 ) : (
@@ -985,72 +1106,13 @@ export default function ScanScreen() {
                   <View style={[styles.fullPageSearchSection, { backgroundColor: colors.surface }]}>
                     <View style={[styles.searchSectionHeader, { backgroundColor: colors.surface }]}>
                       <Text style={[styles.searchSectionTitle, { color: colors.text.primary }]}>
-                        Pas de résultat, recherche manuelle :
+                        {t('scan.searchManually')}
                       </Text>
                     </View>
                     
                     <View style={styles.searchSectionContent}>
-                      {/* Champ de recherche */}
-                      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-                        <Ionicons name="search-outline" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                          ref={searchInputRef}
-                          style={[styles.searchInput, { color: colors.text.primary }]}
-                          placeholder={t('scan.searchPlaceholder') || "Rechercher une carte..."}
-                          placeholderTextColor={colors.text.secondary}
-                          value={searchQuery}
-                          onChangeText={setSearchQuery}
-                          returnKeyType="search"
-                          clearButtonMode="while-editing"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          onFocus={() => setSearchFocused(true)}
-                          onBlur={() => setSearchFocused(false)}
-                        />
-                      </View>
-                      
-                      {/* Suggestions de recherche */}
-                      {showSuggestions && (
-                        <View style={[styles.suggestionsContainer, { backgroundColor: colors.background }]}>
-                          {searchResults.length > 0 ? (
-                            <FlatList
-                              data={searchResults}
-                              keyExtractor={item => item.card_id}
-                              renderItem={({ item }) => (
-                                <TouchableOpacity
-                                  style={[styles.suggestionItem, { borderBottomColor: colors.border }]}
-                                  onPress={() => handleCardSelectFromSearch(item)}
-                                >
-                                  <View style={styles.suggestionContent}>
-                                    {item.image_small ? (
-                                      <Image source={{ uri: item.image_small }} style={styles.suggestionImage} resizeMode="contain" />
-                                    ) : (
-                                      <View style={[styles.suggestionImagePlaceholder, { backgroundColor: colors.surface }]} />
-                                    )}
-                                    <View style={styles.suggestionTextContainer}>
-                                      <Text style={[styles.suggestionTitle, { color: colors.text.primary }]}>{item.card_name}</Text>
-                                      {item.edition_name && (
-                                        <Text style={[styles.suggestionSubtitle, { color: colors.text.secondary }]}>{item.edition_name}</Text>
-                                      )}
-                                    </View>
-                                    <Ionicons name="add-circle" size={24} color={colors.primary} />
-                                  </View>
-                                </TouchableOpacity>
-                              )}
-                              style={styles.suggestionsList}
-                              keyboardShouldPersistTaps="handled"
-                              showsVerticalScrollIndicator={false}
-                            />
-                          ) : searchQuery.trim().length >= 2 ? (
-                            <View style={styles.noResultsContainer}>
-                              <Text style={[styles.noResultsText, { color: colors.text.secondary }]}>
-                                {isSearching ? (t('scan.searching') || 'Recherche en cours...') : (t('scan.noResults') || 'Aucun résultat trouvé')}
-                              </Text>
-                              {isSearching && <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />}
-                            </View>
-                          ) : null}
-                        </View>
-                      )}
+                      {renderManualSearchInput()}
+                      {renderManualSearchResults()}
                     </View>
                   </View>
                 )}
@@ -1536,11 +1598,26 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
+  resultsContainerExpanded: {
+    top: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
   matchingCardsSection: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+  },
+  matchingSearchBlock: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  matchingSearchHint: {
+    fontSize: 13,
+    marginBottom: 6,
+    marginLeft: 2,
   },
   fullPageSearchSection: {
     ...StyleSheet.absoluteFillObject,
@@ -1895,7 +1972,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   suggestionsContainer: {
-    maxHeight: 300,
+    flex: 1,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
@@ -1904,9 +1981,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  suggestionsContainerCompact: {
+    flexGrow: 0,
+    maxHeight: 220,
+  },
+  suggestionsContainerExpanded: {
+    flex: 1,
+    minHeight: 280,
   },
   suggestionsList: {
-    maxHeight: 280,
+    flex: 1,
+  },
+  suggestionsListContent: {
+    flexGrow: 1,
+    paddingBottom: 16,
   },
   suggestionItem: {
     paddingVertical: 12,

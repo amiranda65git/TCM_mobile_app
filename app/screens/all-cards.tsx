@@ -344,7 +344,7 @@ export default function AllCardsScreen() {
         data={filteredCards.slice(0, visibleCount)}
         keyExtractor={(item) => String(item.user_card_id)}
         style={styles.cardsList}
-        contentContainerStyle={styles.cardsListContent}
+        contentContainerStyle={[styles.cardsListContent, { paddingBottom: 16 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         initialNumToRender={8}
         maxToRenderPerBatch={10}
@@ -532,7 +532,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardsListContent: {
-    paddingBottom: 16,
     flexGrow: 1,
   },
   emptyState: {

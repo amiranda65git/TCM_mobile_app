@@ -583,22 +583,16 @@ export const getUserCardsGroupedByEdition = async (userId: string) => {
       return { data: null, error: editionsError };
     }
 
-    // 3. Récupérer les prix du marché pour toutes les cartes
+    // 3. Récupérer les prix du marché les plus récents (RPC)
     const { data: marketPrices, error: marketPricesError } = await supabase
-      .from('market_prices')
-      .select('card_id, price_mid')
-      .in('card_id', Array.from(cardIds))
-      .order('date', { ascending: false });
+      .rpc('get_latest_market_prices_by_card_ids', { p_card_ids: Array.from(cardIds) });
 
     // Créer une map des prix du marché les plus récents
     const marketPriceMap = new Map();
     if (marketPrices && !marketPricesError) {
-      // Pour chaque carte, ne garder que le prix le plus récent
-      const seenCardIds = new Set();
-      marketPrices.forEach(price => {
-        if (!seenCardIds.has(price.card_id) && price.price_mid !== null) {
-          marketPriceMap.set(price.card_id, price.price_mid);
-          seenCardIds.add(price.card_id);
+      marketPrices.forEach((price: { card_id: string; price_mid: number | null }) => {
+        if (price.price_mid !== null && price.price_mid !== undefined) {
+          marketPriceMap.set(price.card_id, Number(price.price_mid));
         }
       });
     }
@@ -950,12 +944,9 @@ export const getUserCollectionTotalValue = async (userId: string) => {
     // Extraire les IDs des cartes
     const cardIds = userCards.map(card => card.card_id);
     
-    // 2. Récupérer les prix du marché pour les cartes sans prix manuel
+    // 2. Récupérer les prix du marché les plus récents (RPC, fiable même avec beaucoup de cartes)
     const { data: marketPrices, error: marketPricesError } = await supabase
-      .from('market_prices')
-      .select('card_id, price_mid')
-      .in('card_id', cardIds)
-      .order('date', { ascending: false });
+      .rpc('get_latest_market_prices_by_card_ids', { p_card_ids: cardIds });
       
     if (marketPricesError) {
       console.error("Erreur lors de la récupération des prix du marché:", marketPricesError);
@@ -965,12 +956,9 @@ export const getUserCollectionTotalValue = async (userId: string) => {
     // Créer une map des prix du marché les plus récents
     const marketPriceMap = new Map();
     if (marketPrices) {
-      // Pour chaque carte, ne garder que le prix le plus récent
-      const seenCardIds = new Set();
-      marketPrices.forEach(price => {
-        if (!seenCardIds.has(price.card_id) && price.price_mid !== null) {
-          marketPriceMap.set(price.card_id, price.price_mid);
-          seenCardIds.add(price.card_id);
+      marketPrices.forEach((price: { card_id: string; price_mid: number | null }) => {
+        if (price.price_mid !== null && price.price_mid !== undefined) {
+          marketPriceMap.set(price.card_id, Number(price.price_mid));
         }
       });
     }
@@ -1025,10 +1013,10 @@ export const getCollectionPriceVariation = async (userId: string) => {
     // Récupérer les IDs des cartes pour la requête
     const cardIds = userCards.map(card => card.card_id);
     
-    // 2. Récupérer la date actuelle et d'il y a une semaine
+    // 2. Comparaison sur 7 jours (prix actuel vs prix d'il y a une semaine)
     const today = new Date();
     const lastWeek = new Date();
-    lastWeek.setDate(today.getDate() - 8); // 8 jours en arrière pour avoir une semaine complète
+    lastWeek.setDate(today.getDate() - 7);
     
     const todayStr = today.toISOString().split('T')[0];
     const lastWeekStr = lastWeek.toISOString().split('T')[0];
@@ -1046,7 +1034,7 @@ export const getCollectionPriceVariation = async (userId: string) => {
       return { variation: 0, error: currentError };
     }
     
-    // 4. Récupérer les prix jusqu'à la semaine dernière
+    // 4. Récupérer les prix jusqu'à il y a une semaine
     const { data: previousPrices, error: previousError } = await supabase
       .from('market_prices')
       .select('card_id, price_mid, date')
@@ -1059,18 +1047,14 @@ export const getCollectionPriceVariation = async (userId: string) => {
       return { variation: 0, error: previousError };
     }
     
-    // 5. Calculer la moyenne des prix pour chaque période
-    
-    // Obtenir le prix le plus récent pour chaque carte (période actuelle)
+    // 5. Prix le plus récent par carte pour chaque période
     const latestPriceByCard = new Map();
     if (currentPrices) {
-      // Trier par card_id, puis par date (décroissante)
       currentPrices.sort((a, b) => {
         if (a.card_id !== b.card_id) return a.card_id.localeCompare(b.card_id);
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
       
-      // Prendre le premier prix pour chaque carte (le plus récent)
       for (const price of currentPrices) {
         if (!latestPriceByCard.has(price.card_id) && price.price_mid !== null) {
           latestPriceByCard.set(price.card_id, price.price_mid);
@@ -1078,16 +1062,13 @@ export const getCollectionPriceVariation = async (userId: string) => {
       }
     }
     
-    // Obtenir le prix le plus récent pour chaque carte (période précédente)
     const previousPriceByCard = new Map();
     if (previousPrices) {
-      // Trier par card_id, puis par date (décroissante)
       previousPrices.sort((a, b) => {
         if (a.card_id !== b.card_id) return a.card_id.localeCompare(b.card_id);
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
       
-      // Prendre le premier prix pour chaque carte (le plus récent)
       for (const price of previousPrices) {
         if (!previousPriceByCard.has(price.card_id) && price.price_mid !== null) {
           previousPriceByCard.set(price.card_id, price.price_mid);
@@ -1095,7 +1076,7 @@ export const getCollectionPriceVariation = async (userId: string) => {
       }
     }
     
-    // Calculer la somme des prix actuels et précédents
+    // Ne comparer que les cartes ayant un prix actuel ET un prix il y a 7 jours
     let currentTotal = 0;
     let previousTotal = 0;
     let cardsWithBothPrices = 0;
@@ -1104,22 +1085,15 @@ export const getCollectionPriceVariation = async (userId: string) => {
       const currentPrice = latestPriceByCard.get(cardId);
       const previousPrice = previousPriceByCard.get(cardId);
       
-      if (currentPrice !== undefined) {
-        currentTotal += currentPrice;
-      }
-      
-      if (previousPrice !== undefined) {
-        previousTotal += previousPrice;
-      }
-      
       if (currentPrice !== undefined && previousPrice !== undefined) {
+        currentTotal += currentPrice;
+        previousTotal += previousPrice;
         cardsWithBothPrices++;
       }
     }
     
     // 6. Calculer la variation en pourcentage
     if (previousTotal === 0 || cardsWithBothPrices === 0) {
-      // Pas assez de données pour calculer une variation
       return { variation: 0, error: null };
     }
     
@@ -1427,27 +1401,17 @@ export const getTopGainers = async () => {
       // Extraire les données de official_cards de manière sûre
       const officialCard = card.official_cards as unknown as OfficialCard;
       
-      // Calculer diff et diff_percent si nécessaire
+      // Toujours recalculer diff / % à partir des prix (évite un ratio DB affiché comme %)
       let diff = card.diff;
       let diffPercent = card.diff_percent;
-      
-      // Si diff est null mais que nous avons last_price et prev_price, calculer manuellement
-      if ((diff === null || diff === undefined) && 
-          card.last_price !== null && card.last_price !== undefined &&
-          card.prev_price !== null && card.prev_price !== undefined) {
+
+      if (
+        card.last_price !== null && card.last_price !== undefined &&
+        card.prev_price !== null && card.prev_price !== undefined
+      ) {
         diff = card.last_price - card.prev_price;
-      }
-      
-      // Si diff_percent est null mais que nous avons prev_price, calculer manuellement
-      if ((diffPercent === null || diffPercent === undefined) &&
-          card.prev_price !== null && card.prev_price !== undefined && 
-          card.prev_price !== 0 &&
-          diff !== null && diff !== undefined) {
-        diffPercent = (diff / card.prev_price) * 100;
-      }
-      
-      // Si pas de prix précédent, ne pas calculer de différence
-      if (card.prev_price === null || card.prev_price === undefined) {
+        diffPercent = card.prev_price !== 0 ? (diff / card.prev_price) * 100 : 0;
+      } else if (card.prev_price === null || card.prev_price === undefined) {
         diff = 0;
         diffPercent = 0;
       }
@@ -1518,27 +1482,17 @@ export const getTopLosers = async () => {
       // Extraire les données de official_cards de manière sûre
       const officialCard = card.official_cards as unknown as OfficialCard;
       
-      // Calculer diff et diff_percent si nécessaire
+      // Toujours recalculer diff / % à partir des prix (évite un ratio DB affiché comme %)
       let diff = card.diff;
       let diffPercent = card.diff_percent;
-      
-      // Si diff est null mais que nous avons last_price et prev_price, calculer manuellement
-      if ((diff === null || diff === undefined) && 
-          card.last_price !== null && card.last_price !== undefined &&
-          card.prev_price !== null && card.prev_price !== undefined) {
+
+      if (
+        card.last_price !== null && card.last_price !== undefined &&
+        card.prev_price !== null && card.prev_price !== undefined
+      ) {
         diff = card.last_price - card.prev_price;
-      }
-      
-      // Si diff_percent est null mais que nous avons prev_price, calculer manuellement
-      if ((diffPercent === null || diffPercent === undefined) &&
-          card.prev_price !== null && card.prev_price !== undefined && 
-          card.prev_price !== 0 &&
-          diff !== null && diff !== undefined) {
-        diffPercent = (diff / card.prev_price) * 100;
-      }
-      
-      // Si pas de prix précédent, ne pas calculer de différence
-      if (card.prev_price === null || card.prev_price === undefined) {
+        diffPercent = card.prev_price !== 0 ? (diff / card.prev_price) * 100 : 0;
+      } else if (card.prev_price === null || card.prev_price === undefined) {
         diff = 0;
         diffPercent = 0;
       }

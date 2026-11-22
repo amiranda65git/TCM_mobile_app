@@ -613,7 +613,7 @@ export default function CollectionScreen() {
                   {hideValues ? "***" : formatVariation(valueVariation)}
                 </Text>
                 <Text style={[styles.valuePeriod, { color: colors.text.secondary }]}>
-                  {t('settings.alerts.lastWeek')}
+                  {t('home.thisWeek')}
                 </Text>
               </View>
             </View>

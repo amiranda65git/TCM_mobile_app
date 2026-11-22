@@ -306,12 +306,17 @@ export default function HomeScreen() {
           <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
         </View>
       </View>
-      <Text style={[
-        styles.percentage, 
-        { color: getVariationColor(valueVariation) }
-      ]}>
-        {hideValues ? "***" : formatVariation(valueVariation || 0)}
-      </Text>
+      <View style={styles.percentageRow}>
+        <Text style={[
+          styles.percentage, 
+          { color: getVariationColor(valueVariation) }
+        ]}>
+          {hideValues ? "***" : formatVariation(valueVariation || 0)}
+        </Text>
+        <Text style={[styles.percentagePeriod, { color: colors.text.secondary }]}>
+          {t('home.thisWeek')}
+        </Text>
+      </View>
     </View>
   );
 
@@ -525,9 +530,17 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
   },
+  percentageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
   percentage: {
     fontSize: 14,
-    marginTop: 4,
+  },
+  percentagePeriod: {
+    fontSize: 13,
   },
   cardsCount: {
     marginTop: 8,
