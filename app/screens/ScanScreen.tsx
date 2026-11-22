@@ -114,13 +114,27 @@ function getOpenAIClient(): OpenAI | null {
   return openAIClient;
 }
 
-// Image plus légère = upload + vision plus rapides (le crop guide est déjà fait en amont)
+const SCAN_VISION_PROMPT = `Tu analyses une photo de carte Pokémon (FR ou EN), déjà recadrée sur la carte.
+Lis UNIQUEMENT ces zones (n'invente rien) :
+1) HAUT-GAUCHE : nom du Pokémon. Inclus le suffixe s'il est collé au nom ou juste à côté : ex, EX, GX, V, VMAX, VSTAR, Radiant, etc. Ex: "Pikachu ex", "Mewtwo-GX", "Charizard VMAX".
+2) HAUT-DROITE : points de vie = le nombre après HP ou PV (2 ou 3 chiffres). Ignore les autres chiffres.
+3) BAS DE CARTE : numéro de collection au format N/M ou NN/MMM (ex: "25/102", "015/165", "188/198"). C'est souvent petit et en bas à gauche. Ignore rarity (Common/Rare) et le set code à côté si tu n'es pas sûr.
+
+Réponds en JSON strict, sans markdown ni texte autour :
+{"pokemonName":"Pikachu ex","healthPoints":"200","cardNumber":"25/102","confidence":0.85}
+Règles :
+- healthPoints = chiffres seulement
+- cardNumber = exactement N/M comme imprimé (garde les zéros)
+- null si illisible
+- confidence entre 0 et 1`;
+
+// Qualité un peu plus haute : le n° en bas de carte est petit
 async function optimizeImageForAPI(imagePath: string): Promise<string> {
   const manipulatedImage = await ImageManipulator.manipulateAsync(
     imagePath,
-    [{ resize: { width: 768 } }],
+    [{ resize: { width: 1024 } }],
     {
-      compress: 0.55,
+      compress: 0.72,
       format: ImageManipulator.SaveFormat.JPEG,
       base64: true,
     }
@@ -128,19 +142,52 @@ async function optimizeImageForAPI(imagePath: string): Promise<string> {
   return `data:image/jpeg;base64,${manipulatedImage.base64}`;
 }
 
+function normalizeCardNumber(value: unknown): string | null {
+  if (value == null) return null;
+  const match = String(value).replace(/\s+/g, '').match(/(\d{1,3})\/(\d{2,3})/);
+  return match ? `${match[1]}/${match[2]}` : null;
+}
+
+function normalizePokemonNameField(value: unknown): string | null {
+  if (value == null) return null;
+  const name = String(value).replace(/\s+/g, ' ').trim();
+  return name.length >= 2 ? name : null;
+}
+
 function parseScanJson(text: string, imagePath: string): ScanResult | null {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
-  const json = JSON.parse(match[0]);
-  const healthPoints = json.healthPoints != null
-    ? String(json.healthPoints).match(/\d+/)?.[0] || String(json.healthPoints)
-    : null;
-  return {
-    pokemonName: json.pokemonName || null,
-    healthPoints,
-    cardNumber: json.cardNumber || null,
+  try {
+    const json = JSON.parse(match[0]);
+    const healthPoints = json.healthPoints != null
+      ? String(json.healthPoints).match(/\d{2,3}/)?.[0] || null
+      : null;
+    return {
+      pokemonName: normalizePokemonNameField(json.pokemonName),
+      healthPoints,
+      cardNumber: normalizeCardNumber(json.cardNumber),
+      imageUri: imagePath,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mergeScanResults(
+  primary: ScanResult | null,
+  secondary: ScanResult | null,
+  imagePath: string
+): ScanResult | null {
+  if (!primary && !secondary) return null;
+  const merged: ScanResult = {
+    pokemonName: primary?.pokemonName || secondary?.pokemonName || null,
+    healthPoints: primary?.healthPoints || secondary?.healthPoints || null,
+    // Le n° bas de carte rate souvent en vision : on complète avec l'OCR
+    cardNumber: primary?.cardNumber || secondary?.cardNumber || null,
     imageUri: imagePath,
   };
+  if (!merged.pokemonName && !merged.cardNumber && !merged.healthPoints) return null;
+  return merged;
 }
 
 async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | null> {
@@ -158,19 +205,19 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
 
     const completion = await openai.responses.create({
       model: openaiModel,
-      max_output_tokens: 120,
+      max_output_tokens: 200,
       input: [
         {
           role: 'user',
           content: [
             {
               type: 'input_text',
-              text: 'Carte Pokémon. JSON only: {"pokemonName":"Name","healthPoints":"70","cardNumber":"25/102","confidence":0.9}. Null si illisible.',
+              text: SCAN_VISION_PROMPT,
             },
             {
               type: 'input_image',
               image_url: base64Image,
-              detail: 'low',
+              detail: 'high',
             } as any,
           ],
         },
@@ -178,7 +225,7 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
     });
 
     const text = completion.output_text || '';
-    console.log(`[Scan] OpenAI done in ${Date.now() - startTime}ms:`, text.substring(0, 120));
+    console.log(`[Scan] OpenAI done in ${Date.now() - startTime}ms:`, text.substring(0, 180));
     return parseScanJson(text, imagePath);
   } catch (e) {
     console.error(`[Scan] OpenAI failed after ${Date.now() - startTime}ms:`, e);
@@ -187,15 +234,39 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
 }
 
 function extractScanFromOcrText(text: string, imagePath: string): ScanResult | null {
-  const pokemonNameRegex = /([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*(?:PV|HP)\s*(\d+)/i;
-  const cardNumberRegex = /(\d+)\/(\d+)/;
-  const nameMatch = text.match(pokemonNameRegex);
-  const numberMatch = text.match(cardNumberRegex);
-  if (!nameMatch && !numberMatch) return null;
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+
+  // Nom (+ suffixe) suivi de PV/HP — typique ligne du haut
+  const nameHpMatch = normalized.match(
+    /([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)?)\s*(?:[-–]?\s*)?(ex|EX|gx|GX|VMAX|Vmax|VSTAR|Vstar|V)?\s*(?:PV|HP)\s*[.:]?\s*(\d{2,3})\b/
+  );
+
+  const hpOnly =
+    normalized.match(/\b(?:HP|PV)\s*[.:]?\s*(\d{2,3})\b/i) ||
+    normalized.match(/\b(\d{2,3})\s*(?:HP|PV)\b/i);
+
+  // Numéro bas de carte : on prend le DERNIER XX/YYY (souvent en bas dans l'ordre OCR)
+  const numberMatches = [...normalized.matchAll(/\b(\d{1,3})\s*\/\s*(\d{2,3})\b/g)];
+  const lastNumber = numberMatches.length
+    ? `${numberMatches[numberMatches.length - 1][1]}/${numberMatches[numberMatches.length - 1][2]}`
+    : null;
+
+  let pokemonName: string | null = null;
+  if (nameHpMatch) {
+    const base = nameHpMatch[1].trim();
+    const suffix = nameHpMatch[2]?.trim();
+    pokemonName = suffix ? `${base} ${suffix}` : base;
+  }
+
+  const healthPoints = nameHpMatch?.[3] || hpOnly?.[1] || null;
+
+  if (!pokemonName && !healthPoints && !lastNumber) return null;
+
   return {
-    pokemonName: nameMatch?.[1] ?? null,
-    healthPoints: nameMatch?.[2] ?? null,
-    cardNumber: numberMatch ? numberMatch[0] : null,
+    pokemonName: normalizePokemonNameField(pokemonName),
+    healthPoints,
+    cardNumber: normalizeCardNumber(lastNumber),
     imageUri: imagePath,
   };
 }
@@ -547,19 +618,16 @@ export default function ScanScreen() {
 
       const [ocrResult, aiResult] = await Promise.all([ocrPromise, aiPromise]);
 
-      const chosen =
-        aiResult && (aiResult.pokemonName || aiResult.cardNumber)
-          ? aiResult
-          : ocrResult && (ocrResult.pokemonName || ocrResult.cardNumber)
-            ? ocrResult
-            : null;
+      // Vision en priorité pour le nom/PV, OCR en complément (surtout n° bas de carte)
+      const chosen = mergeScanResults(aiResult, ocrResult, imagePath);
 
-      console.log('[Scan] Résultat choisi:', {
-        source: chosen === aiResult ? 'openai' : chosen === ocrResult ? 'ocr' : 'none',
+      console.log('[Scan] Résultat fusionné:', {
+        ai: aiResult,
+        ocr: ocrResult,
         chosen,
       });
 
-      if (chosen) {
+      if (chosen && (chosen.pokemonName || chosen.cardNumber || chosen.healthPoints)) {
         setScanResult(chosen);
         await searchMatchingCards(chosen);
         return;

@@ -41,4 +41,5 @@ app-example
 
 #config
 .env
-
+# clé de compte google cloud soumission de l'app
+tcmarket-459718-219752d3a82c.json
