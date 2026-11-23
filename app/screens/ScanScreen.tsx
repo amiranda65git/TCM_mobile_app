@@ -122,8 +122,9 @@ Deux types de cartes possibles :
 
 A) CARTE POKÉMON (avec PV/HP) :
 1) HAUT-GAUCHE : nom du Pokémon. Inclus le suffixe s'il est collé au nom ou juste à côté : ex, EX, GX, V, VMAX, VSTAR, Radiant, etc. Ex: "Pikachu ex", "Mewtwo-GX", "Charizard VMAX".
+   Pokémon d'un dresseur : le logo ex est ENTRE le nom et « de … ». Garde cet ordre, ex : "Mélofée ex de Lilie" (pas "Mélofée de Lilie ex"). Le code de série en bas (JTG, TEF…) n'est pas le nom.
 2) HAUT-DROITE : points de vie = le nombre après HP ou PV (2 ou 3 chiffres). Ignore les autres chiffres.
-3) BAS DE CARTE : numéro de collection N/M (ex: "25/102", "188/198").
+3) BAS DE CARTE : numéro de collection N/M (ex: "056/159", "25/102"). Ignore le code série juste avant (JTG FR, TEF FR…).
 
 B) CARTE TRAINER / DRESSEUR / ITEM / STADE :
 - Repère le mot "TRAINER" ou "Dresseur" / "DRESSEUR" en haut à gauche OU en haut à droite (souvent avec un sous-type : Supporter, Item, Stadium, Objet, Outil, Stade, Unterstützer).
@@ -312,6 +313,33 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
   const lastNumber = numberMatches.length
     ? `${numberMatches[numberMatches.length - 1][1]}/${numberMatches[numberMatches.length - 1][2]}`
     : null;
+
+  // « Mélofée ex de Lilie PV 190 » — le « de » casse le motif nom+PV générique (il ne gardait que « Lilie »)
+  const ownedEx = normalized.match(
+    /([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)\s+(ex|EX|Ex)\s+de\s+([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)?)\s*(?:PV|HP)\s*[.:]?\s*(\d{2,3})\b/
+  );
+  if (ownedEx) {
+    return {
+      pokemonName: normalizePokemonNameField(`${ownedEx[1]} ex de ${ownedEx[3]}`),
+      healthPoints: ownedEx[4],
+      cardNumber: normalizeCardNumber(lastNumber),
+      cardKind: 'pokemon',
+      imageUri: imagePath,
+    };
+  }
+
+  const ownedExAtEnd = normalized.match(
+    /([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)\s+de\s+([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)?)\s+(ex|EX|Ex)\s*(?:PV|HP)\s*[.:]?\s*(\d{2,3})\b/
+  );
+  if (ownedExAtEnd) {
+    return {
+      pokemonName: normalizePokemonNameField(`${ownedExAtEnd[1]} ex de ${ownedExAtEnd[2]}`),
+      healthPoints: ownedExAtEnd[4],
+      cardNumber: normalizeCardNumber(lastNumber),
+      cardKind: 'pokemon',
+      imageUri: imagePath,
+    };
+  }
 
   // Cartes Trainer / Dresseur / Item (pas de PV)
   const trainerName = extractTrainerNameFromOcr(normalized);
