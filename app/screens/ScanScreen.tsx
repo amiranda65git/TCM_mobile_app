@@ -25,10 +25,13 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 
+type ScanCardKind = 'pokemon' | 'trainer' | null;
+
 type ScanResult = {
   pokemonName: string | null;
   healthPoints: string | null;
   cardNumber: string | null;
+  cardKind: ScanCardKind;
   imageUri: string | null;
 };
 
@@ -114,16 +117,28 @@ function getOpenAIClient(): OpenAI | null {
   return openAIClient;
 }
 
-const SCAN_VISION_PROMPT = `Tu analyses une photo de carte Pokémon (FR ou EN), déjà recadrée sur la carte.
-Lis UNIQUEMENT ces zones (n'invente rien) :
+const SCAN_VISION_PROMPT = `Tu analyses une photo de carte Pokémon (FR, EN ou DE), déjà recadrée sur la carte.
+Deux types de cartes possibles :
+
+A) CARTE POKÉMON (avec PV/HP) :
 1) HAUT-GAUCHE : nom du Pokémon. Inclus le suffixe s'il est collé au nom ou juste à côté : ex, EX, GX, V, VMAX, VSTAR, Radiant, etc. Ex: "Pikachu ex", "Mewtwo-GX", "Charizard VMAX".
 2) HAUT-DROITE : points de vie = le nombre après HP ou PV (2 ou 3 chiffres). Ignore les autres chiffres.
-3) BAS DE CARTE : numéro de collection au format N/M ou NN/MMM (ex: "25/102", "015/165", "188/198"). C'est souvent petit et en bas à gauche. Ignore rarity (Common/Rare) et le set code à côté si tu n'es pas sûr.
+3) BAS DE CARTE : numéro de collection N/M (ex: "25/102", "188/198").
+
+B) CARTE TRAINER / DRESSEUR / ITEM / STADE :
+- Repère le mot "TRAINER" ou "Dresseur" / "DRESSEUR" en haut à gauche OU en haut à droite (souvent avec un sous-type : Supporter, Item, Stadium, Objet, Outil, Stade, Unterstützer).
+- Le NOM de la carte est écrit juste SOUS cette ligne (ex: "Doctor", "Mistys Vitalität", "Ordre de N", "Potion").
+- Pas de PV/HP → healthPoints = null.
+- BAS DE CARTE : numéro N/M si visible.
 
 Réponds en JSON strict, sans markdown ni texte autour :
-{"pokemonName":"Pikachu ex","healthPoints":"200","cardNumber":"25/102","confidence":0.85}
+{"cardKind":"pokemon","pokemonName":"Pikachu ex","healthPoints":"200","cardNumber":"25/102","confidence":0.85}
+ou
+{"cardKind":"trainer","pokemonName":"Doctor","healthPoints":null,"cardNumber":"214/198","confidence":0.85}
 Règles :
-- healthPoints = chiffres seulement
+- cardKind = "pokemon" ou "trainer" (trainer = Trainer/Dresseur/Item/Stadium/Objet)
+- pokemonName = nom de la carte (Pokémon OU Trainer), jamais le mot TRAINER/Dresseur lui-même
+- healthPoints = chiffres seulement, null pour les trainers
 - cardNumber = exactement N/M comme imprimé (garde les zéros)
 - null si illisible
 - confidence entre 0 et 1`;
@@ -154,6 +169,20 @@ function normalizePokemonNameField(value: unknown): string | null {
   return name.length >= 2 ? name : null;
 }
 
+function normalizeCardKind(value: unknown, name: string | null, healthPoints: string | null): ScanCardKind {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw === 'trainer' || raw === 'item' || raw === 'stadium' || raw === 'dresseur') {
+    return 'trainer';
+  }
+  if (raw === 'pokemon' || raw === 'pokémon') {
+    return 'pokemon';
+  }
+  // Heuristique : pas de PV + nom présent → souvent trainer si le modèle a oublié cardKind
+  if (!healthPoints && name) return null;
+  if (healthPoints) return 'pokemon';
+  return null;
+}
+
 function parseScanJson(text: string, imagePath: string): ScanResult | null {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -162,10 +191,12 @@ function parseScanJson(text: string, imagePath: string): ScanResult | null {
     const healthPoints = json.healthPoints != null
       ? String(json.healthPoints).match(/\d{2,3}/)?.[0] || null
       : null;
+    const pokemonName = normalizePokemonNameField(json.pokemonName);
     return {
-      pokemonName: normalizePokemonNameField(json.pokemonName),
+      pokemonName,
       healthPoints,
       cardNumber: normalizeCardNumber(json.cardNumber),
+      cardKind: normalizeCardKind(json.cardKind, pokemonName, healthPoints),
       imageUri: imagePath,
     };
   } catch {
@@ -179,11 +210,17 @@ function mergeScanResults(
   imagePath: string
 ): ScanResult | null {
   if (!primary && !secondary) return null;
+  const cardKind = primary?.cardKind || secondary?.cardKind || null;
   const merged: ScanResult = {
     pokemonName: primary?.pokemonName || secondary?.pokemonName || null,
-    healthPoints: primary?.healthPoints || secondary?.healthPoints || null,
+    // Les trainers n'ont pas de PV : ne pas reprendre un faux HP de l'OCR
+    healthPoints:
+      cardKind === 'trainer'
+        ? null
+        : primary?.healthPoints || secondary?.healthPoints || null,
     // Le n° bas de carte rate souvent en vision : on complète avec l'OCR
     cardNumber: primary?.cardNumber || secondary?.cardNumber || null,
+    cardKind,
     imageUri: imagePath,
   };
   if (!merged.pokemonName && !merged.cardNumber && !merged.healthPoints) return null;
@@ -233,11 +270,62 @@ async function analyzeCardWithOpenAI(imagePath: string): Promise<ScanResult | nu
   }
 }
 
+const TRAINER_LABEL_RE = /\b(?:TRAINER|DRESSEUR|Dresseur|Trainer)\b/i;
+const TRAINER_SUBTYPE_RE =
+  /Supporter|Item|Stadium|Tool|Objet|Outil|Stade|Unterst(?:ü|u)tzer|Itemkarte|Stadion|Sous-?supporter/i;
+
+function extractTrainerNameFromOcr(normalized: string): string | null {
+  if (!TRAINER_LABEL_RE.test(normalized) && !/\bUnterst(?:ü|u)tzer\b/i.test(normalized)) {
+    return null;
+  }
+
+  // Ex: "TRAINER Supporter Doctor …" ou "Dresseur Objet Potion …"
+  const afterLabel = normalized.match(
+    /\b(?:TRAINER|DRESSEUR|Dresseur|Trainer)\b(?:\s+(?:Supporter|Item|Stadium|Tool|Objet|Outil|Stade|Unterst(?:ü|u)tzer|Itemkarte|Stadion))?\s+([A-ZÀ-Ü][A-Za-zÀ-ü''\-.]+(?:\s+[A-Za-zÀ-ü''\-.]+){0,4})/i
+  );
+  if (afterLabel?.[1]) {
+    const cleaned = afterLabel[1]
+      .replace(/\s+(?:Draw|Search|Look|Choose|Discard|Shuffle|Play|Through|Cherche|Pioche|Choisis|Défausse|Defausse|Durchsuche|Dein|Tu)\b.*$/i, '')
+      .trim();
+    if (cleaned.length >= 2 && !TRAINER_LABEL_RE.test(cleaned) && !TRAINER_SUBTYPE_RE.test(cleaned)) {
+      return cleaned;
+    }
+  }
+
+  // Ex DE: "Unterstützer TRAINER Mistys Vitalität …"
+  const deOrder = normalized.match(
+    /\bUnterst(?:ü|u)tzer\b\s+\bTRAINER\b\s+([A-ZÀ-Ü][A-Za-zÀ-ü''\-.]+(?:\s+[A-Za-zÀ-ü''\-.]+){0,4})/i
+  );
+  if (deOrder?.[1]) {
+    return deOrder[1].trim();
+  }
+
+  return null;
+}
+
 function extractScanFromOcrText(text: string, imagePath: string): ScanResult | null {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) return null;
 
-  // Nom (+ suffixe) suivi de PV/HP — typique ligne du haut
+  // Numéro bas de carte : on prend le DERNIER XX/YYY (souvent en bas dans l'ordre OCR)
+  const numberMatches = [...normalized.matchAll(/\b(\d{1,3})\s*\/\s*(\d{2,3})\b/g)];
+  const lastNumber = numberMatches.length
+    ? `${numberMatches[numberMatches.length - 1][1]}/${numberMatches[numberMatches.length - 1][2]}`
+    : null;
+
+  // Cartes Trainer / Dresseur / Item (pas de PV)
+  const trainerName = extractTrainerNameFromOcr(normalized);
+  if (trainerName) {
+    return {
+      pokemonName: normalizePokemonNameField(trainerName),
+      healthPoints: null,
+      cardNumber: normalizeCardNumber(lastNumber),
+      cardKind: 'trainer',
+      imageUri: imagePath,
+    };
+  }
+
+  // Nom (+ suffixe) suivi de PV/HP — typique ligne du haut (Pokémon)
   const nameHpMatch = normalized.match(
     /([A-ZÀ-Ü][A-Za-zÀ-ü''\-]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-ü''\-]+)?)\s*(?:[-–]?\s*)?(ex|EX|gx|GX|VMAX|Vmax|VSTAR|Vstar|V)?\s*(?:PV|HP)\s*[.:]?\s*(\d{2,3})\b/
   );
@@ -245,12 +333,6 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
   const hpOnly =
     normalized.match(/\b(?:HP|PV)\s*[.:]?\s*(\d{2,3})\b/i) ||
     normalized.match(/\b(\d{2,3})\s*(?:HP|PV)\b/i);
-
-  // Numéro bas de carte : on prend le DERNIER XX/YYY (souvent en bas dans l'ordre OCR)
-  const numberMatches = [...normalized.matchAll(/\b(\d{1,3})\s*\/\s*(\d{2,3})\b/g)];
-  const lastNumber = numberMatches.length
-    ? `${numberMatches[numberMatches.length - 1][1]}/${numberMatches[numberMatches.length - 1][2]}`
-    : null;
 
   let pokemonName: string | null = null;
   if (nameHpMatch) {
@@ -267,6 +349,7 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
     pokemonName: normalizePokemonNameField(pokemonName),
     healthPoints,
     cardNumber: normalizeCardNumber(lastNumber),
+    cardKind: healthPoints ? 'pokemon' : null,
     imageUri: imagePath,
   };
 }
@@ -288,6 +371,7 @@ export default function ScanScreen() {
     pokemonName: null,
     healthPoints: null,
     cardNumber: null,
+    cardKind: null,
     imageUri: null
   });
   const [matchingCards, setMatchingCards] = useState<OfficialCard[]>([]);
@@ -388,6 +472,7 @@ export default function ScanScreen() {
       pokemonName: null,
       healthPoints: null,
       cardNumber: null,
+      cardKind: null,
       imageUri: null
     });
     setMatchingCards([]);
@@ -532,7 +617,7 @@ export default function ScanScreen() {
     setCameraViewSize({ width, height });
   };
 
-  // Fonction pour rechercher les cartes correspondantes (recherche plus permissive : Nom + HP seulement)
+  // Fonction pour rechercher les cartes correspondantes (Pokémon : Nom+HP ; Trainer : Nom sans HP)
   const searchMatchingCards = async (scanResult: ScanResult) => {
     const searchStartTime = Date.now();
     console.log(`🕐 [${new Date().toISOString()}] Database search STARTED for:`, JSON.stringify(scanResult));
@@ -542,11 +627,14 @@ export default function ScanScreen() {
       console.log('Recherche de cartes correspondantes avec:', scanResult);
       
       let allCards: OfficialCard[] = [];
+      const isTrainer = scanResult.cardKind === 'trainer';
+      // Les trainers n'ont pas de PV : ne pas filtrer sur HP
+      const healthPoints = isTrainer ? null : scanResult.healthPoints;
 
       // Une seule passe : searchOfficialCardsByDetails gère déjà les variantes de nom
       const { data, error } = await SupabaseService.searchOfficialCardsByDetails({
         pokemonName: scanResult.pokemonName,
-        healthPoints: scanResult.healthPoints,
+        healthPoints,
         cardNumber: scanResult.cardNumber,
       });
       if (!error && data) {
@@ -557,13 +645,13 @@ export default function ScanScreen() {
       if (allCards.length === 0 && scanResult.pokemonName && scanResult.cardNumber) {
         const { data: withoutNumber } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
-          healthPoints: scanResult.healthPoints,
+          healthPoints,
           cardNumber: null,
         });
         if (withoutNumber?.length) allCards = withoutNumber;
       }
 
-      if (allCards.length === 0 && scanResult.pokemonName && scanResult.healthPoints) {
+      if (allCards.length === 0 && scanResult.pokemonName && (healthPoints || isTrainer)) {
         const { data: nameOnly } = await SupabaseService.searchOfficialCardsByDetails({
           pokemonName: scanResult.pokemonName,
           healthPoints: null,
@@ -578,7 +666,16 @@ export default function ScanScreen() {
       const sortStartTime = Date.now();
       if (scanResult.pokemonName && allCards.length > 1) {
         const originalName = scanResult.pokemonName.toLowerCase();
+        const isTrainerSupertype = (s?: string) =>
+          /trainer|dresseur|item|stadium|energy|énergie/i.test(String(s || ''));
         allCards.sort((a, b) => {
+          if (isTrainer) {
+            const aTrainer = isTrainerSupertype(a.supertype);
+            const bTrainer = isTrainerSupertype(b.supertype);
+            if (aTrainer && !bTrainer) return -1;
+            if (!aTrainer && bTrainer) return 1;
+          }
+
           const aExact = a.name.toLowerCase() === originalName;
           const bExact = b.name.toLowerCase() === originalName;
           
@@ -657,6 +754,7 @@ export default function ScanScreen() {
         pokemonName: null,
         healthPoints: null,
         cardNumber: null,
+        cardKind: null,
         imageUri: null,
       });
       setMatchingCards([]);

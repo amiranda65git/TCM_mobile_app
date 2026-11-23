@@ -9,8 +9,8 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchCards } from '../lib/supabase';
-import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchCards, getMyMarketCards } from '../lib/supabase';
+import { TabView, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/auth';
 
@@ -107,6 +107,8 @@ export default function MarketScreen() {
   const [isLoadingFilteredCards, setIsLoadingFilteredCards] = useState(false);
   const [onlyMyCards, setOnlyMyCards] = useState(false);
   const [ownedCardIds, setOwnedCardIds] = useState<Set<string>>(new Set());
+  const [ownedMarketCards, setOwnedMarketCards] = useState<any[]>([]);
+  const [ownedMarketLoading, setOwnedMarketLoading] = useState(false);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -228,16 +230,37 @@ export default function MarketScreen() {
     };
   }, [user?.id, refreshKey]);
 
-  const applyMarketFilters = useCallback(
+  const applyOwnedFilter = useCallback(
     (list: any[]) => {
-      let result = list;
-      if (onlyMyCards) {
-        result = result.filter((item) => ownedCardIds.has(item.card_id));
-      }
-      return result;
+      if (!onlyMyCards) return list;
+      return list.filter((item) => ownedCardIds.has(item.card_id));
     },
     [onlyMyCards, ownedCardIds]
   );
+
+  // « Mes cartes » : requête dédiée (le top marché est tronqué)
+  useEffect(() => {
+    if (!onlyMyCards || !user?.id || index > 2) {
+      return;
+    }
+    let cancelled = false;
+    const mode = index === 1 ? 'gainers' : index === 2 ? 'losers' : 'all';
+    setOwnedMarketLoading(true);
+    getMyMarketCards(user.id, mode).then(({ data }) => {
+      if (cancelled) return;
+      setOwnedMarketCards(data || []);
+      setOwnedMarketLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onlyMyCards, user?.id, index, refreshKey]);
+
+  const listForTab = (fallback: any[]) =>
+    onlyMyCards && !isFiltering ? ownedMarketCards : applyOwnedFilter(isFiltering ? filteredCards : fallback);
+
+  const loadingForTab = (fallbackLoading: boolean) =>
+    onlyMyCards && !isFiltering ? ownedMarketLoading : fallbackLoading;
 
   // Nouvel effet pour la recherche
   useEffect(() => {
@@ -297,7 +320,7 @@ export default function MarketScreen() {
   // Placeholders pour chaque onglet avec prise en compte du filtrage
   const AllCardsRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
-      {allLoading ? (
+      {loadingForTab(allLoading) ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
         <>
@@ -316,7 +339,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={applyMarketFilters(isFiltering ? filteredCards : allCards)}
+              data={listForTab(allCards)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -344,7 +367,7 @@ export default function MarketScreen() {
   
   const GainersRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
-      {gainersLoading ? (
+      {loadingForTab(gainersLoading) ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
         <>
@@ -363,7 +386,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={applyMarketFilters(isFiltering ? filteredCards : gainers)}
+              data={listForTab(gainers)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -414,7 +437,7 @@ export default function MarketScreen() {
   
   const LosersRoute = () => (
     <View style={{ flex: 1, padding: 8 }}>
-      {losersLoading ? (
+      {loadingForTab(losersLoading) ? (
         <ActivityIndicator size="large" color={colors.primary} />
       ) : (
         <>
@@ -433,7 +456,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={applyMarketFilters(isFiltering ? filteredCards : losers)}
+              data={listForTab(losers)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -505,7 +528,7 @@ export default function MarketScreen() {
             <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={applyMarketFilters(isFiltering ? filteredCards : watched)}
+              data={applyOwnedFilter(isFiltering ? filteredCards : watched)}
               keyExtractor={item => item.card_id}
               renderItem={({ item }) => (
                 <CardListItem 
@@ -531,12 +554,18 @@ export default function MarketScreen() {
     </View>
   );
 
-  const renderScene = SceneMap({
-    all: AllCardsRoute,
-    gainers: GainersRoute,
-    losers: LosersRoute,
-    watched: WatchedRoute,
-  });
+  const renderScene = ({ route }: { route: { key: string } }) => {
+    switch (route.key) {
+      case 'gainers':
+        return <GainersRoute />;
+      case 'losers':
+        return <LosersRoute />;
+      case 'watched':
+        return <WatchedRoute />;
+      default:
+        return <AllCardsRoute />;
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

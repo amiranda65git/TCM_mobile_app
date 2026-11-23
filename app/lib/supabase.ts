@@ -1528,6 +1528,104 @@ export const getTopLosers = async () => {
   }
 };
 
+const MARKET_CARD_EMBED = `
+  official_cards:card_id (
+    image_small,
+    edition_id,
+    editions:edition_id (
+      name
+    )
+  )
+`;
+
+async function listOwnedCardIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('user_cards')
+    .select('card_id')
+    .eq('user_id', userId)
+    .eq('is_sold', false);
+  if (error || !data) return [];
+  return [...new Set(data.map((row: { card_id: string }) => row.card_id).filter(Boolean))];
+}
+
+function mapOwnedPriceRow(card: any) {
+  const officialCard = embeddedOne<OfficialCard>(card.official_cards);
+  return {
+    card_id: card.card_id,
+    card_name: card.card_name,
+    price_mid: card.price_mid != null ? Number(card.price_mid) : null,
+    image_small: officialCard?.image_small,
+    edition_name: officialCard?.editions?.name,
+  };
+}
+
+function mapOwnedMoveRow(card: any) {
+  const officialCard = embeddedOne<OfficialCard>(card.official_cards);
+  const last = Number(card.last_price);
+  const prev =
+    card.prev_price === null || card.prev_price === undefined ? null : Number(card.prev_price);
+  const diff = prev != null && Number.isFinite(prev) && Number.isFinite(last) ? last - prev : 0;
+  const diffPercent = prev ? (diff / prev) * 100 : 0;
+  return {
+    card_id: card.card_id,
+    card_name: card.card_name,
+    last_price: Number.isFinite(last) ? last : 0,
+    prev_price: prev,
+    diff,
+    diff_percent: diffPercent,
+    image_small: officialCard?.image_small,
+    edition_name: officialCard?.editions?.name,
+  };
+}
+
+/** Cotations des cartes possédées (requête dédiée, pas un filtre du top limité). */
+export const getMyMarketCards = async (
+  userId: string,
+  mode: 'all' | 'gainers' | 'losers' = 'all'
+) => {
+  try {
+    const ids = await listOwnedCardIds(userId);
+    if (ids.length === 0) return { data: [], error: null };
+
+    const rows: any[] = [];
+    for (let i = 0; i < ids.length; i += 80) {
+      const chunk = ids.slice(i, i + 80);
+      if (mode === 'all') {
+        const { data, error } = await supabase
+          .from('market_card_last')
+          .select(`card_id, card_name, price_mid, ${MARKET_CARD_EMBED}`)
+          .in('card_id', chunk);
+        if (error) throw error;
+        rows.push(...(data || []));
+      } else {
+        const { data, error } = await supabase
+          .from('market_card_last2_diff')
+          .select(`card_id, card_name, last_price, prev_price, diff, diff_percent, ${MARKET_CARD_EMBED}`)
+          .in('card_id', chunk);
+        if (error) throw error;
+        rows.push(...(data || []));
+      }
+    }
+
+    if (mode === 'all') {
+      const mapped = rows
+        .map(mapOwnedPriceRow)
+        .filter((card) => card.price_mid != null)
+        .sort((a, b) => (b.price_mid || 0) - (a.price_mid || 0));
+      return { data: mapped, error: null };
+    }
+
+    const mapped = rows
+      .map(mapOwnedMoveRow)
+      .filter((card) => (mode === 'gainers' ? card.diff > 0 : card.diff < 0))
+      .sort((a, b) => (mode === 'gainers' ? b.diff - a.diff : a.diff - b.diff));
+    return { data: mapped, error: null };
+  } catch (error) {
+    console.error('Erreur getMyMarketCards:', error);
+    return { data: [], error };
+  }
+};
+
 // Fonction pour récupérer les cartes surveillées (wishlist + alertes) d'un utilisateur
 export const getWatchedCards = async (userId: string) => {
   try {
@@ -2603,6 +2701,7 @@ const SupabaseService = {
   getTopCards,
   getTopGainers,
   getTopLosers,
+  getMyMarketCards,
   getWatchedCards,
   signInWithGoogle,
   searchCards,
