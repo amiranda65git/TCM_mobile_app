@@ -2484,11 +2484,49 @@ export const getUserSoldCards = async (userId: string) => {
 };
 
 // Fonction pour normaliser les noms de Pokémon pour améliorer la correspondance
+function pushNameVariant(variants: string[], value: string) {
+  const variant = value.replace(/\s+/g, ' ').trim();
+  if (variant.length >= 2 && !variants.includes(variant)) variants.push(variant);
+}
+
+/**
+ * Cartes « Pokémon ex de Dresseur » (catalogue : « Mélofée-ex de Lilie »).
+ * Le scan lit souvent « Mélofée ex de Lilie » ou « Mélofée de Lilie ex ».
+ */
+function pushTrainerOwnedExVariants(variants: string[], name: string) {
+  const middle = name.match(/^(.+?)\s*[-–]?\s*ex\s+de\s+(.+)$/i);
+  const trailing = name.match(/^(.+?)\s+de\s+(.+?)\s+ex$/i);
+  const owned = middle || trailing;
+  if (owned) {
+    const pokemon = owned[1].trim();
+    const trainer = owned[2].trim();
+    pushNameVariant(variants, `${pokemon}-ex de ${trainer}`);
+    pushNameVariant(variants, `${pokemon} ex de ${trainer}`);
+    pushNameVariant(variants, `${pokemon} de ${trainer}`);
+    pushNameVariant(variants, `${pokemon}-ex`);
+    pushNameVariant(variants, pokemon);
+    if (!/[À-ÿŒœ]/.test(pokemon)) {
+      const loose = pokemon.replace(/[aeiouyAEIOUY]/g, '_');
+      if (loose !== pokemon) pushNameVariant(variants, `${loose}-ex`);
+    }
+    return;
+  }
+
+  if (/\bex\b/i.test(name)) return;
+  const plain = name.match(/^(.+?)\s+de\s+(.+)$/i);
+  if (!plain) return;
+  const pokemon = plain[1].trim();
+  const trainer = plain[2].trim();
+  pushNameVariant(variants, `${pokemon}-ex de ${trainer}`);
+  pushNameVariant(variants, `${pokemon} ex de ${trainer}`);
+}
+
 const normalizePokemonName = (name: string): string[] => {
   if (!name) return [];
   
   const normalizedName = name.trim();
   const variants: string[] = [normalizedName];
+  pushTrainerOwnedExVariants(variants, normalizedName);
   
   // Variations courantes des suffixes spéciaux
   const suffixVariations = [
