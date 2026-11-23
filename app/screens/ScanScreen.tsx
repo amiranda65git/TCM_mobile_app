@@ -928,7 +928,7 @@ export default function ScanScreen() {
     const delaySearch = setTimeout(async () => {
       if (searchQuery.trim().length >= 2) {
         setIsSearching(true);
-        const { data, error } = await SupabaseService.searchCards(searchQuery);
+        const { data, error } = await SupabaseService.searchCards(searchQuery, 10, { flexible: true });
         if (!error && data) {
           setSearchResults(data);
         } else {

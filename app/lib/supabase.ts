@@ -13,6 +13,7 @@ import { AppState } from 'react-native';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { cardNameMatchesSearch, cardNameSearchClauses } from './cardSearch';
 
 // Types pour les relations Supabase
 interface UserInfo {
@@ -1761,36 +1762,71 @@ export const signInWithGoogle = async () => {
   }
 };
 
-// Fonction pour rechercher des cartes par nom
-export const searchCards = async (searchTerm: string, limit: number = 10) => {
+const OFFICIAL_CARD_SEARCH_SELECT = `
+  id,
+  name,
+  number,
+  rarity,
+  image_small,
+  edition_id,
+  editions:edition_id (
+    name
+  ),
+  market_prices!market_prices_card_id_fkey(
+    price_mid
+  )
+`;
+
+function queryOfficialCardsByName(searchTerm: string, limit: number, flexible: boolean) {
+  let query = supabase.from('official_cards').select(OFFICIAL_CARD_SEARCH_SELECT);
+
+  if (flexible) {
+    // ~* : casse ignorée, un filtre par mot (ordre libre), alternatives pour œ/æ/ß
+    for (const patterns of cardNameSearchClauses(searchTerm)) {
+      if (patterns.length === 1) {
+        query = query.filter('name', 'imatch', patterns[0]);
+      } else {
+        query = query.or(patterns.map((pattern) => `name.imatch.${pattern}`).join(','));
+      }
+    }
+  } else {
+    query = query.ilike('name', `%${searchTerm}%`);
+  }
+
+  return query.order('name').limit(limit);
+}
+
+// Fonction pour rechercher des cartes par nom.
+// flexible : accents, majuscules et ordre des mots ignorés (recherche du scan).
+export const searchCards = async (
+  searchTerm: string,
+  limit: number = 10,
+  options?: { flexible?: boolean }
+) => {
   try {
     if (!searchTerm || searchTerm.trim() === '') {
       return { data: [], error: null };
     }
 
-    const { data, error } = await supabase
-      .from('official_cards')
-      .select(`
-        id,
-        name,
-        number,
-        rarity,
-        image_small,
-        edition_id,
-        editions:edition_id (
-          name
-        ),
-        market_prices!market_prices_card_id_fkey(
-          price_mid
-        )
-      `)
-      .ilike('name', `%${searchTerm}%`)
-      .order('name')
-      .limit(limit);
+    const flexible = options?.flexible === true;
+    if (flexible && cardNameSearchClauses(searchTerm).length === 0) {
+      return { data: [], error: null };
+    }
+
+    let { data, error } = await queryOfficialCardsByName(searchTerm, limit, flexible);
+
+    if (error && flexible) {
+      console.warn('Recherche souple indisponible, repli sur la recherche exacte:', error);
+      ({ data, error } = await queryOfficialCardsByName(searchTerm, limit, false));
+    }
 
     if (error) {
       console.error('Erreur lors de la recherche de cartes:', error);
       return { data: [], error };
+    }
+
+    if (flexible && data) {
+      data = data.filter((card) => cardNameMatchesSearch(card.name, searchTerm));
     }
 
     // Transformer les données pour être plus facilement utilisables
