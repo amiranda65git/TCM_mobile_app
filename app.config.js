@@ -38,7 +38,7 @@ export default {
     },
     android: {
       supportsTablet: false,
-      versionCode: 120,
+      versionCode: 121,
       edgeToEdgeEnabled: true,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png", backgroundColor: "#FFFFFF"
