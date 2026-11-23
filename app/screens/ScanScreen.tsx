@@ -26,12 +26,35 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 
 type ScanCardKind = 'pokemon' | 'trainer' | null;
+type ScanFinish = 'normale' | 'holo' | 'inverse';
+
+function normalizeScanFinish(value: unknown): ScanFinish | null {
+  const key = String(value ?? '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (key === 'normal' || key === 'normale' || key === 'nonholo') return 'normale';
+  if (key === 'holo' || key === 'holofoil' || key === 'holographique' || key === 'holographic') return 'holo';
+  if (key === 'reverse' || key === 'inverse' || key === 'reverseholo') return 'inverse';
+  return null;
+}
+
+function finishFromRarity(rarity?: string | null): ScanFinish {
+  const value = (rarity || '').toLowerCase();
+  if (value.includes('reverse') || value.includes('inverse')) return 'inverse';
+  if (/holo|ultra|illustration|secret|hyper|double|shiny|radieux|radiant/.test(value)) return 'holo';
+  return 'normale';
+}
+
+function finishFromOcr(text: string): ScanFinish | null {
+  if (/\breverse\b|\binverse\b/i.test(text)) return 'inverse';
+  if (/\bholo(?:graphique|graphic|foil)?\b/i.test(text)) return 'holo';
+  return null;
+}
 
 type ScanResult = {
   pokemonName: string | null;
   healthPoints: string | null;
   cardNumber: string | null;
   cardKind: ScanCardKind;
+  finish: ScanFinish | null;
   imageUri: string | null;
 };
 
@@ -125,6 +148,7 @@ A) CARTE POKÉMON (avec PV/HP) :
    Pokémon d'un dresseur : le logo ex est ENTRE le nom et « de … ». Garde cet ordre, ex : "Mélofée ex de Lilie" (pas "Mélofée de Lilie ex"). Le code de série en bas (JTG, TEF…) n'est pas le nom.
 2) HAUT-DROITE : points de vie = le nombre après HP ou PV (2 ou 3 chiffres). Ignore les autres chiffres.
 3) BAS DE CARTE : numéro de collection N/M (ex: "056/159", "25/102"). Ignore le code série juste avant (JTG FR, TEF FR…).
+4) TIRAGE : regarde les reflets. holo = le dessin brille et le cadre est mat. reverse = le dessin est mat et le cadre ou le fond brille. normal = aucun reflet holographique.
 
 B) CARTE TRAINER / DRESSEUR / ITEM / STADE :
 - Repère le mot "TRAINER" ou "Dresseur" / "DRESSEUR" en haut à gauche OU en haut à droite (souvent avec un sous-type : Supporter, Item, Stadium, Objet, Outil, Stade, Unterstützer).
@@ -133,14 +157,15 @@ B) CARTE TRAINER / DRESSEUR / ITEM / STADE :
 - BAS DE CARTE : numéro N/M si visible.
 
 Réponds en JSON strict, sans markdown ni texte autour :
-{"cardKind":"pokemon","pokemonName":"Pikachu ex","healthPoints":"200","cardNumber":"25/102","confidence":0.85}
+{"cardKind":"pokemon","pokemonName":"Pikachu ex","healthPoints":"200","cardNumber":"25/102","finish":"holo","confidence":0.85}
 ou
-{"cardKind":"trainer","pokemonName":"Doctor","healthPoints":null,"cardNumber":"214/198","confidence":0.85}
+{"cardKind":"trainer","pokemonName":"Doctor","healthPoints":null,"cardNumber":"214/198","finish":"normal","confidence":0.85}
 Règles :
 - cardKind = "pokemon" ou "trainer" (trainer = Trainer/Dresseur/Item/Stadium/Objet)
 - pokemonName = nom de la carte (Pokémon OU Trainer), jamais le mot TRAINER/Dresseur lui-même
 - healthPoints = chiffres seulement, null pour les trainers
 - cardNumber = exactement N/M comme imprimé (garde les zéros)
+- finish = "normal", "holo" ou "reverse". null si le reflet n'est pas lisible
 - null si illisible
 - confidence entre 0 et 1`;
 
@@ -198,6 +223,7 @@ function parseScanJson(text: string, imagePath: string): ScanResult | null {
       healthPoints,
       cardNumber: normalizeCardNumber(json.cardNumber),
       cardKind: normalizeCardKind(json.cardKind, pokemonName, healthPoints),
+      finish: normalizeScanFinish(json.finish),
       imageUri: imagePath,
     };
   } catch {
@@ -222,6 +248,7 @@ function mergeScanResults(
     // Le n° bas de carte rate souvent en vision : on complète avec l'OCR
     cardNumber: primary?.cardNumber || secondary?.cardNumber || null,
     cardKind,
+    finish: primary?.finish || secondary?.finish || null,
     imageUri: imagePath,
   };
   if (!merged.pokemonName && !merged.cardNumber && !merged.healthPoints) return null;
@@ -324,6 +351,7 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
       healthPoints: ownedEx[4],
       cardNumber: normalizeCardNumber(lastNumber),
       cardKind: 'pokemon',
+      finish: finishFromOcr(normalized),
       imageUri: imagePath,
     };
   }
@@ -337,6 +365,7 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
       healthPoints: ownedExAtEnd[4],
       cardNumber: normalizeCardNumber(lastNumber),
       cardKind: 'pokemon',
+      finish: finishFromOcr(normalized),
       imageUri: imagePath,
     };
   }
@@ -349,6 +378,7 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
       healthPoints: null,
       cardNumber: normalizeCardNumber(lastNumber),
       cardKind: 'trainer',
+      finish: finishFromOcr(normalized),
       imageUri: imagePath,
     };
   }
@@ -378,6 +408,7 @@ function extractScanFromOcrText(text: string, imagePath: string): ScanResult | n
     healthPoints,
     cardNumber: normalizeCardNumber(lastNumber),
     cardKind: healthPoints ? 'pokemon' : null,
+    finish: finishFromOcr(normalized),
     imageUri: imagePath,
   };
 }
@@ -400,6 +431,7 @@ export default function ScanScreen() {
     healthPoints: null,
     cardNumber: null,
     cardKind: null,
+    finish: null,
     imageUri: null
   });
   const [matchingCards, setMatchingCards] = useState<OfficialCard[]>([]);
@@ -502,6 +534,7 @@ export default function ScanScreen() {
       healthPoints: null,
       cardNumber: null,
       cardKind: null,
+      finish: null,
       imageUri: null
     });
     setMatchingCards([]);
@@ -784,6 +817,7 @@ export default function ScanScreen() {
         healthPoints: null,
         cardNumber: null,
         cardKind: null,
+        finish: null,
         imageUri: null,
       });
       setMatchingCards([]);
@@ -805,7 +839,7 @@ export default function ScanScreen() {
   // Sélectionner une carte et ouvrir le modal
   const handleCardPress = (card: OfficialCard) => {
     setSelectedCard(card);
-    setSelectedFinish('normale');
+    setSelectedFinish(scanResult.finish || finishFromRarity(card.rarity));
     setSelectedCondition(null);
     setModalVisible(true);
   };
@@ -1003,7 +1037,7 @@ export default function ScanScreen() {
     
     // Définir la carte sélectionnée et ouvrir le modal
     setSelectedCard(selectedCardData);
-    setSelectedFinish('normale');
+    setSelectedFinish(finishFromRarity(selectedCardData.rarity));
     setSelectedCondition(null);
     setModalVisible(true);
   };
