@@ -22,11 +22,21 @@ interface CardPrice {
 type UserCardRow = {
   id: string;
   condition: string | null;
+  finish: string | null;
   price: number | null;
   is_for_sale: boolean;
   image_url: string | null;
   created_at: string;
 };
+
+const COPY_CONDITIONS = ['excellent', 'nearmint', 'good', 'played'] as const;
+const CARD_FINISHES = ['normale', 'holo', 'inverse'] as const;
+
+function normalizeConditionKey(value?: string | null) {
+  if (!value) return '';
+  const key = value.toLowerCase().replace(/\s+/g, '');
+  return (COPY_CONDITIONS as readonly string[]).includes(key) ? key : '';
+}
 
 interface CardDetails {
   id: string;
@@ -41,6 +51,7 @@ interface CardDetails {
   owned: boolean;
   user_card_id?: string;
   condition?: string;
+  finish?: string | null;
   price?: number | null;
   is_for_sale: boolean;
   has_price_alert?: boolean;
@@ -128,7 +139,7 @@ export default function CardDetailScreen() {
       // 2. Vérifier si l'utilisateur possède cette carte (plusieurs lignes possibles : ex. une en vente sans photo, une autre avec photo R2)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
-        .select('id, condition, price, is_for_sale, image_url, created_at')
+        .select('id, condition, finish, price, is_for_sale, image_url, created_at')
         .eq('user_id', user.id)
         .eq('card_id', cardId)
         .eq('is_sold', false);
@@ -147,7 +158,7 @@ export default function CardDetailScreen() {
         if (!primaryUserCard) {
           const { data: single } = await supabase
             .from('user_cards')
-            .select('id, condition, price, is_for_sale, image_url, created_at, card_id')
+            .select('id, condition, finish, price, is_for_sale, image_url, created_at, card_id')
             .eq('id', userCardIdParam)
             .eq('user_id', user.id)
             .eq('is_sold', false)
@@ -217,6 +228,7 @@ export default function CardDetailScreen() {
         owned: userRows.length > 0,
         user_card_id: primaryUserCard?.id,
         condition: primaryUserCard?.condition ?? undefined,
+        finish: primaryUserCard?.finish ?? null,
         price: primaryUserCard?.price ?? null,
         is_for_sale: primaryUserCard?.is_for_sale ?? false,
         has_price_alert: priceAlertData && priceAlertData.length > 0,
@@ -231,6 +243,29 @@ export default function CardDetailScreen() {
     }
   };
   
+  const updateOwnedCopy = async (patch: { finish?: string; condition?: string }) => {
+    if (!cardDetails?.user_card_id || !user?.id) return;
+    const previous = cardDetails;
+    setCardDetails({ ...cardDetails, ...patch });
+    try {
+      const { error } = await supabase
+        .from('user_cards')
+        .update(patch)
+        .eq('id', cardDetails.user_card_id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      EventRegister.emit('collection_data_changed', {
+        type: 'updated',
+        user_card_id: cardDetails.user_card_id,
+        card_id: cardDetails.id,
+      });
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour de l'exemplaire:", error);
+      setCardDetails(previous);
+      Alert.alert(t('general.error'), t('card.updateCopyError'));
+    }
+  };
+
   const checkWishlist = async () => {
     if (!user || !cardId) return;
     const { data: wishlist } = await getUserWishlist(user.id);
@@ -645,16 +680,72 @@ export default function CardDetailScreen() {
               </Text>
             </View>
             
-            {cardDetails.owned && cardDetails.condition && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.text.secondary }]}>
-                  {t('card.condition')}:
+            {cardDetails.owned && cardDetails.user_card_id ? (
+              <View style={styles.copyEditor}>
+                <Text style={[styles.copyEditorLabel, { color: colors.text.secondary }]}>
+                  {t('card.finish')}
                 </Text>
-                <Text style={[styles.infoValue, { color: colors.text.primary }]}>
-                  {cardDetails.condition}
+                <View style={styles.copyEditorRow}>
+                  {CARD_FINISHES.map((finish) => {
+                    const selected = cardDetails.finish === finish;
+                    return (
+                      <TouchableOpacity
+                        key={finish}
+                        style={[
+                          styles.copyChip,
+                          {
+                            borderColor: selected ? colors.primary : colors.border,
+                            backgroundColor: selected ? colors.primary : 'transparent',
+                          },
+                        ]}
+                        onPress={() => {
+                          if (!selected) updateOwnedCopy({ finish });
+                        }}
+                      >
+                        <Text style={[styles.copyChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
+                          {t(`card.finishes.${finish}`)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.copyEditorLabel, { color: colors.text.secondary }]}>
+                  {t('card.condition')}
                 </Text>
+                {cardDetails.condition && !normalizeConditionKey(cardDetails.condition) ? (
+                  <Text style={[styles.infoValue, { color: colors.text.primary, marginBottom: 8 }]}>
+                    {cardDetails.condition}
+                  </Text>
+                ) : null}
+                <View style={styles.copyEditorRow}>
+                  {COPY_CONDITIONS.map((condition) => {
+                    const selected = normalizeConditionKey(cardDetails.condition) === condition;
+                    return (
+                      <TouchableOpacity
+                        key={condition}
+                        style={[
+                          styles.copyChip,
+                          {
+                            borderColor: selected ? colors.primary : colors.border,
+                            backgroundColor: selected ? colors.primary : 'transparent',
+                          },
+                        ]}
+                        onPress={() => {
+                          if (!selected || cardDetails.condition !== condition) {
+                            updateOwnedCopy({ condition });
+                          }
+                        }}
+                      >
+                        <Text style={[styles.copyChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
+                          {t(`card.conditions.${condition}`)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-            )}
+            ) : null}
             
             {/* Badges */}
             <View style={styles.badgesContainer}>
@@ -1117,6 +1208,30 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 16,
+  },
+  copyEditor: {
+    width: '100%',
+    marginTop: 12,
+  },
+  copyEditorLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  copyEditorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  copyChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  copyChipText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   badgesContainer: {
     flexDirection: 'row',

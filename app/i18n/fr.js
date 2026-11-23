@@ -179,6 +179,7 @@ export default {
     scan: 'Scanner',
     scans: 'scans',
     selectCondition: 'Sélectionnez l\'état de la carte',
+    selectFinish: 'Sélectionnez le tirage',
     searchManually: 'Rechercher manuellement',
     notInListSearch: 'Pas dans la liste ? Rechercher :',
     searchPlaceholder: 'Rechercher une carte...',
@@ -340,11 +341,18 @@ export default {
     edition: 'Édition',
     condition: 'État',
     selectCondition: 'Sélectionner l\'état',
+    finish: 'Tirage',
+    updateCopyError: 'Impossible de mettre à jour cet exemplaire',
     conditions: {
       nearmint: 'Quasi Neuf',
       excellent: 'Excellent',
       good: 'Bon',
       played: 'Joué'
+    },
+    finishes: {
+      normale: 'Normale',
+      holo: 'Holo',
+      inverse: 'Inverse'
     },
     prices: 'Prix du marché',
     lowPrice: 'Prix bas',
