@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import OpenAI from 'openai';
 import SupabaseService from '../lib/supabase';
+import { stripCardLevelPrefix } from '../lib/cardSearch';
 import { Session } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -144,10 +145,11 @@ const SCAN_VISION_PROMPT = `Tu analyses une photo de carte Pokémon (FR, EN ou D
 Deux types de cartes possibles :
 
 A) CARTE POKÉMON (avec PV/HP) :
-1) HAUT-GAUCHE : nom du Pokémon. Inclus le suffixe s'il est collé au nom ou juste à côté : ex, EX, GX, V, VMAX, VSTAR, Radiant, etc. Ex: "Pikachu ex", "Mewtwo-GX", "Charizard VMAX".
+1) HAUT-GAUCHE : le grand nom du Pokémon. Inclus le suffixe collé ou juste à côté : ex, EX, GX, V, VMAX, VSTAR, Radiant, etc. Ex: "Kirlia", "Pikachu ex", "Mewtwo-GX".
+   Ignore le bandeau « NIVEAU 1 », « LV.1 » ou « Level ». Ignore « Évolution de » / « Evolves from » (ex. « Évolution de : Tarsal » n'est pas le nom).
    Pokémon d'un dresseur : le logo ex est ENTRE le nom et « de … ». Garde cet ordre, ex : "Mélofée ex de Lilie" (pas "Mélofée de Lilie ex"). Le code de série en bas (JTG, TEF…) n'est pas le nom.
 2) HAUT-DROITE : points de vie = le nombre après HP ou PV (2 ou 3 chiffres). Ignore les autres chiffres.
-3) BAS DE CARTE : numéro de collection N/M (ex: "056/159", "25/102"). Ignore le code série juste avant (JTG FR, TEF FR…).
+3) BAS DE CARTE, coin bas-gauche uniquement : numéro de collection N/M (ex: "068/195", "056/159"). Garde les zéros. Ignore le N° de Pokédex au centre (ex. « N° 281 ») et le code série (JTG FR, TEF FR…).
 4) TIRAGE : regarde les reflets. holo = le dessin brille et le cadre est mat. reverse = le dessin est mat et le cadre ou le fond brille. normal = aucun reflet holographique.
 
 B) CARTE TRAINER / DRESSEUR / ITEM / STADE :
@@ -191,7 +193,7 @@ function normalizeCardNumber(value: unknown): string | null {
 
 function normalizePokemonNameField(value: unknown): string | null {
   if (value == null) return null;
-  const name = String(value).replace(/\s+/g, ' ').trim();
+  const name = stripCardLevelPrefix(String(value).replace(/\s+/g, ' ').trim());
   return name.length >= 2 ? name : null;
 }
 

@@ -15,6 +15,36 @@ const LIGATURES: Record<string, [string, string]> = {
   ss: ['ss', 'ß'],
 };
 
+/** « NIVEAU 1 Kirlia » → « Kirlia ». Le bandeau de niveau n'est pas le nom. */
+export function stripCardLevelPrefix(name: string): string {
+  return name.replace(/^(?:niveau|level|lv|stufe)\.?\s*\d+\s+/i, '').trim();
+}
+
+/**
+ * Formes du numéro à chercher en base.
+ * Le catalogue FR (TCGdex) garde les zéros (« 068 »), le scan les retire (« 68 »).
+ */
+export function cardNumberLookupValues(cardNumberRaw: string): string[] {
+  const part = cardNumberRaw.split('/')[0]?.trim() ?? '';
+  if (!part) return [];
+
+  const values = new Set<string>([part]);
+  if (/^\d+$/.test(part)) {
+    const numeric = String(parseInt(part, 10));
+    values.add(numeric);
+    values.add(numeric.padStart(3, '0'));
+  } else {
+    const prefixed = part.match(/^([A-Za-z]+)(\d+)$/);
+    if (prefixed) {
+      const numeric = String(parseInt(prefixed[2], 10));
+      values.add(`${prefixed[1]}${numeric}`);
+      values.add(`${prefixed[1].toUpperCase()}${numeric}`);
+      values.add(`${prefixed[1].toUpperCase()}${numeric.padStart(3, '0')}`);
+    }
+  }
+  return [...values];
+}
+
 /** Minuscules, sans accents ni ligatures. Les séparateurs restent en place. */
 export function foldCardSearchText(value: string): string {
   return value

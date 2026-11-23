@@ -13,7 +13,7 @@ import { AppState } from 'react-native';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { cardNameMatchesSearch, cardNameSearchClauses } from './cardSearch';
+import { cardNameMatchesSearch, cardNameSearchClauses, cardNumberLookupValues, stripCardLevelPrefix } from './cardSearch';
 
 // Types pour les relations Supabase
 interface UserInfo {
@@ -48,23 +48,18 @@ function embeddedOne<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-/** Numéro de carte OCR (« 025/165 », « SM098 ») ramené au format stocké. */
-function normalizeCardNumberFilter(cardNumberRaw: string): string | null {
-  const numberParts = cardNumberRaw.split('/');
-  if (numberParts.length === 0) return null;
-  let cardNumber = numberParts[0].trim();
-  if (!cardNumber) return null;
+/** Valeur citée pour PostgREST, afin de conserver les zéros (« 068 »). */
+function quotedPostgrestValue(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
 
-  if (/^\d+$/.test(cardNumber)) {
-    cardNumber = parseInt(cardNumber, 10).toString();
-  } else if (/^([A-Z]+)(\d+)$/.test(cardNumber)) {
-    const match = cardNumber.match(/^([A-Z]+)(\d+)$/);
-    if (match) {
-      cardNumber = match[1] + parseInt(match[2], 10).toString();
-    }
+function applyCardNumberFilter(query: any, cardNumberRaw: string) {
+  const numbers = cardNumberLookupValues(cardNumberRaw);
+  if (numbers.length === 0) return query;
+  if (numbers.length === 1) {
+    return query.filter('number', 'eq', quotedPostgrestValue(numbers[0]));
   }
-
-  return cardNumber;
+  return query.or(numbers.map((value: string) => `number.eq.${quotedPostgrestValue(value)}`).join(','));
 }
 
 // Configuration de Supabase
@@ -2080,15 +2075,15 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
         }
         
         if (details.cardNumber) {
-          const cardNumber = normalizeCardNumberFilter(details.cardNumber);
-          if (cardNumber) {
-            console.log(`Numéro original: "${details.cardNumber}" -> Numéro traité: "${cardNumber}"`);
-            query = query.eq('number', cardNumber);
+          const numbers = cardNumberLookupValues(details.cardNumber);
+          if (numbers.length > 0) {
+            console.log(`Numéro original: "${details.cardNumber}" -> Numéros cherchés:`, numbers);
+            query = applyCardNumberFilter(query, details.cardNumber);
           }
         }
         
         // Exécuter la requête pour cette variante
-        const { data, error } = await query.order('name').limit(10);
+        const { data, error } = await query.order('name').limit(40);
         
         if (!error && data && data.length > 0) {
           // Première variante qui matche suffit (évite N requêtes séquentielles)
@@ -2123,13 +2118,10 @@ export const searchOfficialCardsByDetails = async (details: { pokemonName?: stri
       }
       
       if (details.cardNumber) {
-        const cardNumber = normalizeCardNumberFilter(details.cardNumber);
-        if (cardNumber) {
-          query = query.eq('number', cardNumber);
-        }
+        query = applyCardNumberFilter(query, details.cardNumber);
       }
       
-      const { data, error } = await query.order('name');
+      const { data, error } = await query.order('name').limit(40);
       
       if (!error && data) {
         allResults = data;
@@ -2563,8 +2555,10 @@ function pushTrainerOwnedExVariants(variants: string[], name: string) {
 const normalizePokemonName = (name: string): string[] => {
   if (!name) return [];
   
-  const normalizedName = name.trim();
-  const variants: string[] = [normalizedName];
+  const normalizedName = stripCardLevelPrefix(name.trim());
+  const variants: string[] = [];
+  pushNameVariant(variants, normalizedName);
+  pushNameVariant(variants, name.trim());
   pushTrainerOwnedExVariants(variants, normalizedName);
   
   // Variations courantes des suffixes spéciaux
