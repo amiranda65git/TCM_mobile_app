@@ -409,6 +409,7 @@ export default function ScanScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [isAddingToCollection, setIsAddingToCollection] = useState(false);
   const [selectedCondition, setSelectedCondition] = useState<string | null>(null);
+  const [selectedFinish, setSelectedFinish] = useState<'normale' | 'holo' | 'inverse'>('normale');
   
   // État pour l'alerte de succès
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -804,6 +805,8 @@ export default function ScanScreen() {
   // Sélectionner une carte et ouvrir le modal
   const handleCardPress = (card: OfficialCard) => {
     setSelectedCard(card);
+    setSelectedFinish('normale');
+    setSelectedCondition(null);
     setModalVisible(true);
   };
 
@@ -811,6 +814,7 @@ export default function ScanScreen() {
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedCondition(null);
+    setSelectedFinish('normale');
   };
 
   // Vérifier la session utilisateur
@@ -876,6 +880,7 @@ export default function ScanScreen() {
         userId: session.user.id,
         cardId: selectedCard.id,
         condition: condition,
+        finish: selectedFinish,
         imageBase64: base64Image
       });
       
@@ -998,6 +1003,8 @@ export default function ScanScreen() {
     
     // Définir la carte sélectionnée et ouvrir le modal
     setSelectedCard(selectedCardData);
+    setSelectedFinish('normale');
+    setSelectedCondition(null);
     setModalVisible(true);
   };
 
@@ -1411,6 +1418,44 @@ export default function ScanScreen() {
                   </View>
                 </View>
                 
+                <View style={styles.conditionSelectionContainer}>
+                  <Text style={[styles.conditionTitle, { color: colors.text.primary }]}>
+                    {t('scan.selectFinish')}
+                  </Text>
+                  <View style={styles.conditionGrid}>
+                    {(['normale', 'holo', 'inverse'] as const).map((finish) => (
+                      <TouchableOpacity
+                        key={finish}
+                        style={[
+                          styles.conditionButton,
+                          {
+                            backgroundColor: selectedFinish === finish
+                              ? colors.primary
+                              : colors.surface,
+                            borderColor: selectedFinish === finish
+                              ? colors.primary
+                              : colors.border
+                          }
+                        ]}
+                        onPress={() => setSelectedFinish(finish)}
+                        disabled={isAddingToCollection}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[
+                          styles.conditionButtonText,
+                          {
+                            color: selectedFinish === finish
+                              ? '#FFFFFF'
+                              : colors.text.primary
+                          }
+                        ]}>
+                          {t(`card.finishes.${finish}`)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
                 {/* Sélection de condition */}
                 <View style={styles.conditionSelectionContainer}>
                   <Text style={[styles.conditionTitle, { color: colors.text.primary }]}>

@@ -2263,11 +2263,13 @@ export const addCardToCollection = async ({
   userId, 
   cardId, 
   condition = 'excellent', 
+  finish = 'normale',
   imageBase64 = null 
 }: {
   userId: string,
   cardId: string,
   condition?: string,
+  finish?: string,
   imageBase64?: string | null
 }) => {
   try {
@@ -2294,6 +2296,7 @@ export const addCardToCollection = async ({
         user_id: userId,
         card_id: cardId,
         condition: condition,
+        finish,
         is_for_sale: false,
         image_url: imageUrl, // URL Cloudflare R2 ou null
         created_at: new Date().toISOString()

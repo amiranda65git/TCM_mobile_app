@@ -178,6 +178,7 @@ export default {
     adding: 'Adding...',
     scan: 'Scan',
     selectCondition: 'Select card condition',
+    selectFinish: 'Select the finish',
     searchManually: 'Search manually',
     notInListSearch: 'Not in the list? Search:',
     searchPlaceholder: 'Search for a card...',
@@ -340,11 +341,18 @@ export default {
     edition: 'Edition',
     condition: 'Condition',
     selectCondition: 'Select condition',
+    finish: 'Finish',
+    updateCopyError: 'Could not update this copy',
     conditions: {
       nearmint: 'Near Mint',
       excellent: 'Excellent',
       good: 'Good',
       played: 'Played'
+    },
+    finishes: {
+      normale: 'Normal',
+      holo: 'Holo',
+      inverse: 'Reverse'
     },
     prices: 'Market Prices',
     lowPrice: 'Low Price',
