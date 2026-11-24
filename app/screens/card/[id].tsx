@@ -38,6 +38,20 @@ function normalizeConditionKey(value?: string | null) {
   return (COPY_CONDITIONS as readonly string[]).includes(key) ? key : '';
 }
 
+const USER_CARD_COLUMNS = 'id, condition, price, is_for_sale, image_url, created_at';
+const USER_CARD_COLUMNS_WITH_FINISH = 'id, condition, finish, price, is_for_sale, image_url, created_at';
+
+function isMissingFinishColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const message = `${error.code || ''} ${error.message || ''}`.toLowerCase();
+  return message.includes('finish') && (
+    message.includes('column') ||
+    message.includes('schema cache') ||
+    error.code === '42703' ||
+    error.code === 'PGRST204'
+  );
+}
+
 interface CardDetails {
   id: string;
   name: string;
@@ -52,6 +66,8 @@ interface CardDetails {
   user_card_id?: string;
   condition?: string;
   finish?: string | null;
+  /** Faux si la colonne n'existe pas encore : on affiche la carte sans le sélecteur. */
+  finishEditable?: boolean;
   price?: number | null;
   is_for_sale: boolean;
   has_price_alert?: boolean;
@@ -137,16 +153,30 @@ export default function CardDetailScreen() {
       if (cardError) throw cardError;
       
       // 2. Vérifier si l'utilisateur possède cette carte (plusieurs lignes possibles : ex. une en vente sans photo, une autre avec photo R2)
-      const { data: userCardData, error: userCardError } = await supabase
+      // Une carte non possédée, ou sans tirage, doit quand même s'afficher.
+      let finishEditable = true;
+      let ownedQuery = await supabase
         .from('user_cards')
-        .select('id, condition, finish, price, is_for_sale, image_url, created_at')
+        .select(USER_CARD_COLUMNS_WITH_FINISH)
         .eq('user_id', user.id)
         .eq('card_id', cardId)
         .eq('is_sold', false);
 
-      if (userCardError) throw userCardError;
+      if (isMissingFinishColumn(ownedQuery.error)) {
+        finishEditable = false;
+        ownedQuery = await supabase
+          .from('user_cards')
+          .select(USER_CARD_COLUMNS)
+          .eq('user_id', user.id)
+          .eq('card_id', cardId)
+          .eq('is_sold', false);
+      }
 
-      const userRows = (userCardData ?? []) as UserCardRow[];
+      if (ownedQuery.error) {
+        console.error('Exemplaires indisponibles, affichage de la carte officielle:', ownedQuery.error);
+      }
+
+      const userRows = (ownedQuery.data ?? []) as UserCardRow[];
       const sortedByDate = [...userRows].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -156,14 +186,19 @@ export default function CardDetailScreen() {
       if (userCardIdParam) {
         primaryUserCard = userRows.find((r) => r.id === userCardIdParam) ?? null;
         if (!primaryUserCard) {
-          const { data: single } = await supabase
+          const columns = finishEditable
+            ? `${USER_CARD_COLUMNS_WITH_FINISH}, card_id`
+            : `${USER_CARD_COLUMNS}, card_id`;
+          const { data: single, error: singleError } = await supabase
             .from('user_cards')
-            .select('id, condition, finish, price, is_for_sale, image_url, created_at, card_id')
+            .select(columns)
             .eq('id', userCardIdParam)
             .eq('user_id', user.id)
             .eq('is_sold', false)
             .maybeSingle();
-          if (single && (single as { card_id: string }).card_id === cardId) {
+          if (singleError) {
+            console.error('Exemplaire demandé indisponible:', singleError);
+          } else if (single && (single as { card_id: string }).card_id === cardId) {
             primaryUserCard = single as UserCardRow;
           }
         }
@@ -223,12 +258,13 @@ export default function CardDetailScreen() {
         image_small: cardData.image_small,
         image_large: cardData.image_large,
         edition_id: cardData.edition_id,
-        edition_name: Array.isArray(cardData.editions) ? cardData.editions[0]?.name || 'Unknown' : (cardData.editions as any).name || 'Unknown',
+        edition_name: (Array.isArray(cardData.editions) ? cardData.editions[0] : cardData.editions)?.name || 'Unknown',
         prices: priceData,
-        owned: userRows.length > 0,
+        owned: userRows.length > 0 || !!primaryUserCard,
         user_card_id: primaryUserCard?.id,
         condition: primaryUserCard?.condition ?? undefined,
         finish: primaryUserCard?.finish ?? null,
+        finishEditable,
         price: primaryUserCard?.price ?? null,
         is_for_sale: primaryUserCard?.is_for_sale ?? false,
         has_price_alert: priceAlertData && priceAlertData.length > 0,
@@ -682,33 +718,37 @@ export default function CardDetailScreen() {
             
             {cardDetails.owned && cardDetails.user_card_id ? (
               <View style={styles.copyEditor}>
-                <Text style={[styles.copyEditorLabel, { color: colors.text.secondary }]}>
-                  {t('card.finish')}
-                </Text>
-                <View style={styles.copyEditorRow}>
-                  {CARD_FINISHES.map((finish) => {
-                    const selected = cardDetails.finish === finish;
-                    return (
-                      <TouchableOpacity
-                        key={finish}
-                        style={[
-                          styles.copyChip,
-                          {
-                            borderColor: selected ? colors.primary : colors.border,
-                            backgroundColor: selected ? colors.primary : 'transparent',
-                          },
-                        ]}
-                        onPress={() => {
-                          if (!selected) updateOwnedCopy({ finish });
-                        }}
-                      >
-                        <Text style={[styles.copyChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
-                          {t(`card.finishes.${finish}`)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                {cardDetails.finishEditable !== false ? (
+                  <>
+                    <Text style={[styles.copyEditorLabel, { color: colors.text.secondary }]}>
+                      {t('card.finish')}
+                    </Text>
+                    <View style={styles.copyEditorRow}>
+                      {CARD_FINISHES.map((finish) => {
+                        const selected = cardDetails.finish === finish;
+                        return (
+                          <TouchableOpacity
+                            key={finish}
+                            style={[
+                              styles.copyChip,
+                              {
+                                borderColor: selected ? colors.primary : colors.border,
+                                backgroundColor: selected ? colors.primary : 'transparent',
+                              },
+                            ]}
+                            onPress={() => {
+                              if (!selected) updateOwnedCopy({ finish });
+                            }}
+                          >
+                            <Text style={[styles.copyChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
+                              {t(`card.finishes.${finish}`)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
 
                 <Text style={[styles.copyEditorLabel, { color: colors.text.secondary }]}>
                   {t('card.condition')}
