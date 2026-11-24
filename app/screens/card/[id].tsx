@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions, Alert, Modal, TextInput, Animated, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Dimensions, Alert, Modal, TextInput, Animated, PanResponder } from 'react-native';
+import Reanimated from 'react-native-reanimated';
+import { GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { CardImageSlider } from '../../components/CardImageSlider';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { readRouteParam } from '../../lib/cardBrowse';
+import { useCardBrowse } from '../../lib/useCardBrowse';
 import { useAuth } from '../../lib/auth';
 import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
@@ -36,6 +40,14 @@ function normalizeConditionKey(value?: string | null) {
   if (!value) return '';
   const key = value.toLowerCase().replace(/\s+/g, '');
   return (COPY_CONDITIONS as readonly string[]).includes(key) ? key : '';
+}
+
+function normalizeFinishKey(value?: string | null) {
+  const key = String(value ?? '').toLowerCase().replace(/[\s_-]+/g, '');
+  if (key === 'normal' || key === 'normale' || key === 'nonholo') return 'normale';
+  if (key === 'holo' || key === 'holofoil' || key === 'holographique' || key === 'holographic') return 'holo';
+  if (key === 'reverse' || key === 'inverse' || key === 'reverseholo') return 'inverse';
+  return '';
 }
 
 const USER_CARD_COLUMNS = 'id, condition, price, is_for_sale, image_url, created_at';
@@ -76,17 +88,14 @@ interface CardDetails {
 }
 
 export default function CardDetailScreen() {
-  const { id: rawCardId, userCardId: rawUserCardId } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id?: string | string[];
     userCardId?: string | string[];
+    browse?: string | string[];
   }>();
-  const cardId = rawCardId ? (Array.isArray(rawCardId) ? rawCardId[0] : rawCardId) : undefined;
-  const userCardIdParam =
-    rawUserCardId !== undefined
-      ? Array.isArray(rawUserCardId)
-        ? rawUserCardId[0]
-        : rawUserCardId
-      : undefined;
+  const routeCardId = readRouteParam(params.id);
+  const routeUserCardId = readRouteParam(params.userCardId);
+  const browseOn = readRouteParam(params.browse) === '1';
   const { user } = useAuth();
   const { canUsePriceAlerts, showPremiumUpsell } = useSubscriptionRestrictions();
   const { t } = useTranslation();
@@ -111,6 +120,8 @@ export default function CardDetailScreen() {
   const sliderTrackWidthRef = useRef(0);
   const isDeletingCardRef = useRef(false);
   const handleDeleteCardRef = useRef<() => void>(() => {});
+  const loadRequestRef = useRef(0);
+  const scrollRef = useRef<GestureScrollView>(null);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS = {
@@ -121,9 +132,23 @@ export default function CardDetailScreen() {
   };
   
   const CONDITIONS = Object.keys(CONDITION_COLORS);
+
+  const browse = useCardBrowse({
+    routeCardId,
+    routeUserCardId,
+    browseOn,
+    hasUserPhoto: !!cardDetails?.user_photo_url,
+    blocked: showSellModal || showDeleteModal,
+  });
+  const cardId = browse.cardId;
+  const userCardIdParam = browse.userCardId;
   
   useEffect(() => {
     if (cardId && user) {
+      setShowSellModal(false);
+      setShowDeleteModal(false);
+      setInWishlist(false);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
       loadCardDetails();
       checkWishlist();
     }
@@ -131,7 +156,8 @@ export default function CardDetailScreen() {
   
   const loadCardDetails = async () => {
     if (!cardId || !user) return;
-    
+
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     try {
       // 1. Récupérer les détails de la carte officielle
@@ -271,10 +297,12 @@ export default function CardDetailScreen() {
         user_photo_url: userPhotoUrl,
       };
       
+      if (requestId !== loadRequestRef.current) return;
       setCardDetails(cardDetails);
     } catch (error) {
       console.error("Erreur lors du chargement des détails de la carte:", error);
     } finally {
+      if (requestId !== loadRequestRef.current) return;
       setLoading(false);
     }
   };
@@ -282,6 +310,7 @@ export default function CardDetailScreen() {
   const updateOwnedCopy = async (patch: { finish?: string; condition?: string }) => {
     if (!cardDetails?.user_card_id || !user?.id) return;
     const previous = cardDetails;
+    const targetCardId = cardDetails.id;
     setCardDetails({ ...cardDetails, ...patch });
     try {
       const { error } = await supabase
@@ -297,6 +326,7 @@ export default function CardDetailScreen() {
       });
     } catch (error) {
       console.error("Erreur lors de la mise à jour de l'exemplaire:", error);
+      if (browse.activeCardRef.current.id !== targetCardId) return;
       setCardDetails(previous);
       Alert.alert(t('general.error'), t('card.updateCopyError'));
     }
@@ -304,8 +334,10 @@ export default function CardDetailScreen() {
 
   const checkWishlist = async () => {
     if (!user || !cardId) return;
+    const requestedId = cardId;
     const { data: wishlist } = await getUserWishlist(user.id);
-    setInWishlist((wishlist as string[]).includes(cardId));
+    if (browse.activeCardRef.current.id !== requestedId) return;
+    setInWishlist((wishlist as string[]).includes(requestedId));
   };
   
   // Formatter les prix
@@ -332,6 +364,7 @@ export default function CardDetailScreen() {
   // Action lorsqu'on clique sur Vendre
   const handleSell = async () => {
     if (!cardDetails?.user_card_id) return;
+    const targetCardId = cardDetails.id;
     
     if (cardDetails.is_for_sale) {
       // Si la carte est déjà en vente, la retirer de la vente
@@ -344,6 +377,7 @@ export default function CardDetailScreen() {
           .eq('id', cardDetails.user_card_id);
         
         if (error) throw error;
+        if (browse.activeCardRef.current.id !== targetCardId) return;
         
         // Mettre à jour l'état local
         setCardDetails({
@@ -356,7 +390,7 @@ export default function CardDetailScreen() {
       } catch (error) {
         console.error("Erreur lors du retrait de la vente:", error);
       } finally {
-        setLoading(false);
+        if (browse.activeCardRef.current.id === targetCardId) setLoading(false);
       }
     } else {
       // Ouvrir le modal pour mettre en vente
@@ -378,6 +412,7 @@ export default function CardDetailScreen() {
   // Confirmer la vente
   const handleConfirmSell = async () => {
     if (!cardDetails?.user_card_id) return;
+    const targetCardId = cardDetails.id;
     
     try {
       setLoading(true);
@@ -399,6 +434,7 @@ export default function CardDetailScreen() {
         .eq('id', cardDetails.user_card_id);
       
       if (error) throw error;
+      if (browse.activeCardRef.current.id !== targetCardId) return;
       
       // Mettre à jour l'état local
       setCardDetails({
@@ -415,7 +451,7 @@ export default function CardDetailScreen() {
       console.error("Erreur lors de la mise en vente de la carte:", error);
       Alert.alert(t('general.error'), t('sell.error'));
     } finally {
-      setLoading(false);
+      if (browse.activeCardRef.current.id === targetCardId) setLoading(false);
     }
   };
 
@@ -519,6 +555,7 @@ export default function CardDetailScreen() {
   // Action lorsqu'on clique sur Définir une alerte de prix
   const handlePriceAlert = async () => {
     if (!cardDetails || !user) return;
+    const targetCardId = cardDetails.id;
     
     try {
       setLoading(true);
@@ -566,16 +603,16 @@ export default function CardDetailScreen() {
       }
       
       // Rafraîchir les données
-      loadCardDetails();
+      if (browse.activeCardRef.current.id === targetCardId) loadCardDetails();
       
     } catch (error) {
       console.error('Erreur lors de la gestion de l\'alerte de prix:', error);
     } finally {
-      setLoading(false);
+      if (browse.activeCardRef.current.id === targetCardId) setLoading(false);
     }
   };
   
-  if (loading) {
+  if (loading && !cardDetails) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen 
@@ -630,14 +667,54 @@ export default function CardDetailScreen() {
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
           {cardDetails.name}
         </Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        </View>
       </View>
-      
-      <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+
+      <GestureDetector gesture={browse.panGesture}>
+        <Reanimated.View style={[styles.screenBody, browse.animatedStyle]} collapsable={false}>
+          {browse.canBrowse ? (
+            <View style={styles.browseBar}>
+              <TouchableOpacity
+                accessibilityLabel={t('card.previousCard')}
+                disabled={!browse.position.prev}
+                onPress={() => browse.position.prev && browse.goTo(browse.position.prev)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{ opacity: browse.position.prev ? 1 : 0.3 }}
+              >
+                <Ionicons name="chevron-back" size={26} color={colors.text.primary} />
+              </TouchableOpacity>
+              <View style={styles.browseCenter}>
+                <Text style={[styles.browseCount, { color: colors.text.secondary }]}>
+                  {browse.position.index + 1} / {browse.position.total}
+                </Text>
+                <Text style={[styles.browseHint, { color: colors.text.secondary }]} numberOfLines={1}>
+                  {t('card.swipeHint')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityLabel={t('card.nextCard')}
+                disabled={!browse.position.next}
+                onPress={() => browse.position.next && browse.goTo(browse.position.next)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{ opacity: browse.position.next ? 1 : 0.3 }}
+              >
+                <Ionicons name="chevron-forward" size={26} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          <GestureDetector gesture={browse.scrollGesture}>
+            <GestureScrollView
+              ref={scrollRef}
+              style={[styles.scrollContainer, loading ? { opacity: 0.55 } : null]}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              directionalLockEnabled
+              nestedScrollEnabled
+              pointerEvents={loading ? 'none' : 'auto'}
+            >
         {/* Carte : pastilles sur l’illustration ; photo R2 = fondu (pas rotateY 3D) */}
         <View style={styles.cardSection}>
           <View
@@ -653,6 +730,7 @@ export default function CardDetailScreen() {
                   height={windowWidth * 1.1}
                   officialUri={cardDetails.image_large || cardDetails.image_small}
                   userPhotoUri={cardDetails.user_photo_url}
+                  nativeGesture={browse.imageGesture}
                 />
               ) : (
                 <Image
@@ -725,7 +803,7 @@ export default function CardDetailScreen() {
                     </Text>
                     <View style={styles.copyEditorRow}>
                       {CARD_FINISHES.map((finish) => {
-                        const selected = cardDetails.finish === finish;
+                        const selected = normalizeFinishKey(cardDetails.finish) === finish;
                         return (
                           <TouchableOpacity
                             key={finish}
@@ -936,7 +1014,10 @@ export default function CardDetailScreen() {
             </Text>
           </TouchableOpacity>
         ) : null}
-      </ScrollView>
+            </GestureScrollView>
+          </GestureDetector>
+        </Reanimated.View>
+      </GestureDetector>
       
       {/* Modal de vente */}
       <Modal
@@ -1163,6 +1244,31 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screenBody: {
+    flex: 1,
+  },
+  browseBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  browseCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  browseCount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  browseHint: {
+    fontSize: 11,
+    marginTop: 2,
   },
   scrollContainer: {
     flex: 1,

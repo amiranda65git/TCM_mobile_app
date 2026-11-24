@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Image, TextInput, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, FlatList, Image, TextInput, Keyboard, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useTranslation } from 'react-i18next';
@@ -9,9 +9,10 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchCards, getMyMarketCards } from '../lib/supabase';
+import { supabase, getTopCards, getTopGainers, getTopLosers, getWatchedCards, searchMarketCards, getMyMarketCards } from '../lib/supabase';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 
 // Mise à jour du composant CardListItem pour accepter des enfants (pour la différence de prix)
@@ -41,6 +42,21 @@ const CardListItem = ({ card, colors, onPress, children }: { card: any, colors: 
     </View>
   </TouchableOpacity>
 );
+
+const PRICE_RANGES = [
+  { id: 'all', min: null as number | null, max: null as number | null },
+  { id: 'lt5', min: null, max: 5 },
+  { id: 'm5_20', min: 5, max: 20 },
+  { id: 'm20_50', min: 20, max: 50 },
+  { id: 'gt50', min: 50, max: null },
+];
+
+function parsePriceInput(value: string): number | null {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
 // Fonction pour nettoyer et sécuriser les données numériques
 const sanitizeNumericData = (data: any[]) => {
@@ -90,6 +106,7 @@ export default function MarketScreen() {
   const [losers, setLosers] = useState<any[]>([]);
   const [losersLoading, setLosersLoading] = useState(true);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [watched, setWatched] = useState<any[]>([]);
   const [watchedLoading, setWatchedLoading] = useState(true);
@@ -109,6 +126,38 @@ export default function MarketScreen() {
   const [ownedCardIds, setOwnedCardIds] = useState<Set<string>>(new Set());
   const [ownedMarketCards, setOwnedMarketCards] = useState<any[]>([]);
   const [ownedMarketLoading, setOwnedMarketLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [pricePreset, setPricePreset] = useState('all');
+  const [priceMinInput, setPriceMinInput] = useState('');
+  const [priceMaxInput, setPriceMaxInput] = useState('');
+  const [editionId, setEditionId] = useState<string | null>(null);
+  const [editionName, setEditionName] = useState('');
+  const [cardLang, setCardLang] = useState<'' | 'FR' | 'EN'>('');
+  const [editionModal, setEditionModal] = useState(false);
+  const [editionQuery, setEditionQuery] = useState('');
+  const [editions, setEditions] = useState<{ id: string; name: string }[]>([]);
+  const [editionsLoading, setEditionsLoading] = useState(false);
+  const [catalogResults, setCatalogResults] = useState<any[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
+  const priceBounds = useMemo(() => {
+    if (pricePreset === 'custom') {
+      let min = parsePriceInput(priceMinInput);
+      let max = parsePriceInput(priceMaxInput);
+      if (min != null && max != null && min > max) {
+        const swap = min;
+        min = max;
+        max = swap;
+      }
+      return { min, max };
+    }
+    const range = PRICE_RANGES.find((item) => item.id === pricePreset);
+    return { min: range?.min ?? null, max: range?.max ?? null };
+  }, [pricePreset, priceMinInput, priceMaxInput]);
+
+  const hasPriceFilter = priceBounds.min != null || priceBounds.max != null;
+  const hasCatalogFilters = hasPriceFilter || !!editionId || !!cardLang;
+  const activeFilterCount = (hasPriceFilter ? 1 : 0) + (editionId ? 1 : 0) + (cardLang ? 1 : 0);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -262,60 +311,128 @@ export default function MarketScreen() {
   const loadingForTab = (fallbackLoading: boolean) =>
     onlyMyCards && !isFiltering ? ownedMarketLoading : fallbackLoading;
 
-  // Nouvel effet pour la recherche
+  const marketFilters = useMemo(() => ({
+    editionId,
+    lang: cardLang || null,
+    minPrice: priceBounds.min,
+    maxPrice: priceBounds.max,
+    cardIds: onlyMyCards ? Array.from(ownedCardIds) : null,
+  }), [editionId, cardLang, priceBounds.min, priceBounds.max, onlyMyCards, ownedCardIds]);
+
+  // Recherche par nom, en tenant compte des filtres
   useEffect(() => {
     const delaySearch = setTimeout(async () => {
       if (searchQuery.trim().length >= 2) {
         setIsSearching(true);
-        const { data, error } = await searchCards(searchQuery);
-        if (!error && data) {
-          setSearchResults(data);
-        } else {
-          setSearchResults([]);
-        }
+        const { data, error } = await searchMarketCards({
+          query: searchQuery,
+          ...marketFilters,
+          limit: 20,
+        });
+        setSearchResults(!error && data ? data : []);
         setIsSearching(false);
         setShowSuggestions(true);
       } else {
         setSearchResults([]);
         setShowSuggestions(false);
       }
-    }, 500);
+    }, 400);
 
     return () => clearTimeout(delaySearch);
-  }, [searchQuery]);
+  }, [searchQuery, marketFilters]);
 
-  // Fonction qui recherche toutes les cartes par nom dans la base de données
-  const handleCardSelect = async (cardName: string) => {
+  // Nom choisi : toutes les éditions de cette carte, dans la tranche et la collection
+  useEffect(() => {
+    if (!isFiltering || !filterName) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsLoadingFilteredCards(true);
+      const { data, error } = await searchMarketCards({
+        query: filterName,
+        ...marketFilters,
+        limit: 400,
+      });
+      if (cancelled) return;
+      if (!error && data) {
+        const exact = data.filter((card) => String(card.card_name).toLowerCase() === filterName.toLowerCase());
+        setFilteredCards(exact.length > 0 ? exact : data);
+      } else {
+        setFilteredCards([]);
+      }
+      setIsLoadingFilteredCards(false);
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isFiltering, filterName, marketFilters]);
+
+  // Filtres sans nom : interroger les cotations, pas le top tronqué
+  useEffect(() => {
+    if (!hasCatalogFilters || isFiltering || searchQuery.trim().length >= 2) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setCatalogLoading(true);
+      const { data, error } = await searchMarketCards({
+        ...marketFilters,
+        limit: editionId ? 400 : 100,
+      });
+      if (cancelled) return;
+      setCatalogResults(!error && data ? data : []);
+      setCatalogLoading(false);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [hasCatalogFilters, isFiltering, searchQuery, editionId, marketFilters]);
+
+  const handleCardSelect = (cardName: string) => {
     setFilterName(cardName);
     setIsFiltering(true);
     setSearchQuery('');
     setShowSuggestions(false);
-    setIsLoadingFilteredCards(true);
     Keyboard.dismiss();
-    
-    // Rechercher toutes les cartes avec ce nom dans la base de données
-    try {
-      const { data, error } = await searchCards(cardName, 1000); // Limite élevée pour récupérer toutes les cartes
-      if (!error && data) {
-        setFilteredCards(data);
-      } else {
-        console.error('Erreur lors de la recherche:', error);
-        setFilteredCards([]);
-      }
-    } catch (error) {
-      console.error('Erreur lors de la recherche:', error);
-      setFilteredCards([]);
-    } finally {
-      setIsLoadingFilteredCards(false);
-    }
   };
 
-  // Fonction pour effacer le filtre
   const clearFilter = () => {
     setIsFiltering(false);
     setFilterName('');
     setFilteredCards([]);
   };
+
+  const clearCatalogFilters = () => {
+    setPricePreset('all');
+    setPriceMinInput('');
+    setPriceMaxInput('');
+    setEditionId(null);
+    setEditionName('');
+    setCardLang('');
+  };
+
+  const openEditionPicker = async () => {
+    setEditionModal(true);
+    if (editions.length > 0 || editionsLoading) return;
+    setEditionsLoading(true);
+    const { data, error } = await supabase
+      .from('editions')
+      .select('id, name')
+      .order('name')
+      .limit(1000);
+    setEditions(!error && data ? data.filter((edition) => edition.name) : []);
+    setEditionsLoading(false);
+  };
+
+  const priceChipLabel = (range: (typeof PRICE_RANGES)[number]) => {
+    if (range.id === 'all') return t('market.priceAll');
+    if (range.min == null && range.max != null) return t('market.priceUnder', { max: range.max });
+    if (range.min != null && range.max == null) return t('market.priceOver', { min: range.min });
+    return t('market.priceBetween', { min: range.min, max: range.max });
+  };
+
+  const visibleEditions = editions.filter((edition) =>
+    edition.name.toLowerCase().includes(editionQuery.trim().toLowerCase())
+  );
 
   // Placeholders pour chaque onglet avec prise en compte du filtrage
   const AllCardsRoute = () => (
@@ -567,6 +684,8 @@ export default function MarketScreen() {
     }
   };
 
+  const suggestionItems = applyOwnedFilter(searchResults);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -593,40 +712,171 @@ export default function MarketScreen() {
 
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.onlyMyCardsChip,
-          {
-            backgroundColor: onlyMyCards ? colors.primary : colors.surface,
-            borderColor: onlyMyCards ? colors.primary : colors.border,
-          },
-        ]}
-        onPress={() => setOnlyMyCards((v) => !v)}
-        activeOpacity={0.8}
-        disabled={!user?.id}
-      >
-        <Ionicons
-          name={onlyMyCards ? 'checkbox' : 'square-outline'}
-          size={18}
-          color={onlyMyCards ? '#FFFFFF' : colors.text.secondary}
-          style={{ marginRight: 8 }}
-        />
-        <Text
-          style={{
-            color: onlyMyCards ? '#FFFFFF' : colors.text.primary,
-            fontWeight: '600',
-            fontSize: 13,
-          }}
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[
+            styles.onlyMyCardsChip,
+            {
+              backgroundColor: onlyMyCards ? colors.primary : colors.surface,
+              borderColor: onlyMyCards ? colors.primary : colors.border,
+            },
+          ]}
+          onPress={() => setOnlyMyCards((v) => !v)}
+          activeOpacity={0.8}
+          disabled={!user?.id}
         >
-          {t('market.onlyMyCards')}
-        </Text>
-      </TouchableOpacity>
+          <Ionicons
+            name={onlyMyCards ? 'checkbox' : 'square-outline'}
+            size={18}
+            color={onlyMyCards ? '#FFFFFF' : colors.text.secondary}
+            style={{ marginRight: 8 }}
+          />
+          <Text
+            style={{
+              color: onlyMyCards ? '#FFFFFF' : colors.text.primary,
+              fontWeight: '600',
+              fontSize: 13,
+            }}
+          >
+            {t('market.onlyMyCards')}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.onlyMyCardsChip,
+            {
+              backgroundColor: hasCatalogFilters ? colors.primary : colors.surface,
+              borderColor: hasCatalogFilters ? colors.primary : colors.border,
+            },
+          ]}
+          onPress={() => setShowFilters((open) => !open)}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={hasCatalogFilters ? '#FFFFFF' : colors.text.secondary}
+            style={{ marginRight: 8 }}
+          />
+          <Text
+            style={{
+              color: hasCatalogFilters ? '#FFFFFF' : colors.text.primary,
+              fontWeight: '600',
+              fontSize: 13,
+            }}
+          >
+            {t('market.filters')}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {showFilters && (
+        <View style={[styles.filterPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>{t('market.priceRange')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.priceChipRow}>
+            {PRICE_RANGES.map((range) => {
+              const selected = pricePreset === range.id;
+              return (
+                <TouchableOpacity
+                  key={range.id}
+                  style={[
+                    styles.choiceChip,
+                    {
+                      backgroundColor: selected ? colors.primary : colors.background,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}
+                  onPress={() => {
+                    setPricePreset(range.id);
+                    setPriceMinInput('');
+                    setPriceMaxInput('');
+                  }}
+                >
+                  <Text style={{ color: selected ? '#FFFFFF' : colors.text.primary, fontSize: 13, fontWeight: '600' }}>
+                    {priceChipLabel(range)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.priceInputs}>
+            <TextInput
+              style={[styles.priceInput, { color: colors.text.primary, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholder={t('market.priceMin')}
+              placeholderTextColor={colors.text.secondary}
+              keyboardType="decimal-pad"
+              value={priceMinInput}
+              onChangeText={(value) => {
+                setPriceMinInput(value);
+                setPricePreset('custom');
+              }}
+            />
+            <TextInput
+              style={[styles.priceInput, { color: colors.text.primary, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholder={t('market.priceMax')}
+              placeholderTextColor={colors.text.secondary}
+              keyboardType="decimal-pad"
+              value={priceMaxInput}
+              onChangeText={(value) => {
+                setPriceMaxInput(value);
+                setPricePreset('custom');
+              }}
+            />
+          </View>
+
+          <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>{t('market.collection')}</Text>
+          <TouchableOpacity
+            style={[styles.editionButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+            onPress={openEditionPicker}
+          >
+            <Text style={{ color: editionName ? colors.text.primary : colors.text.secondary, flex: 1 }} numberOfLines={1}>
+              {editionName || t('market.allCollections')}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={colors.text.secondary} />
+          </TouchableOpacity>
+
+          <Text style={[styles.filterLabel, { color: colors.text.secondary }]}>{t('market.language')}</Text>
+          <View style={styles.chipRow}>
+            {([
+              { id: '', label: t('market.langAll') },
+              { id: 'FR', label: t('market.langFr') },
+              { id: 'EN', label: t('market.langEn') },
+            ] as const).map((option) => {
+              const selected = cardLang === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id || 'all'}
+                  style={[
+                    styles.choiceChip,
+                    {
+                      backgroundColor: selected ? colors.primary : colors.background,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}
+                  onPress={() => setCardLang(option.id)}
+                >
+                  <Text style={{ color: selected ? '#FFFFFF' : colors.text.primary, fontSize: 13, fontWeight: '600' }}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {hasCatalogFilters && (
+            <TouchableOpacity onPress={clearCatalogFilters} style={styles.clearFiltersButton}>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>{t('market.clearFilters')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
       
       {/* Suggestions de recherche */}
-      {showSuggestions && searchResults.length > 0 ? (
+      {showSuggestions && suggestionItems.length > 0 ? (
         <View style={[styles.suggestionsContainer, { backgroundColor: colors.surface }]}>
           <FlatList
-            data={searchResults}
+            data={suggestionItems}
             keyExtractor={item => item.card_id}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -641,8 +891,10 @@ export default function MarketScreen() {
                   )}
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text.primary, fontWeight: 'bold' }}>{item.card_name}</Text>
-                    {item.edition_name && (
-                      <Text style={{ color: colors.text.secondary, fontSize: 12 }}>{item.edition_name}</Text>
+                    {(item.edition_name || item.lang) && (
+                      <Text style={{ color: colors.text.secondary, fontSize: 12 }} numberOfLines={1}>
+                        {[item.edition_name, item.lang].filter(Boolean).join(' · ')}
+                      </Text>
                     )}
                   </View>
                   {item.price_mid !== null && item.price_mid !== undefined ? (
@@ -668,8 +920,32 @@ export default function MarketScreen() {
         </View>
       ) : null}
       
-      {/* Contenu des onglets - masqué pendant la recherche */}
-      {!showSuggestions && (
+      {!showSuggestions && hasCatalogFilters && !isFiltering ? (
+        <View style={{ flex: 1, padding: 8 }}>
+          {catalogLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={applyOwnedFilter(catalogResults)}
+              keyExtractor={(item) => item.card_id}
+              renderItem={({ item }) => (
+                <CardListItem
+                  card={item}
+                  colors={colors}
+                  onPress={() => router.push(`/screens/card/${item.card_id}`)}
+                />
+              )}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text style={{ color: colors.text.secondary, textAlign: 'center', marginTop: 20 }}>
+                  {onlyMyCards ? t('market.noOwnedInMarket') : t('market.noFilterResults')}
+                </Text>
+              }
+            />
+          )}
+        </View>
+      ) : !showSuggestions ? (
         <TabView
           navigationState={{ index, routes }}
           renderScene={renderScene}
@@ -689,7 +965,62 @@ export default function MarketScreen() {
           )}
           style={{ flex: 1 }}
         />
-      )}
+      ) : null}
+
+      <Modal visible={editionModal} animationType="slide" onRequestClose={() => setEditionModal(false)}>
+        <View style={[styles.modalPage, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text.primary }]}>{t('market.collection')}</Text>
+            <TouchableOpacity onPress={() => setEditionModal(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={[styles.editionSearch, { color: colors.text.primary, backgroundColor: colors.surface }]}
+            placeholder={t('market.searchCollection')}
+            placeholderTextColor={colors.text.secondary}
+            value={editionQuery}
+            onChangeText={setEditionQuery}
+            autoCorrect={false}
+          />
+          {editionsLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+          ) : (
+            <FlatList
+              data={visibleEditions}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+              ListHeaderComponent={
+                <TouchableOpacity
+                  style={[styles.editionRow, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setEditionId(null);
+                    setEditionName('');
+                    setEditionModal(false);
+                  }}
+                >
+                  <Text style={{ color: colors.primary, fontWeight: '600' }}>{t('market.allCollections')}</Text>
+                </TouchableOpacity>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.editionRow, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setEditionId(item.id);
+                    setEditionName(item.name);
+                    setEditionModal(false);
+                  }}
+                >
+                  <Text style={{ color: item.id === editionId ? colors.primary : colors.text.primary, fontWeight: item.id === editionId ? '700' : '400' }}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -720,16 +1051,104 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
   onlyMyCardsChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginHorizontal: 16,
-    marginBottom: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  filterPanel: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  priceChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  choiceChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  priceInputs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  priceInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+  },
+  editionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  clearFiltersButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  modalPage: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  editionSearch: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  editionRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchInput: {
     flex: 1,
@@ -737,18 +1156,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   suggestionsContainer: {
-    position: 'absolute',
-    top: 110, // Position en dessous du champ de recherche
-    left: 16,
-    right: 16,
-    maxHeight: 300,
+    flex: 1,
+    marginHorizontal: 16,
+    marginBottom: 16,
     borderRadius: 8,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   suggestionItem: {
     padding: 12,

@@ -1864,6 +1864,93 @@ export const searchCards = async (
   }
 };
 
+export type MarketSearchFilters = {
+  query?: string;
+  editionId?: string | null;
+  lang?: string | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  cardIds?: string[] | null;
+  limit?: number;
+};
+
+/** Cotations récentes, filtrables par nom, collection, langue et tranche de prix. */
+export const searchMarketCards = async (filters: MarketSearchFilters = {}) => {
+  try {
+    if (filters.cardIds && filters.cardIds.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const limit = filters.limit ?? 80;
+    const chunks = filters.cardIds?.length
+      ? Array.from({ length: Math.ceil(filters.cardIds.length / 80) }, (_, index) =>
+          filters.cardIds!.slice(index * 80, index * 80 + 80)
+        )
+      : [null];
+    const rows: any[] = [];
+
+    for (const chunk of chunks) {
+      let query = supabase
+        .from('market_card_last')
+        .select(`
+          card_id,
+          card_name,
+          price_mid,
+          official_cards!inner (
+            image_small,
+            edition_id,
+            lang,
+            editions:edition_id ( name )
+          )
+        `);
+
+      const term = filters.query?.trim();
+      if (term) query = query.ilike('card_name', `%${term}%`);
+      if (filters.editionId) query = query.eq('official_cards.edition_id', filters.editionId);
+      if (filters.lang) query = query.eq('official_cards.lang', filters.lang);
+      if (filters.minPrice != null && Number.isFinite(filters.minPrice)) {
+        query = query.gte('price_mid', filters.minPrice);
+      }
+      if (filters.maxPrice != null && Number.isFinite(filters.maxPrice)) {
+        query = query.lte('price_mid', filters.maxPrice);
+      }
+      if (chunk) query = query.in('card_id', chunk);
+
+      const { data, error } = await query.order('price_mid', { ascending: false }).limit(chunk ? chunk.length : limit);
+      if (error) {
+        console.error('Erreur lors de la recherche marché:', error);
+        return { data: [], error };
+      }
+      rows.push(...(data ?? []));
+    }
+
+    const transformed = rows.map((card: any) => {
+      const official = embeddedOne<{
+        image_small?: string;
+        edition_id?: string;
+        lang?: string;
+        editions?: { name?: string } | { name?: string }[] | null;
+      }>(card.official_cards);
+      const edition = embeddedOne(official?.editions);
+      return {
+        card_id: card.card_id,
+        card_name: card.card_name,
+        price_mid: card.price_mid != null ? Number(card.price_mid) : null,
+        image_small: official?.image_small,
+        edition_id: official?.edition_id ?? null,
+        edition_name: edition?.name || '',
+        lang: official?.lang || null,
+      };
+    });
+
+    transformed.sort((a, b) => (b.price_mid ?? 0) - (a.price_mid ?? 0));
+    return { data: transformed.slice(0, limit), error: null };
+  } catch (error) {
+    console.error('Erreur inattendue lors de la recherche marché:', error);
+    return { data: [], error };
+  }
+};
+
 // Fonction pour enregistrer une offre d'achat
 export const createOffer = async ({ buyer_id, seller_id, user_card_id, proposed_price, message = '' }: {
   buyer_id: string,
@@ -2776,6 +2863,7 @@ const SupabaseService = {
   getWatchedCards,
   signInWithGoogle,
   searchCards,
+  searchMarketCards,
   createOffer,
   createOfferNotification,
   getUserNotifications,

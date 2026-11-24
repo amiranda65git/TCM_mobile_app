@@ -290,6 +290,11 @@ export default function AllCardsScreen() {
     }
   };
 
+  const browseEntries = filteredCards.map((entry) => ({
+    id: String(entry.card.id),
+    userCardId: entry.user_card_id != null ? String(entry.user_card_id) : undefined,
+  }));
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -364,6 +369,7 @@ export default function AllCardsScreen() {
             onPriceAlertPress={handleCreatePriceAlert}
             onWishlistPress={handleToggleWishlist}
             showOwnershipIcon={false} // On sait déjà que toutes les cartes sont possédées
+            browseEntries={browseEntries}
           />
         )}
         ListEmptyComponent={

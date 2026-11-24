@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Image } from 'react
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import LanguageFlag from './LanguageFlag';
+import { setCardBrowseList, type CardBrowseEntry } from '../lib/cardBrowse';
 
 interface CardInfo {
   id: string;
@@ -40,6 +41,7 @@ interface SwipeableCardProps {
   onWishlistPress: (card: CardInfo) => void;
   onCardPress?: (card: CardInfo) => void;
   showOwnershipIcon?: boolean;
+  browseEntries?: CardBrowseEntry[];
 }
 
 const SwipeableCard: React.FC<SwipeableCardProps> = ({ 
@@ -52,7 +54,8 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
   onPriceAlertPress, 
   onWishlistPress,
   onCardPress,
-  showOwnershipIcon = true
+  showOwnershipIcon = true,
+  browseEntries,
 }) => {
   
   const renderLeftActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
@@ -172,13 +175,19 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
   const handleCardPress = () => {
     if (onCardPress) {
       onCardPress(card);
-    } else {
-      const q =
-        card.owned && card.user_card_id
-          ? `?userCardId=${encodeURIComponent(card.user_card_id)}`
-          : '';
-      router.push(`/screens/card/${encodeURIComponent(card.id)}${q}`);
+      return;
     }
+    const canBrowse = !!browseEntries && browseEntries.length > 1;
+    if (canBrowse && browseEntries) {
+      setCardBrowseList(browseEntries);
+    }
+    const parts: string[] = [];
+    if (card.owned && card.user_card_id) {
+      parts.push(`userCardId=${encodeURIComponent(card.user_card_id)}`);
+    }
+    if (canBrowse) parts.push('browse=1');
+    const qs = parts.join('&');
+    router.push(`/screens/card/${encodeURIComponent(card.id)}${qs ? `?${qs}` : ''}`);
   };
   
   // Couleurs pour les raretés

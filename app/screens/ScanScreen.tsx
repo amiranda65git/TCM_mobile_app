@@ -1039,7 +1039,7 @@ export default function ScanScreen() {
     
     // Définir la carte sélectionnée et ouvrir le modal
     setSelectedCard(selectedCardData);
-    setSelectedFinish(finishFromRarity(selectedCardData.rarity));
+    setSelectedFinish(scanResult.finish || finishFromRarity(selectedCardData.rarity));
     setSelectedCondition(null);
     setModalVisible(true);
   };
@@ -1244,7 +1244,14 @@ export default function ScanScreen() {
                   ]}>
                     <View style={styles.matchingCardsSection}>
                       <View style={[styles.matchingCardsHeader, { backgroundColor: colors.surface + 'F0' }]}>
-                        <Text style={[styles.matchingCardsTitle, { color: colors.text.primary }]}>{t('scan.matchingCards')}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.matchingCardsTitle, { color: colors.text.primary }]}>{t('scan.matchingCards')}</Text>
+                          {scanResult.finish ? (
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, marginTop: 2 }}>
+                              {t('card.finish')} : {t(`card.finishes.${scanResult.finish}`)}
+                            </Text>
+                          ) : null}
+                        </View>
                         {isLoadingCards && <ActivityIndicator size="small" color={colors.primary} />}
                       </View>
 

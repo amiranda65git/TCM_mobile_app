@@ -1,14 +1,16 @@
 import React, { useRef, useState } from 'react';
-import { View, Image, StyleSheet, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, Image, StyleSheet, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { GestureDetector, ScrollView, type NativeGesture } from 'react-native-gesture-handler';
 
 type Props = {
   width: number;
   height: number;
   officialUri: string;
   userPhotoUri: string;
+  nativeGesture?: NativeGesture;
 };
 
-export function CardImageSlider({ width, height, officialUri, userPhotoUri }: Props) {
+export function CardImageSlider({ width, height, officialUri, userPhotoUri, nativeGesture }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -17,19 +19,25 @@ export function CardImageSlider({ width, height, officialUri, userPhotoUri }: Pr
     setCurrentPage(page);
   };
 
+  const pager = (
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      pagingEnabled
+      directionalLockEnabled
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator={false}
+      onMomentumScrollEnd={onScrollEnd}
+      style={{ width, height }}
+    >
+      <Image source={{ uri: officialUri }} style={{ width, height }} resizeMode="contain" />
+      <Image source={{ uri: userPhotoUri }} style={{ width, height }} resizeMode="cover" />
+    </ScrollView>
+  );
+
   return (
     <View style={{ width, height }}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onScrollEnd}
-        style={{ width, height }}
-      >
-        <Image source={{ uri: officialUri }} style={{ width, height }} resizeMode="contain" />
-        <Image source={{ uri: userPhotoUri }} style={{ width, height }} resizeMode="cover" />
-      </ScrollView>
+      {nativeGesture ? <GestureDetector gesture={nativeGesture}>{pager}</GestureDetector> : pager}
       <View style={styles.dotsRow}>
         <View style={[styles.dot, currentPage === 0 ? styles.dotActive : null]} />
         <View style={[styles.dot, currentPage === 1 ? styles.dotActive : null]} />

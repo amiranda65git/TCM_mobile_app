@@ -337,6 +337,10 @@ export default function EditionDetail() {
   // Filtrer les cartes selon l'état de showOnlyOwned
   const filteredCards = editionDetail?.cards.filter(card => !showOnlyOwned || card.owned) || [];
   const visibleCards = filteredCards.slice(0, visibleCount);
+  const browseEntries = filteredCards.map((entry) => ({
+    id: entry.id,
+    userCardId: entry.user_card_id || undefined,
+  }));
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -501,6 +505,7 @@ export default function EditionDetail() {
             onSellPress={handleSellPress}
             onPriceAlertPress={handlePriceAlert}
             onWishlistPress={handleWishlist}
+            browseEntries={browseEntries}
           />
         )}
         ListFooterComponent={
