@@ -42,6 +42,8 @@ interface SwipeableCardProps {
   onCardPress?: (card: CardInfo) => void;
   showOwnershipIcon?: boolean;
   browseEntries?: CardBrowseEntry[];
+  onFolderPress?: () => void;
+  folderAssigned?: boolean;
 }
 
 const SwipeableCard: React.FC<SwipeableCardProps> = ({ 
@@ -56,6 +58,8 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
   onCardPress,
   showOwnershipIcon = true,
   browseEntries,
+  onFolderPress,
+  folderAssigned = false,
 }) => {
   
   const renderLeftActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
@@ -250,11 +254,26 @@ const SwipeableCard: React.FC<SwipeableCardProps> = ({
             
             {/* Prix aligné à droite */}
             <View style={styles.priceContainer}>
+              <View style={styles.priceLine}>
+                {onFolderPress ? (
+                  <TouchableOpacity
+                    onPress={onFolderPress}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.folderButton}
+                  >
+                    <Ionicons
+                      name={folderAssigned ? 'folder' : 'folder-outline'}
+                      size={16}
+                      color={folderAssigned ? colors.primary : colors.text.secondary}
+                    />
+                  </TouchableOpacity>
+                ) : null}
               {card.market_price_mid && (
                 <Text style={[styles.marketPrice, { color: isDarkMode ? '#FFFFFF' : colors.primary }]}>
                   {card.market_price_mid.toFixed(2)} €
                 </Text>
               )}
+              </View>
               
               {card.price && card.is_for_sale && (
                 <Text style={[styles.cardPrice, { color: isDarkMode ? '#FFFFFF' : colors.secondary }]}>
@@ -378,6 +397,13 @@ const styles = StyleSheet.create({
   },
   priceContainer: {
     alignItems: 'flex-end',
+  },
+  priceLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  folderButton: {
+    marginRight: 6,
   },
   marketPrice: {
     fontSize: 14,

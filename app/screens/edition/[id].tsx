@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Modal, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Animated, Dimensions, Modal, TextInput, FlatList, Alert } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../lib/auth';
@@ -67,7 +67,6 @@ export default function EditionDetail() {
   const [loading, setLoading] = useState(true);
   const [editionDetail, setEditionDetail] = useState<EditionDetail | null>(null);
   const [totalValue, setTotalValue] = useState(0);
-  const [ownedCards, setOwnedCards] = useState(0);
   
   // États pour la modale de vente
   const [sellModalVisible, setSellModalVisible] = useState(false);
@@ -77,6 +76,8 @@ export default function EditionDetail() {
   
   // État pour le filtre des cartes possédées
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
+  const [showOnlyMissing, setShowOnlyMissing] = useState(false);
+  const [addingMissing, setAddingMissing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const {
@@ -141,7 +142,6 @@ export default function EditionDetail() {
           cards: cardsWithAlerts
         } as EditionDetail);
         setTotalValue(editionData.totalValue || 0);
-        setOwnedCards(editionData.ownedCards || 0);
         hasLoadedRef.current = true;
       }
     } catch (error) {
@@ -345,8 +345,44 @@ export default function EditionDetail() {
     }
   };
 
+  const addMissingToWishlist = async () => {
+    if (!user || !editionDetail || addingMissing) return;
+    const missing = editionDetail.cards.filter((card) => !card.owned && !card.has_wishlist);
+    if (missing.length === 0) {
+      const stillMissing = editionDetail.cards.some((card) => !card.owned);
+      Alert.alert(t('general.success'), stillMissing ? t('edition.missingAlreadyWishlist') : t('edition.setComplete'));
+      return;
+    }
+
+    setAddingMissing(true);
+    try {
+      const { error } = await supabase.from('wishlists').insert(
+        missing.map((card) => ({ user_id: user.id, card_id: card.id }))
+      );
+      if (error) throw error;
+      Alert.alert(t('general.success'), t('edition.missingAdded', { count: missing.length }));
+      await loadEditionDetails(true);
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout des cartes manquantes:', error);
+      Alert.alert(t('general.error'), t('edition.wishlistError'));
+    } finally {
+      setAddingMissing(false);
+    }
+  };
+
+  const uniqueOwned = new Set((editionDetail?.cards || []).filter((card) => card.owned).map((card) => card.id)).size;
+  const setSize = editionDetail
+    ? (editionDetail.printed_total || editionDetail.total || new Set(editionDetail.cards.map((card) => card.id)).size)
+    : 0;
+  const completion = setSize > 0 ? Math.min(1, uniqueOwned / setSize) : 0;
+  const missingCount = (editionDetail?.cards || []).filter((card) => !card.owned).length;
+
   // Filtrer les cartes selon l'état de showOnlyOwned
-  const filteredCards = editionDetail?.cards.filter(card => !showOnlyOwned || card.owned) || [];
+  const filteredCards = editionDetail?.cards.filter((card) => {
+    if (showOnlyMissing) return !card.owned;
+    if (showOnlyOwned) return card.owned;
+    return true;
+  }) || [];
   const visibleCards = filteredCards.slice(0, visibleCount);
   const browseEntries = filteredCards.map((entry) => ({
     id: entry.id,
@@ -356,7 +392,7 @@ export default function EditionDetail() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
     setIsLoadingMore(false);
-  }, [showOnlyOwned, editionDetail?.id]);
+  }, [showOnlyOwned, showOnlyMissing, editionDetail?.id]);
 
   useEffect(() => {
     setVisibleCount((prev) => Math.min(Math.max(prev, PAGE_SIZE), filteredCards.length || PAGE_SIZE));
@@ -429,6 +465,7 @@ export default function EditionDetail() {
           style={styles.filterButton}
           onPress={() => {
             resetListScroll();
+            setShowOnlyMissing(false);
             setShowOnlyOwned((prev) => !prev);
           }}
         >
@@ -491,10 +528,53 @@ export default function EditionDetail() {
                 {t('edition.cardsOwned')}
               </Text>
               <Text style={[styles.statValue, { color: colors.text.primary }]}>
-                {ownedCards} / {editionDetail.printed_total || editionDetail.total || editionDetail.cards.length}
+                {uniqueOwned} / {setSize}
               </Text>
             </View>
           </View>
+          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+            <View style={[styles.progressFill, { width: `${completion * 100}%`, backgroundColor: colors.primary }]} />
+          </View>
+          <View style={styles.completionActions}>
+            <TouchableOpacity
+              style={[styles.completionButton, { borderColor: colors.primary, opacity: missingCount === 0 ? 0.45 : 1 }]}
+              disabled={missingCount === 0 || addingMissing}
+              onPress={addMissingToWishlist}
+            >
+              {addingMissing ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.completionButtonText, { color: colors.primary }]}>
+                  {t('edition.addMissingWishlist')}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.completionButton,
+                {
+                  borderColor: colors.secondary,
+                  backgroundColor: showOnlyMissing ? colors.secondary : 'transparent',
+                  opacity: missingCount === 0 ? 0.45 : 1,
+                },
+              ]}
+              disabled={missingCount === 0}
+              onPress={() => {
+                resetListScroll();
+                setShowOnlyOwned(false);
+                setShowOnlyMissing((prev) => !prev);
+              }}
+            >
+              <Text style={[styles.completionButtonText, { color: showOnlyMissing ? '#FFFFFF' : colors.secondary }]}>
+                {t('edition.viewMissingMarket')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {showOnlyMissing ? (
+            <Text style={[styles.marketHint, { color: colors.text.secondary }]}>
+              {t('edition.missingMarketHint')}
+            </Text>
+          ) : null}
         </View>
         
         <View style={styles.sectionHeader}>
@@ -505,6 +585,13 @@ export default function EditionDetail() {
             <View style={[styles.filterBadge, { backgroundColor: colors.secondary }]}>
               <Text style={styles.filterBadgeText}>
                 {t('edition.onlyOwned')}
+              </Text>
+            </View>
+          )}
+          {showOnlyMissing && (
+            <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.filterBadgeText}>
+                {t('edition.missingOnly')}
               </Text>
             </View>
           )}
@@ -790,6 +877,42 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  progressTrack: {
+    height: 6,
+    width: '100%',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginTop: 14,
+  },
+  progressFill: {
+    height: 6,
+  },
+  completionActions: {
+    flexDirection: 'row',
+    width: '100%',
+    marginTop: 14,
+  },
+  completionButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+  },
+  completionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  marketHint: {
+    marginTop: 10,
+    fontSize: 12,
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',

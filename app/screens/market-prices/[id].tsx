@@ -8,6 +8,7 @@ import { useThemeColors } from '../../lib/ThemeUtils';
 import { useTheme } from '../../lib/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import { LineChart } from 'react-native-chart-kit';
+import { sourceLabel, type CardFinish } from '../../lib/priceSource';
 
 interface PriceRecord {
   id: string;
@@ -147,6 +148,11 @@ export default function MarketPricesScreen() {
     return d.toLocaleDateString().slice(0, 5);
   });
 
+  const finishNames: Record<CardFinish, string> = {
+    normale: t('card.finishes.normale'),
+    holo: t('card.finishes.holo'),
+    inverse: t('card.finishes.inverse'),
+  };
   const screenWidth = Dimensions.get('window').width - 32;
 
   return (
@@ -186,7 +192,7 @@ export default function MarketPricesScreen() {
               color: ds.color,
               strokeWidth: ds.strokeWidth,
             })),
-            legend: datasets.map(ds => ds.source.replace('tcgplayer_', '')),
+            legend: datasets.map(ds => sourceLabel(ds.source, finishNames)),
           }}
           width={screenWidth}
           height={180}
@@ -250,7 +256,7 @@ export default function MarketPricesScreen() {
                 {formatDate(item.date)}
               </Text>
               <Text style={[styles.cell, styles.sourceCell, { color: colors.text.primary }]}>
-                {item.source.replace('tcgplayer_', '')}
+                {sourceLabel(item.source, finishNames)}
               </Text>
               <Text style={[styles.cell, styles.priceCell, { color: colors.text.primary }]}>
                 {formatPrice(item.price_low)}

@@ -14,6 +14,7 @@ import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { cardNameMatchesSearch, cardNameSearchClauses, cardNumberLookupValues, stripCardLevelPrefix } from './cardSearch';
+import { latestQuotes, preferredQuote } from './priceSource';
 
 // Types pour les relations Supabase
 interface UserInfo {
@@ -1134,18 +1135,27 @@ export const getMarketPricesForCard = async (cardId: string) => {
   try {
     const { data, error } = await supabase
       .from('market_prices')
-      .select('price_low, price_mid, price_high')
+      .select('source, price_low, price_mid, price_high, price_market, date')
       .eq('card_id', cardId)
       .order('date', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(40);
     
     if (error && error.code !== 'PGRST116') {
       console.error("Erreur lors de la récupération des prix du marché:", error);
       return { data: null, error };
     }
-    
-    return { data: data || null, error: null };
+
+    const quote = preferredQuote(latestQuotes(data || []), null);
+    if (!quote) return { data: null, error: null };
+
+    return {
+      data: {
+        price_low: quote.low,
+        price_mid: quote.mid,
+        price_high: quote.high,
+      },
+      error: null,
+    };
   } catch (error) {
     console.error("Erreur inattendue lors de la récupération des prix du marché:", error);
     return { data: null, error };
