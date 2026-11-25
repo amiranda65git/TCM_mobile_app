@@ -12,6 +12,7 @@ import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../../components/SwipeableCard';
 import NotificationIcon from '../../components/NotificationIcon';
 import LanguageFlag from '../../components/LanguageFlag';
+import { usePreservedListScroll } from '../../lib/usePreservedListScroll';
 
 interface CardInfo {
   id: string;
@@ -78,6 +79,12 @@ export default function EditionDetail() {
   const [showOnlyOwned, setShowOnlyOwned] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const {
+    listRef,
+    scrollProps,
+    restore: restoreListScroll,
+    reset: resetListScroll,
+  } = usePreservedListScroll<CardInfo>();
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS: Record<string, string> = {
@@ -159,6 +166,10 @@ export default function EditionDetail() {
       if (listener) EventRegister.removeEventListener(listener);
     };
   }, [loadEditionDetails]);
+
+  useEffect(() => {
+    restoreListScroll();
+  }, [editionDetail, loading, restoreListScroll]);
 
   // Gérer l'ouverture du modal de vente
   const handleSellPress = (card: CardInfo) => {
@@ -360,7 +371,7 @@ export default function EditionDetail() {
     }, 250);
   };
 
-  if (loading) {
+  if (loading && !editionDetail) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen 
@@ -416,7 +427,10 @@ export default function EditionDetail() {
         </Text>
         <TouchableOpacity 
           style={styles.filterButton}
-          onPress={() => setShowOnlyOwned(!showOnlyOwned)}
+          onPress={() => {
+            resetListScroll();
+            setShowOnlyOwned((prev) => !prev);
+          }}
         >
           <MaterialIcons 
             name={showOnlyOwned ? "catching-pokemon" : "catching-pokemon"} 
@@ -427,6 +441,8 @@ export default function EditionDetail() {
       </View>
       
       <FlatList
+        ref={listRef}
+        {...scrollProps}
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         data={visibleCards}

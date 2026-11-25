@@ -12,6 +12,7 @@ import { supabase, addOrRemoveFromWishlist, getAllUserCards, markCardAsSold } fr
 import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../components/SwipeableCard';
 import LanguageFlag from '../components/LanguageFlag';
+import { usePreservedListScroll } from '../lib/usePreservedListScroll';
 
 interface Card {
   user_card_id: any;
@@ -67,9 +68,19 @@ export default function AllCardsScreen() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const loadStartRef = useRef<number | null>(null);
   const renderMarkedRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+  const {
+    listRef,
+    scrollProps,
+    restore: restoreListScroll,
+    reset: resetListScroll,
+  } = usePreservedListScroll<Card>();
 
-  // Charger toutes les cartes de l'utilisateur
-  const loadUserCards = async () => {
+  // Charger toutes les cartes de l'utilisateur.
+  // silent : on garde la liste affichée pour ne pas perdre le scroll au retour.
+  const loadUserCards = async (silent = false) => {
     if (!session?.user?.id) return;
     
     const loadStart = Date.now();
@@ -77,7 +88,9 @@ export default function AllCardsScreen() {
     renderMarkedRef.current = false;
     console.log(`[all-cards] loadUserCards start: ${new Date(loadStart).toISOString()}`);
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const fetchStart = Date.now();
       const { data, error } = await getAllUserCards(session.user.id);
@@ -107,9 +120,15 @@ export default function AllCardsScreen() {
       });
       console.log(`[all-cards] local filter+sort done in ${Date.now() - sortStart}ms (${sortedCards.length} cartes)`);
       
+      const query = searchQueryRef.current.trim().toLowerCase();
+      const nextCards = query
+        ? sortedCards.filter((card) => card.card.name.toLowerCase().includes(query))
+        : sortedCards;
+
       setAllCards(sortedCards);
       const filteredStart = Date.now();
-      setFilteredCards(sortedCards);
+      setFilteredCards(nextCards);
+      hasLoadedRef.current = true;
       console.log(`[all-cards] setState allCards+filteredCards triggered in ${Date.now() - filteredStart}ms`);
     } catch (error) {
       console.error('Erreur lors du chargement des cartes:', error);
@@ -141,11 +160,12 @@ export default function AllCardsScreen() {
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     filterCards(text);
+    resetListScroll();
   };
 
   useFocusEffect(
     useCallback(() => {
-      void loadUserCards();
+      void loadUserCards(hasLoadedRef.current);
     }, [session?.user?.id])
   );
 
@@ -162,7 +182,7 @@ export default function AllCardsScreen() {
           );
           return;
         }
-        void loadUserCards();
+        void loadUserCards(hasLoadedRef.current);
       }
     );
     return () => {
@@ -171,8 +191,8 @@ export default function AllCardsScreen() {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [allCards]);
+    restoreListScroll();
+  }, [filteredCards, loading, restoreListScroll]);
 
   useEffect(() => {
     if (!loading && loadStartRef.current && !renderMarkedRef.current) {
@@ -295,7 +315,7 @@ export default function AllCardsScreen() {
     userCardId: entry.user_card_id != null ? String(entry.user_card_id) : undefined,
   }));
 
-  if (loading) {
+  if (loading && allCards.length === 0) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <Stack.Screen 
@@ -346,6 +366,8 @@ export default function AllCardsScreen() {
 
       {/* Cards List (virtualisée pour éviter le rendu complet d'un coup) */}
       <FlatList
+        ref={listRef}
+        {...scrollProps}
         data={filteredCards.slice(0, visibleCount)}
         keyExtractor={(item) => String(item.user_card_id)}
         style={styles.cardsList}
