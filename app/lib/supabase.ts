@@ -1828,7 +1828,7 @@ const OFFICIAL_CARD_SEARCH_SELECT = `
   )
 `;
 
-function queryOfficialCardsByName(searchTerm: string, limit: number, flexible: boolean) {
+function queryOfficialCardsByName(searchTerm: string, limit: number, flexible: boolean, offset: number) {
   let query = supabase.from('official_cards').select(OFFICIAL_CARD_SEARCH_SELECT);
 
   if (flexible) {
@@ -1844,37 +1844,46 @@ function queryOfficialCardsByName(searchTerm: string, limit: number, flexible: b
     query = query.ilike('name', `%${searchTerm}%`);
   }
 
-  return query.order('name').limit(limit);
+  const pageSize = Math.max(1, limit);
+  // name + id : les réimpressions du même nom restent dans un ordre stable d'une page à l'autre
+  return query
+    .order('name', { ascending: true })
+    .order('id', { ascending: true })
+    .range(offset, offset + pageSize - 1);
 }
 
 // Fonction pour rechercher des cartes par nom.
 // flexible : accents, majuscules et ordre des mots ignorés (recherche du scan).
+// offset : page suivante, pour charger la suite au scroll.
 export const searchCards = async (
   searchTerm: string,
   limit: number = 10,
-  options?: { flexible?: boolean }
+  options?: { flexible?: boolean; offset?: number }
 ) => {
   try {
     if (!searchTerm || searchTerm.trim() === '') {
-      return { data: [], error: null };
+      return { data: [], error: null, hasMore: false };
     }
 
     const flexible = options?.flexible === true;
+    const offset = Math.max(0, options?.offset ?? 0);
     if (flexible && cardNameSearchClauses(searchTerm).length === 0) {
-      return { data: [], error: null };
+      return { data: [], error: null, hasMore: false };
     }
 
-    let { data, error } = await queryOfficialCardsByName(searchTerm, limit, flexible);
+    let { data, error } = await queryOfficialCardsByName(searchTerm, limit, flexible, offset);
 
     if (error && flexible) {
       console.warn('Recherche souple indisponible, repli sur la recherche exacte:', error);
-      ({ data, error } = await queryOfficialCardsByName(searchTerm, limit, false));
+      ({ data, error } = await queryOfficialCardsByName(searchTerm, limit, false, offset));
     }
 
     if (error) {
       console.error('Erreur lors de la recherche de cartes:', error);
-      return { data: [], error };
+      return { data: [], error, hasMore: false };
     }
+
+    const hasMore = (data?.length ?? 0) === Math.max(1, limit);
 
     if (flexible && data) {
       data = data.filter((card) => cardNameMatchesSearch(card.name, searchTerm));
@@ -1913,10 +1922,10 @@ export const searchCards = async (
       };
     });
 
-    return { data: transformedData, error: null };
+    return { data: transformedData, error: null, hasMore };
   } catch (error) {
     console.error('Erreur inattendue lors de la recherche de cartes:', error);
-    return { data: [], error };
+    return { data: [], error, hasMore: false };
   }
 };
 

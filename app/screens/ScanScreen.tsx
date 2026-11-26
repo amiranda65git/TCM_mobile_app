@@ -79,6 +79,23 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_RATIO = 1.4;
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
 const CARD_HEIGHT = CARD_WIDTH * CARD_RATIO;
+const SCAN_SEARCH_PAGE_SIZE = 20;
+
+function formatSearchCardNumber(number?: string | null): string {
+  if (!number) return '';
+  const label = /^\d+$/.test(number) ? number.padStart(3, '0') : number;
+  return `n° ${label}`;
+}
+
+function sortSearchReprints<T extends { card_name?: string; edition_name?: string; number?: string | null }>(cards: T[]): T[] {
+  return [...cards].sort((a, b) => {
+    const byName = String(a.card_name || '').localeCompare(String(b.card_name || ''), 'fr', { sensitivity: 'base' });
+    if (byName) return byName;
+    const byEdition = String(a.edition_name || '').localeCompare(String(b.edition_name || ''), 'fr', { sensitivity: 'base' });
+    if (byEdition) return byEdition;
+    return String(a.number || '').localeCompare(String(b.number || ''), 'fr', { numeric: true });
+  });
+}
 
 // Fonction pour normaliser les noms de Pokémon pour améliorer la correspondance
 const normalizePokemonName = (name: string): string[] => {
@@ -456,7 +473,16 @@ export default function ScanScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isLoadingMoreResults, setIsLoadingMoreResults] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
+  const searchListRef = useRef<FlatList>(null);
+  const searchScrollOffsetRef = useRef(0);
+  const searchScrollLockedRef = useRef(false);
+  const searchOffsetRef = useRef(0);
+  const searchHasMoreRef = useRef(false);
+  const searchQueryRef = useRef('');
+  const searchRequestRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   // Auto-capture
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
@@ -544,11 +570,33 @@ export default function ScanScreen() {
     setSearchResults([]);
     setShowSuggestions(false);
     setSearchFocused(false);
+    searchOffsetRef.current = 0;
+    searchHasMoreRef.current = false;
+    searchQueryRef.current = '';
+    searchScrollOffsetRef.current = 0;
+    searchRequestRef.current += 1;
     isProcessingRef.current = false;
     setIsProcessing(false);
     setScanError(null);
     captureInFlightRef.current = false;
     markCooldownRef.current();
+  }, []);
+
+  const holdSearchScroll = useCallback(() => {
+    searchScrollLockedRef.current = true;
+    const apply = () => {
+      const offset = searchScrollOffsetRef.current;
+      if (offset > 0) searchListRef.current?.scrollToOffset({ offset, animated: false });
+    };
+    requestAnimationFrame(apply);
+    setTimeout(apply, 80);
+    setTimeout(apply, 320);
+  }, []);
+
+  const releaseSearchScroll = useCallback(() => {
+    setTimeout(() => {
+      searchScrollLockedRef.current = false;
+    }, 360);
   }, []);
 
   useEffect(() => {
@@ -558,12 +606,15 @@ export default function ScanScreen() {
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setIsKeyboardVisible(false);
       setSearchFocused(false);
+      const wasLocked = searchScrollLockedRef.current;
+      holdSearchScroll();
+      if (!wasLocked) releaseSearchScroll();
     });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [holdSearchScroll, releaseSearchScroll]);
 
   const runCapture = useCallback(async () => {
     if (captureInFlightRef.current || isProcessingRef.current || !camera.current) {
@@ -846,11 +897,12 @@ export default function ScanScreen() {
     setModalVisible(true);
   };
 
-  // Fonction pour fermer le modal
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedCondition(null);
     setSelectedFinish('normale');
+    holdSearchScroll();
+    releaseSearchScroll();
   };
 
   // Vérifier la session utilisateur
@@ -933,8 +985,8 @@ export default function ScanScreen() {
         return;
       }
       
-      // Fermer le modal
-      setModalVisible(false);
+      // Fermer le modal et retrouver la liste de recherche au même endroit
+      handleCloseModal();
       
       // Afficher l'alerte de succès
       setSuccessMessage(t('scan.addedToCollection'));
@@ -992,32 +1044,86 @@ export default function ScanScreen() {
     </TouchableOpacity>
   );
 
-  // Logique de recherche avec autocomplétion
+  // Logique de recherche avec autocomplétion, puis pages suivantes au scroll
   useEffect(() => {
+    const requestId = ++searchRequestRef.current;
+    searchHasMoreRef.current = false;
+    const query = searchQuery.trim();
+
     const delaySearch = setTimeout(async () => {
-      if (searchQuery.trim().length >= 2) {
-        setIsSearching(true);
-        const { data, error } = await SupabaseService.searchCards(searchQuery, 10, { flexible: true });
-        if (!error && data) {
-          setSearchResults(data);
-        } else {
-          setSearchResults([]);
-        }
-        setIsSearching(false);
-        setShowSuggestions(true);
-      } else {
+      if (requestId !== searchRequestRef.current) return;
+
+      if (query.length < 2) {
         setSearchResults([]);
         setShowSuggestions(false);
+        setIsSearching(false);
+        searchOffsetRef.current = 0;
+        searchQueryRef.current = '';
+        searchScrollOffsetRef.current = 0;
+        return;
       }
+
+      setIsSearching(true);
+      const { data, error, hasMore } = await SupabaseService.searchCards(query, SCAN_SEARCH_PAGE_SIZE, {
+        flexible: true,
+        offset: 0,
+      });
+      if (requestId !== searchRequestRef.current) return;
+
+      searchQueryRef.current = query;
+      searchOffsetRef.current = 0;
+      searchScrollOffsetRef.current = 0;
+      searchListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      if (!error && data) {
+        setSearchResults(hasMore ? data : sortSearchReprints(data));
+        searchHasMoreRef.current = Boolean(hasMore);
+      } else {
+        setSearchResults([]);
+        searchHasMoreRef.current = false;
+      }
+      setIsSearching(false);
+      setShowSuggestions(true);
     }, 500);
 
     return () => clearTimeout(delaySearch);
   }, [searchQuery]);
 
-  // Fonction pour sélectionner une carte depuis la recherche
-  const handleCardSelectFromSearch = async (card: any) => {
-    setShowSuggestions(false);
-    setSearchQuery('');
+  const loadMoreSearchResults = useCallback(async () => {
+    const query = searchQueryRef.current;
+    if (!query || !searchHasMoreRef.current || loadingMoreRef.current) return;
+
+    const requestId = searchRequestRef.current;
+    loadingMoreRef.current = true;
+    setIsLoadingMoreResults(true);
+    const offset = searchOffsetRef.current + SCAN_SEARCH_PAGE_SIZE;
+
+    try {
+      const { data, error, hasMore } = await SupabaseService.searchCards(query, SCAN_SEARCH_PAGE_SIZE, {
+        flexible: true,
+        offset,
+      });
+      if (requestId !== searchRequestRef.current || searchQueryRef.current !== query) return;
+      if (error || !data) {
+        searchHasMoreRef.current = false;
+        return;
+      }
+
+      searchOffsetRef.current = offset;
+      searchHasMoreRef.current = Boolean(hasMore);
+      setSearchResults((prev) => {
+        const seen = new Set(prev.map((card) => card.card_id));
+        const next = data.filter((card) => !seen.has(card.card_id));
+        return next.length ? [...prev, ...next] : prev;
+      });
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMoreResults(false);
+    }
+  }, []);
+
+  // Ouvre le détail sans effacer la recherche : la liste reste à la même position.
+  const handleCardSelectFromSearch = (card: any) => {
+    searchScrollLockedRef.current = true;
     Keyboard.dismiss();
     
     // Créer un objet carte compatible avec le modal de sélection
@@ -1064,6 +1170,11 @@ export default function ScanScreen() {
       {searchQuery.length > 0 && (
         <TouchableOpacity
           onPress={() => {
+            searchRequestRef.current += 1;
+            searchOffsetRef.current = 0;
+            searchHasMoreRef.current = false;
+            searchQueryRef.current = '';
+            searchScrollOffsetRef.current = 0;
             setSearchQuery('');
             setSearchResults([]);
             setShowSuggestions(false);
@@ -1089,9 +1200,12 @@ export default function ScanScreen() {
       >
         {searchResults.length > 0 ? (
           <FlatList
+            ref={searchListRef}
             data={searchResults}
             keyExtractor={item => item.card_id}
-            renderItem={({ item }) => (
+            renderItem={({ item }) => {
+              const subtitle = [item.edition_name, formatSearchCardNumber(item.number)].filter(Boolean).join(' · ');
+              return (
               <TouchableOpacity
                 style={[styles.suggestionItem, { borderBottomColor: colors.border }]}
                 onPress={() => handleCardSelectFromSearch(item)}
@@ -1104,19 +1218,32 @@ export default function ScanScreen() {
                   )}
                   <View style={styles.suggestionTextContainer}>
                     <Text style={[styles.suggestionTitle, { color: colors.text.primary }]}>{item.card_name}</Text>
-                    {item.edition_name && (
-                      <Text style={[styles.suggestionSubtitle, { color: colors.text.secondary }]}>{item.edition_name}</Text>
-                    )}
+                    {subtitle ? (
+                      <Text style={[styles.suggestionSubtitle, { color: colors.text.secondary }]}>{subtitle}</Text>
+                    ) : null}
                   </View>
                   <Ionicons name="add-circle" size={24} color={colors.primary} />
                 </View>
               </TouchableOpacity>
-            )}
+              );
+            }}
             style={styles.suggestionsList}
             contentContainerStyle={styles.suggestionsListContent}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
+            onScroll={(event) => {
+              if (searchScrollLockedRef.current) return;
+              searchScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+            onEndReached={loadMoreSearchResults}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              isLoadingMoreResults ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+              ) : null
+            }
           />
         ) : searchQuery.trim().length >= 2 ? (
           <View style={styles.noResultsContainer}>
