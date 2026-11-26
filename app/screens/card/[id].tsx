@@ -12,7 +12,7 @@ import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
-import { supabase, getUserWishlist, addOrRemoveFromWishlist } from '../../lib/supabase';
+import { supabase, getUserWishlist, addOrRemoveFromWishlist, notifyWishlistUsersOfSale } from '../../lib/supabase';
 import {
   exactFinishMid,
   latestQuotes,
@@ -437,12 +437,22 @@ export default function CardDetailScreen() {
         .from('user_cards')
         .update({ 
           is_for_sale: true,
+          is_sold: false,
           price: price,
           condition: selectedCondition
         })
         .eq('id', cardDetails.user_card_id);
       
       if (error) throw error;
+      EventRegister.emit('trading_data_changed');
+      if (user?.id) {
+        void notifyWishlistUsersOfSale({
+          sellerId: user.id,
+          cardId: targetCardId,
+          userCardId: String(cardDetails.user_card_id),
+          cardName: cardDetails.name,
+        });
+      }
       if (browse.activeCardRef.current.id !== targetCardId) return;
       
       // Mettre à jour l'état local
@@ -452,7 +462,6 @@ export default function CardDetailScreen() {
         price: price,
         condition: selectedCondition,
       });
-      EventRegister.emit('trading_data_changed');
 
       setShowSellModal(false);
       console.log('Carte mise en vente', cardDetails?.id);
@@ -748,6 +757,7 @@ export default function CardDetailScreen() {
                   officialUri={cardDetails.image_large || cardDetails.image_small}
                   userPhotoUri={cardDetails.user_photo_url}
                   nativeGesture={browse.imageGesture}
+                  zoomable={Boolean(cardDetails.is_for_sale)}
                 />
               ) : (
                 <Image

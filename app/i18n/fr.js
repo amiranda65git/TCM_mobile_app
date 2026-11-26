@@ -102,7 +102,9 @@ export default {
     acceptOfferAlertTitle: "Accepter l'offre",
     acceptOfferAlertMessage: "En acceptant l'offre vous acceptez de communiquer votre email au membre intéressé par votre carte.",
     acceptOfferSuccess: "Les emails ont été envoyés à l'acheteur et au vendeur.",
+    acceptOfferEmailFailed: "Offre acceptée, mais les emails n'ont pas pu être envoyés.",
     acceptOfferEmailError: "Offre acceptée, mais les emails n'ont pas pu être envoyés. Référence : {{id}}",
+    transactionReference: "Référence de la transaction",
     acceptOfferError: "Erreur lors de l'envoi des emails.",
     notificationOfferAccepted: "Votre offre pour la carte {{card}} a été acceptée ! Vous pouvez contacter le vendeur à l'adresse indiquée.",
     notificationOfferRefused: "Votre offre pour la carte {{card}} a été refusée.",
@@ -113,6 +115,8 @@ export default {
     markAsSoldError: "Erreur lors du marquage de la carte comme vendue",
     sold: "Vendu",
     sellDetails: "Détails de la vente",
+    zoomPhoto: "Appuyer pour zoomer la photo",
+    zoomHint: "Pincez ou double-tapez pour voir les détails",
     receivedOffers: "Offres reçues",
     noOffers: "Aucune offre reçue",
     offerSwipeHint: "Glisser à gauche ou à droite pour accepter ou refuser une offre",
@@ -485,6 +489,7 @@ export default {
     confirm: 'Confirmer',
     success: 'Succès',
     cardSold: 'Carte vendue avec succès',
+    listed: 'Carte mise en vente. Retrouve-la dans Trading, onglet Vente.',
     error: 'Erreur lors de la vente'
   },
   priceAlert: {

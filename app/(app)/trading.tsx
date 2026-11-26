@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons, Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
 import { getUserCardsForSale, getCardsForSaleFromOthers } from '../lib/supabase';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import LanguageFlag from '../components/LanguageFlag';
@@ -82,7 +82,10 @@ const BuyTab = () => {
 
   // Appliquer les filtres quand ils changent
   React.useEffect(() => {
-    if (allCards.length === 0) return;
+    if (allCards.length === 0) {
+      setFilteredCards([]);
+      return;
+    }
     
     let result = [...allCards];
     
@@ -226,6 +229,12 @@ const SellTab = () => {
     loadData();
   }, [loadData]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
   // Écouter les changements de données
   React.useEffect(() => {
     const listener = EventRegister.addEventListener('trading_data_changed', () => {
@@ -242,7 +251,10 @@ const SellTab = () => {
 
   // Appliquer les filtres quand ils changent
   React.useEffect(() => {
-    if (allCards.length === 0) return;
+    if (allCards.length === 0) {
+      setFilteredCards([]);
+      return;
+    }
     
     let result = [...allCards];
     

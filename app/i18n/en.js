@@ -102,7 +102,9 @@ export default {
     acceptOfferAlertTitle: "Accept offer",
     acceptOfferAlertMessage: "By accepting, you agree to share your email with the interested member.",
     acceptOfferSuccess: "Emails sent to both buyer and seller.",
+    acceptOfferEmailFailed: "Offer accepted, but the emails could not be sent.",
     acceptOfferEmailError: "Offer accepted, but emails could not be sent. Reference: {{id}}",
+    transactionReference: "Transaction reference",
     acceptOfferError: "Error sending emails.",
     notificationOfferAccepted: "Your offer for the card {{card}} has been accepted! You can contact the seller at the provided address.",
     notificationOfferRefused: "Your offer for the card {{card}} has been refused.",
@@ -113,6 +115,8 @@ export default {
     markAsSoldError: "Error marking card as sold",
     sold: "Sold",
     sellDetails: "Sale details",
+    zoomPhoto: "Tap to zoom the photo",
+    zoomHint: "Pinch or double-tap to inspect details",
     receivedOffers: "Received offers",
     noOffers: "No offers received",
     offerSwipeHint: "Swipe left or right to accept or refuse an offer",
@@ -485,6 +489,7 @@ export default {
     confirm: 'Confirm',
     success: 'Success',
     cardSold: 'Card sold successfully',
+    listed: 'Card listed for sale. Find it in Trading, under the Sell tab.',
     error: 'Error selling card'
   },
   priceAlert: {

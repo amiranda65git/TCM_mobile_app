@@ -9,6 +9,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Alert as RNAlert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { EventRegister } from 'react-native-event-listeners';
+import { PhotoZoomModal } from '../../components/PhotoZoomModal';
 
 export default function CardSellDetails() {
   const { id } = useLocalSearchParams(); // id = user_card_id
@@ -28,6 +29,8 @@ export default function CardSellDetails() {
   const [updatedPrice, setUpdatedPrice] = useState('');
   const [updatedCondition, setUpdatedCondition] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [photoZoomOpen, setPhotoZoomOpen] = useState(false);
+  const [offerResult, setOfferResult] = useState<{ emailErrors: boolean; transactionId: string } | null>(null);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS: Record<string, string> = {
@@ -53,7 +56,7 @@ export default function CardSellDetails() {
       // 1. Récupérer la carte de l'utilisateur (user_cards)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
-        .select('id, card_id, price, condition, is_sold, official_cards(id, name, number, rarity, image_small, image_large)')
+        .select('id, card_id, price, condition, is_sold, image_url, official_cards(id, name, number, rarity, image_small, image_large)')
         .eq('id', userCardId)
         .single();
       if (userCardError) throw userCardError;
@@ -269,6 +272,24 @@ export default function CardSellDetails() {
           )}
         </View>
       </View>
+      {userCard.image_url ? (
+        <TouchableOpacity
+          style={[styles.photoCard, { backgroundColor: colors.surface }]}
+          onPress={() => setPhotoZoomOpen(true)}
+          accessibilityLabel={t('market.zoomPhoto')}
+        >
+          <Image source={{ uri: userCard.image_url }} style={styles.salePhoto} resizeMode="contain" />
+          <View style={styles.zoomHintRow}>
+            <Ionicons name="expand-outline" size={16} color={colors.text.secondary} />
+            <Text style={[styles.zoomHintText, { color: colors.text.secondary }]}>{t('market.zoomPhoto')}</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+      <PhotoZoomModal
+        uri={userCard.image_url || ''}
+        visible={photoZoomOpen && Boolean(userCard.image_url)}
+        onClose={() => setPhotoZoomOpen(false)}
+      />
       {/* Prix du marché */}
       {marketPrices && (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -444,12 +465,10 @@ export default function CardSellDetails() {
                             // Notifier les autres écrans que les données ont changé
                             EventRegister.emit('trading_data_changed');
                             
-                            RNAlert.alert(
-                              result.emailErrors ? t('general.error') : t('general.success'),
-                              result.emailErrors
-                                ? t('market.acceptOfferEmailError', { id: result.transactionId })
-                                : `${t('market.acceptOfferSuccess')} (${result.transactionId})`
-                            );
+                            setOfferResult({
+                              emailErrors: Boolean(result.emailErrors),
+                              transactionId: result.transactionId ? String(result.transactionId) : '',
+                            });
                           } else {
                             console.error('Erreur acceptation offre:', result.error);
                             RNAlert.alert(
@@ -652,6 +671,52 @@ export default function CardSellDetails() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={offerResult != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfferResult(null)}
+      >
+        <View style={styles.resultOverlay}>
+          <View style={[styles.resultCard, { backgroundColor: colors.surface }]}>
+            <View
+              style={[
+                styles.resultIcon,
+                { backgroundColor: (offerResult?.emailErrors ? colors.error : colors.success) + '22' },
+              ]}
+            >
+              <Ionicons
+                name={offerResult?.emailErrors ? 'alert-circle' : 'checkmark-circle'}
+                size={36}
+                color={offerResult?.emailErrors ? colors.error : colors.success}
+              />
+            </View>
+            <Text style={[styles.resultTitle, { color: colors.text.primary }]}>
+              {offerResult?.emailErrors ? t('general.error') : t('general.success')}
+            </Text>
+            <Text style={[styles.resultMessage, { color: colors.text.secondary }]}>
+              {offerResult?.emailErrors ? t('market.acceptOfferEmailFailed') : t('market.acceptOfferSuccess')}
+            </Text>
+            {offerResult?.transactionId ? (
+              <View style={[styles.referenceBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={[styles.referenceLabel, { color: colors.text.secondary }]}>
+                  {t('market.transactionReference')}
+                </Text>
+                <Text selectable style={[styles.referenceValue, { color: colors.text.primary }]}>
+                  {offerResult.transactionId}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.resultButton, { backgroundColor: colors.primary }]}
+              onPress={() => setOfferResult(null)}
+            >
+              <Text style={styles.resultButtonText}>{t('general.ok')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -662,6 +727,16 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   cardInfoContainer: { flexDirection: 'row', padding: 16, borderRadius: 12, margin: 16, alignItems: 'center' },
   cardThumbnail: { width: 60, height: 85, borderRadius: 6 },
+  photoCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  salePhoto: { width: '100%', height: 280, borderRadius: 8 },
+  zoomHintRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  zoomHintText: { marginLeft: 6, fontSize: 13 },
   cardInfo: { marginLeft: 16, flex: 1 },
   cardName: { fontSize: 18, fontWeight: 'bold' },
   cardNumber: { fontSize: 14, marginTop: 2 },
@@ -715,6 +790,67 @@ const styles = StyleSheet.create({
     color: 'white', 
     fontSize: 16, 
     fontWeight: 'bold' 
+  },
+  resultOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  resultCard: {
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  resultIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  resultTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  resultMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  referenceBox: {
+    alignSelf: 'stretch',
+    marginTop: 18,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  referenceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  referenceValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  resultButton: {
+    alignSelf: 'stretch',
+    marginTop: 20,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  resultButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   // Styles pour la modale
   modalOverlay: {

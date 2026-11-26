@@ -64,8 +64,8 @@ export default function NotificationsScreen() {
       }
       
       // Navigation selon le type de notification
-      if (notification.type === 'wishlist_item_sale') {
-        router.push({ pathname: '/market', params: { cardId: notification.card_id } });
+      if (notification.type === 'wishlist_item_sale' && notification.card_id) {
+        router.push(`/screens/market-prices/card-marketplace?id=${notification.card_id}`);
       } else if (notification.type === 'price_alert') {
         router.push({ pathname: '/market', params: { cardId: notification.card_id } });
       } else if (notification.type === 'New_Offer_notification') {
@@ -121,6 +121,10 @@ export default function NotificationsScreen() {
       message = t('market.notificationOfferAccepted', { card: item.data?.card || '' });
     } else if (item.type === 'OfferRefused') {
       message = t('market.notificationOfferRefused', { card: item.data?.card || '' });
+    } else if (item.type === 'wishlist_item_sale') {
+      message = t('alerts.wishlistItemSaleDesc', {
+        cardName: item.data?.cardName || item.data?.card || '',
+      });
     }
     return (
       <Swipeable
