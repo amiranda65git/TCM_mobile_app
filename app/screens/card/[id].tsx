@@ -757,6 +757,7 @@ export default function CardDetailScreen() {
                   officialUri={cardDetails.image_large || cardDetails.image_small}
                   userPhotoUri={cardDetails.user_photo_url}
                   nativeGesture={browse.imageGesture}
+                  zoomable={Boolean(cardDetails.is_for_sale)}
                 />
               ) : (
                 <Image

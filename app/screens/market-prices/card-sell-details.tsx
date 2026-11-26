@@ -9,6 +9,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Alert as RNAlert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { EventRegister } from 'react-native-event-listeners';
+import { PhotoZoomModal } from '../../components/PhotoZoomModal';
 
 export default function CardSellDetails() {
   const { id } = useLocalSearchParams(); // id = user_card_id
@@ -28,6 +29,7 @@ export default function CardSellDetails() {
   const [updatedPrice, setUpdatedPrice] = useState('');
   const [updatedCondition, setUpdatedCondition] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [photoZoomOpen, setPhotoZoomOpen] = useState(false);
 
   // Les conditions disponibles pour les cartes avec leurs couleurs
   const CONDITION_COLORS: Record<string, string> = {
@@ -53,7 +55,7 @@ export default function CardSellDetails() {
       // 1. Récupérer la carte de l'utilisateur (user_cards)
       const { data: userCardData, error: userCardError } = await supabase
         .from('user_cards')
-        .select('id, card_id, price, condition, is_sold, official_cards(id, name, number, rarity, image_small, image_large)')
+        .select('id, card_id, price, condition, is_sold, image_url, official_cards(id, name, number, rarity, image_small, image_large)')
         .eq('id', userCardId)
         .single();
       if (userCardError) throw userCardError;
@@ -269,6 +271,24 @@ export default function CardSellDetails() {
           )}
         </View>
       </View>
+      {userCard.image_url ? (
+        <TouchableOpacity
+          style={[styles.photoCard, { backgroundColor: colors.surface }]}
+          onPress={() => setPhotoZoomOpen(true)}
+          accessibilityLabel={t('market.zoomPhoto')}
+        >
+          <Image source={{ uri: userCard.image_url }} style={styles.salePhoto} resizeMode="contain" />
+          <View style={styles.zoomHintRow}>
+            <Ionicons name="expand-outline" size={16} color={colors.text.secondary} />
+            <Text style={[styles.zoomHintText, { color: colors.text.secondary }]}>{t('market.zoomPhoto')}</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+      <PhotoZoomModal
+        uri={userCard.image_url || ''}
+        visible={photoZoomOpen && Boolean(userCard.image_url)}
+        onClose={() => setPhotoZoomOpen(false)}
+      />
       {/* Prix du marché */}
       {marketPrices && (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
@@ -662,6 +682,16 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   cardInfoContainer: { flexDirection: 'row', padding: 16, borderRadius: 12, margin: 16, alignItems: 'center' },
   cardThumbnail: { width: 60, height: 85, borderRadius: 6 },
+  photoCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  salePhoto: { width: '100%', height: 280, borderRadius: 8 },
+  zoomHintRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  zoomHintText: { marginLeft: 6, fontSize: 13 },
   cardInfo: { marginLeft: 16, flex: 1 },
   cardName: { fontSize: 18, fontWeight: 'bold' },
   cardNumber: { fontSize: 14, marginTop: 2 },

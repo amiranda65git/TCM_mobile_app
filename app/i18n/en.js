@@ -113,6 +113,8 @@ export default {
     markAsSoldError: "Error marking card as sold",
     sold: "Sold",
     sellDetails: "Sale details",
+    zoomPhoto: "Tap to zoom the photo",
+    zoomHint: "Pinch or double-tap to inspect details",
     receivedOffers: "Received offers",
     noOffers: "No offers received",
     offerSwipeHint: "Swipe left or right to accept or refuse an offer",

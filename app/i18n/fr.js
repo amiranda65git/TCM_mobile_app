@@ -113,6 +113,8 @@ export default {
     markAsSoldError: "Erreur lors du marquage de la carte comme vendue",
     sold: "Vendu",
     sellDetails: "Détails de la vente",
+    zoomPhoto: "Appuyer pour zoomer la photo",
+    zoomHint: "Pincez ou double-tapez pour voir les détails",
     receivedOffers: "Offres reçues",
     noOffers: "Aucune offre reçue",
     offerSwipeHint: "Glisser à gauche ou à droite pour accepter ou refuser une offre",
