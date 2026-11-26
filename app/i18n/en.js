@@ -449,6 +449,7 @@ export default {
   sold: {
     noCards: "No cards sold yet",
     soldOn: "Sold on",
+    sold: "Sold",
   },
   allCards: {
     title: 'All my cards',

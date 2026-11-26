@@ -2612,6 +2612,7 @@ export const getUserSoldCards = async (userId: string) => {
         price,
         card_id,
         updated_at,
+        image_url,
         official_cards:card_id (
           id,
           name,
@@ -2675,6 +2676,11 @@ export const getUserSoldCards = async (userId: string) => {
         condition: userCard.condition,
         price: userCard.price,
         updated_at: userCard.updated_at,
+        sold_date: userCard.updated_at,
+        image_url: (userCard as { image_url?: string | null }).image_url ?? null,
+        card_name: (cardData as any).name || '',
+        edition_name: editionName,
+        image_small: (cardData as any).image_small || (cardData as any).image_large || null,
         card: {
           id: (cardData as any).id,
           name: (cardData as any).name,
