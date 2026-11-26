@@ -2642,6 +2642,32 @@ export const getUserSoldCards = async (userId: string) => {
       console.warn('[getUserSoldCards] Erreur lors de la récupération des prix:', pricesError);
     }
 
+    const saleByCard = new Map<string, { price: number; at: number }>();
+    const userCardIds = (data || []).map((item) => item.id).filter(Boolean);
+    if (userCardIds.length > 0) {
+      const { data: offerRows, error: offerError } = await supabase
+        .from('offers')
+        .select('user_card_id, proposed_price, status, updated_at')
+        .in('user_card_id', userCardIds);
+      if (offerError) {
+        console.warn('[getUserSoldCards] Offres acceptées illisibles:', offerError);
+      } else {
+        const ignored = new Set(['pending', 'cancel', 'cancelled', 'canceled', 'refused', 'rejected']);
+        for (const row of offerRows || []) {
+          const offer = row as { user_card_id?: string; proposed_price?: number; status?: string; updated_at?: string };
+          const status = String(offer.status || '').toLowerCase();
+          if (!status || ignored.has(status)) continue;
+          const price = Number(offer.proposed_price);
+          if (!offer.user_card_id || !Number.isFinite(price) || price <= 0) continue;
+          const at = new Date(offer.updated_at || 0).getTime();
+          const previous = saleByCard.get(offer.user_card_id);
+          if (!previous || at >= previous.at) {
+            saleByCard.set(offer.user_card_id, { price, at });
+          }
+        }
+      }
+    }
+
     // Créer un map des prix pour un accès rapide
     const priceMap = new Map();
     if (marketPrices) {
@@ -2671,12 +2697,15 @@ export const getUserSoldCards = async (userId: string) => {
         }
       }
 
+      const sale = saleByCard.get(userCard.id);
       return {
         user_card_id: userCard.id,
         condition: userCard.condition,
-        price: userCard.price,
+        price: sale?.price ?? userCard.price,
         updated_at: userCard.updated_at,
-        sold_date: userCard.updated_at,
+        sold_date: sale && Number.isFinite(sale.at) && sale.at > 0
+          ? new Date(sale.at).toISOString()
+          : userCard.updated_at,
         image_url: (userCard as { image_url?: string | null }).image_url ?? null,
         card_name: (cardData as any).name || '',
         edition_name: editionName,

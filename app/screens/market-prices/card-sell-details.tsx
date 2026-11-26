@@ -456,6 +456,19 @@ export default function CardSellDetails() {
                           console.log('Résultat:', JSON.stringify(result, null, 2));
 
                           if (result.success) {
+                            const acceptedPrice = Number(item.proposed_price);
+                            const userCardId = Array.isArray(id) ? id[0] : id;
+                            if (userCardId && Number.isFinite(acceptedPrice) && acceptedPrice > 0) {
+                              await supabase
+                                .from('user_cards')
+                                .update({
+                                  price: acceptedPrice,
+                                  is_sold: true,
+                                  is_for_sale: false,
+                                  updated_at: new Date().toISOString(),
+                                })
+                                .eq('id', userCardId);
+                            }
                             // Supprimer l'offre de la liste locale
                             setOffers(prev => prev.filter(o => o.id !== item.id));
                             
