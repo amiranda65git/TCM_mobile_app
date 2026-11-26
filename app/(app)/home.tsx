@@ -11,7 +11,6 @@ import {
   getUserAvatar, 
   getUserCollectionTotalValue, 
   getUserWishlist, 
-  getCollectionPriceVariation,
   createUserProfile,
   getUserCardsWithOffersCount,
   getUserSoldCardsCount,
@@ -23,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { EventRegister } from 'react-native-event-listeners';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
+import { CollectionValueChart } from '../components/CollectionValueChart';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -37,9 +37,7 @@ export default function HomeScreen() {
   const [editionsCount, setEditionsCount] = useState(0);
   const [cardsCount, setCardsCount] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
-  const [valueVariation, setValueVariation] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
-  const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [cardsWithOffersCount, setCardsWithOffersCount] = useState(0);
   const [soldCardsCount, setSoldCardsCount] = useState(0);
@@ -167,22 +165,6 @@ export default function HomeScreen() {
             const { totalValue: collectionValue, error: valueError } = await getUserCollectionTotalValue(user.id);
             if (!valueError) {
               setTotalValue(collectionValue);
-              
-              // Récupérer la variation de prix réelle de la collection
-              const priceVariationResult = await getCollectionPriceVariation(user.id);
-              if (!priceVariationResult.error) {
-                setValueVariation(priceVariationResult.variation);
-                // Pour le débogage
-                setPriceDetailsDebug({
-                  currentTotal: priceVariationResult.currentTotal,
-                  previousTotal: priceVariationResult.previousTotal,
-                  cardsWithPrices: priceVariationResult.cardsWithPrices
-                });
-                console.log('Variation de prix:', priceVariationResult);
-              } else {
-                console.error("Erreur lors du calcul de la variation de prix:", priceVariationResult.error);
-                setValueVariation(0);
-              }
             } else {
               console.error("Erreur lors de la récupération de la valeur de la collection:", valueError);
             }
@@ -278,19 +260,7 @@ export default function HomeScreen() {
     return value.toFixed(2).replace('.', ',') + ' €';
   };
 
-  // Déterminer la couleur de la variation
-  const getVariationColor = (variation: number) => {
-    if (variation === 0) return colors.text.secondary; // Gris pour aucune variation
-    return variation > 0 ? colors.success : colors.error;
-  };
-
-  // Format pour afficher la variation
-  const formatVariation = (variation: number) => {
-    if (variation === 0) return "0%";
-    return (variation > 0 ? '+' : '') + variation.toFixed(2) + '%';
-  };
-
-  const CollectionCard = () => (
+  const collectionCard = (
     <View style={[styles.collectionCard, { backgroundColor: colors.surface }]}>
       <View style={styles.collectionHeader}>
         <Text style={[styles.currentValue, { color: colors.text.secondary }]}>{t('home.currentValue')}</Text>
@@ -306,17 +276,9 @@ export default function HomeScreen() {
           <Text style={[styles.badgeText, { color: colors.text.secondary }]}>AVG</Text>
         </View>
       </View>
-      <View style={styles.percentageRow}>
-        <Text style={[
-          styles.percentage, 
-          { color: getVariationColor(valueVariation) }
-        ]}>
-          {hideValues ? "***" : formatVariation(valueVariation || 0)}
-        </Text>
-        <Text style={[styles.percentagePeriod, { color: colors.text.secondary }]}>
-          {t('home.thisWeek')}
-        </Text>
-      </View>
+      {user?.id ? (
+        <CollectionValueChart userId={user.id} hideValues={hideValues} />
+      ) : null}
     </View>
   );
 
@@ -397,7 +359,7 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('home.collection')}</Text>
           </View>
-          <CollectionCard />
+          {collectionCard}
         </View>
 
         <View style={styles.actionCards}>

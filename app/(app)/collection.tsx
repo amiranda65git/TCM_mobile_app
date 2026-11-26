@@ -10,7 +10,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue, getCollectionPriceVariation } from '../lib/supabase';
+import { getUserCardsCount, getUserEditionsCount, getUserCardsGroupedByEdition, getUserCollectionTotalValue } from '../lib/supabase';
+import { CollectionValueChart } from '../components/CollectionValueChart';
 
 interface CardProps {
   id: string;
@@ -63,9 +64,7 @@ export default function CollectionScreen() {
   const [cardsCount, setCardsCount] = useState(0);
   const [editionsCount, setEditionsCount] = useState(0);
   const [totalCollectionValue, setTotalCollectionValue] = useState(0);
-  const [valueVariation, setValueVariation] = useState(0); // Variation en pourcentage
   const [hideValues, setHideValues] = useState(false); // État pour gérer l'affichage/masquage des valeurs
-  const [priceDetailsDebug, setPriceDetailsDebug] = useState<any>(null); // Pour le débogage
   
   // États pour les filtres et tri
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -237,22 +236,6 @@ export default function CollectionScreen() {
       const { totalValue: collectionValue, error: valueError } = await getUserCollectionTotalValue(user.id);
       if (!valueError) {
         setTotalCollectionValue(collectionValue);
-        
-        // Récupérer la variation de prix réelle de la collection
-        const priceVariationResult = await getCollectionPriceVariation(user.id);
-        if (!priceVariationResult.error) {
-          setValueVariation(priceVariationResult.variation);
-          // Pour le débogage
-          setPriceDetailsDebug({
-            currentTotal: priceVariationResult.currentTotal,
-            previousTotal: priceVariationResult.previousTotal,
-            cardsWithPrices: priceVariationResult.cardsWithPrices
-          });
-          console.log('Variation de prix collection:', priceVariationResult);
-        } else {
-          console.error("Erreur lors du calcul de la variation de prix:", priceVariationResult.error);
-          setValueVariation(0);
-        }
       }
       
       // Charger les cartes groupées par édition
@@ -334,18 +317,6 @@ export default function CollectionScreen() {
   // Format pour afficher une valeur monétaire
   const formatCurrency = (value: number) => {
     return value.toFixed(2) + ' €';
-  };
-
-  // Déterminer la couleur de la variation
-  const getVariationColor = (variation: number) => {
-    if (variation === 0) return colors.text.secondary; // Gris pour aucune variation
-    return variation > 0 ? colors.success : colors.error;
-  };
-
-  // Format pour afficher la variation
-  const formatVariation = (variation: number) => {
-    if (variation === 0) return "0%";
-    return (variation > 0 ? '+' : '') + variation.toFixed(2) + '%';
   };
 
   // Fonction pour basculer le tri d'une catégorie (maintenant utilise les états temporaires)
@@ -605,17 +576,9 @@ export default function CollectionScreen() {
                 {hideValues ? "******" : formatCurrency(totalCollectionValue)}
               </Text>
               
-              <View style={styles.valueChange}>
-                <Text style={[
-                  styles.valueChangeText, 
-                  { color: getVariationColor(valueVariation) }
-                ]}>
-                  {hideValues ? "***" : formatVariation(valueVariation)}
-                </Text>
-                <Text style={[styles.valuePeriod, { color: colors.text.secondary }]}>
-                  {t('home.thisWeek')}
-                </Text>
-              </View>
+              {user?.id ? (
+                <CollectionValueChart userId={user.id} hideValues={hideValues} />
+              ) : null}
             </View>
           </View>
           
@@ -696,6 +659,19 @@ export default function CollectionScreen() {
                     color={colors.text.secondary} 
                   />
                 </TouchableOpacity>
+                {totalCards > 0 ? (
+                  <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.min(100, (ownedCards / totalCards) * 100)}%`,
+                          backgroundColor: colors.primary,
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : null}
               </View>
             );
           })}
@@ -859,6 +835,13 @@ const styles = StyleSheet.create({
   },
   editionCardCount: {
     fontSize: 12,
+  },
+  progressTrack: {
+    height: 4,
+    width: '100%',
+  },
+  progressFill: {
+    height: 4,
   },
   editionValue: {
     fontSize: 14,

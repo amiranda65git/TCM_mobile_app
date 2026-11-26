@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, FlatList, ScrollView } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,14 @@ import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../components/SwipeableCard';
 import LanguageFlag from '../components/LanguageFlag';
 import { usePreservedListScroll } from '../lib/usePreservedListScroll';
+import {
+  assignCardFolder,
+  createCardFolder,
+  deleteCardFolder,
+  loadCardFolders,
+  renameCardFolder,
+  type CardFolder,
+} from '../lib/cardFolders';
 
 interface Card {
   user_card_id: any;
@@ -66,11 +74,46 @@ export default function AllCardsScreen() {
   const [selectedCondition, setSelectedCondition] = useState<string>('');
   const [salePrice, setSalePrice] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [folders, setFolders] = useState<CardFolder[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [folderName, setFolderName] = useState('');
+  const [folderModal, setFolderModal] = useState<
+    null | { type: 'create' } | { type: 'rename'; folder: CardFolder } | { type: 'assign'; userCardId: string }
+  >(null);
   const loadStartRef = useRef<number | null>(null);
   const renderMarkedRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+  const activeFolderRef = useRef<string | null>(null);
+  activeFolderRef.current = activeFolderId;
+  const assignmentsRef = useRef<Record<string, string>>({});
+  assignmentsRef.current = assignments;
+
+  const applyCardFilters = (
+    cards: Card[],
+    query: string,
+    folderId: string | null,
+    folderAssignments: Record<string, string>
+  ) => {
+    let next = cards;
+    if (folderId) {
+      next = next.filter((card) => folderAssignments[String(card.user_card_id)] === folderId);
+    }
+    const normalized = query.trim().toLowerCase();
+    if (normalized) {
+      next = next.filter((card) => String(card.card.name).toLowerCase().includes(normalized));
+    }
+    return next;
+  };
+
+  const rememberFolders = (store: { folders: CardFolder[]; assignments: Record<string, string> }, cards = allCards) => {
+    setFolders(store.folders);
+    setAssignments(store.assignments);
+    assignmentsRef.current = store.assignments;
+    setFilteredCards(applyCardFilters(cards, searchQueryRef.current, activeFolderRef.current, store.assignments));
+  };
   const {
     listRef,
     scrollProps,
@@ -120,10 +163,12 @@ export default function AllCardsScreen() {
       });
       console.log(`[all-cards] local filter+sort done in ${Date.now() - sortStart}ms (${sortedCards.length} cartes)`);
       
-      const query = searchQueryRef.current.trim().toLowerCase();
-      const nextCards = query
-        ? sortedCards.filter((card) => card.card.name.toLowerCase().includes(query))
-        : sortedCards;
+      const nextCards = applyCardFilters(
+        sortedCards,
+        searchQueryRef.current,
+        activeFolderRef.current,
+        assignmentsRef.current
+      );
 
       setAllCards(sortedCards);
       const filteredStart = Date.now();
@@ -141,19 +186,71 @@ export default function AllCardsScreen() {
   };
 
   // Filtrer les cartes selon la recherche
-  const filterCards = (query: string) => {
-    if (!query.trim()) {
-      setFilteredCards(allCards);
-      setVisibleCount(PAGE_SIZE);
+  const filterCards = (query: string, folderId = activeFolderRef.current) => {
+    setFilteredCards(applyCardFilters(allCards, query, folderId, assignmentsRef.current));
+    setVisibleCount(PAGE_SIZE);
+  };
+
+  const selectFolder = (folderId: string | null) => {
+    setActiveFolderId(folderId);
+    activeFolderRef.current = folderId;
+    filterCards(searchQueryRef.current, folderId);
+    resetListScroll();
+  };
+
+  const openFolderMenu = (folder: CardFolder) => {
+    Alert.alert(folder.name, undefined, [
+      {
+        text: t('allCards.rename'),
+        onPress: () => {
+          setFolderName(folder.name);
+          setFolderModal({ type: 'rename', folder });
+        },
+      },
+      {
+        text: t('allCards.deleteFolder'),
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(t('allCards.deleteFolder'), t('allCards.deleteFolderConfirm'), [
+            { text: t('general.cancel'), style: 'cancel' },
+            {
+              text: t('allCards.deleteFolder'),
+              style: 'destructive',
+              onPress: async () => {
+                if (!session?.user?.id) return;
+                const store = await deleteCardFolder(session.user.id, folder.id);
+                if (activeFolderRef.current === folder.id) {
+                  setActiveFolderId(null);
+                  activeFolderRef.current = null;
+                }
+                rememberFolders(store);
+              },
+            },
+          ]);
+        },
+      },
+      { text: t('general.cancel'), style: 'cancel' },
+    ]);
+  };
+
+  const saveFolderName = async () => {
+    if (!session?.user?.id) return;
+    const trimmed = folderName.trim();
+    if (!trimmed) return;
+    const duplicate = folders.some((folder) => (
+      folder.name.toLowerCase() === trimmed.toLowerCase()
+      && (folderModal?.type !== 'rename' || folder.id !== folderModal.folder.id)
+    ));
+    if (duplicate) {
+      Alert.alert(t('general.error'), t('allCards.duplicateFolder'));
       return;
     }
-    
-    const filtered = allCards.filter(card =>
-      card.card.name.toLowerCase().includes(query.toLowerCase())
-    );
-    
-    setFilteredCards(filtered);
-    setVisibleCount(PAGE_SIZE);
+    const store = folderModal?.type === 'rename'
+      ? await renameCardFolder(session.user.id, folderModal.folder.id, trimmed)
+      : await createCardFolder(session.user.id, trimmed);
+    rememberFolders(store);
+    setFolderModal(null);
+    setFolderName('');
   };
 
   // Gérer le changement de texte de recherche
@@ -166,6 +263,13 @@ export default function AllCardsScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadUserCards(hasLoadedRef.current);
+      if (session?.user?.id) {
+        void loadCardFolders(session.user.id).then((store) => {
+          setFolders(store.folders);
+          setAssignments(store.assignments);
+          assignmentsRef.current = store.assignments;
+        });
+      }
     }, [session?.user?.id])
   );
 
@@ -189,6 +293,10 @@ export default function AllCardsScreen() {
       if (listener) EventRegister.removeEventListener(listener);
     };
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    setFilteredCards(applyCardFilters(allCards, searchQueryRef.current, activeFolderRef.current, assignments));
+  }, [assignments, allCards]);
 
   useEffect(() => {
     restoreListScroll();
@@ -364,6 +472,58 @@ export default function AllCardsScreen() {
         </View>
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.folderScroll}
+        contentContainerStyle={styles.folderRow}
+      >
+        <TouchableOpacity
+          style={[
+            styles.folderChip,
+            {
+              borderColor: activeFolderId ? colors.border : colors.primary,
+              backgroundColor: activeFolderId ? 'transparent' : colors.primary,
+            },
+          ]}
+          onPress={() => selectFolder(null)}
+        >
+          <Text style={[styles.folderChipText, { color: activeFolderId ? colors.text.primary : '#FFFFFF' }]}>
+            {t('allCards.allFolders')}
+          </Text>
+        </TouchableOpacity>
+        {folders.map((folder) => {
+          const selected = activeFolderId === folder.id;
+          return (
+            <TouchableOpacity
+              key={folder.id}
+              style={[
+                styles.folderChip,
+                {
+                  borderColor: selected ? colors.primary : colors.border,
+                  backgroundColor: selected ? colors.primary : 'transparent',
+                },
+              ]}
+              onPress={() => selectFolder(folder.id)}
+              onLongPress={() => openFolderMenu(folder)}
+            >
+              <Text style={[styles.folderChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
+                {folder.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        <TouchableOpacity
+          style={[styles.folderChip, { borderColor: colors.border }]}
+          onPress={() => {
+            setFolderName('');
+            setFolderModal({ type: 'create' });
+          }}
+        >
+          <Ionicons name="add" size={18} color={colors.text.primary} />
+        </TouchableOpacity>
+      </ScrollView>
+
       {/* Cards List (virtualisée pour éviter le rendu complet d'un coup) */}
       <FlatList
         ref={listRef}
@@ -392,6 +552,8 @@ export default function AllCardsScreen() {
             onWishlistPress={handleToggleWishlist}
             showOwnershipIcon={false} // On sait déjà que toutes les cartes sont possédées
             browseEntries={browseEntries}
+            folderAssigned={!!assignments[String(item.user_card_id)]}
+            onFolderPress={() => setFolderModal({ type: 'assign', userCardId: String(item.user_card_id) })}
           />
         )}
         ListEmptyComponent={
@@ -408,6 +570,13 @@ export default function AllCardsScreen() {
                 >
                   <Text style={styles.clearSearchButtonText}>{t('allCards.clearSearch')}</Text>
                 </TouchableOpacity>
+              </>
+            ) : activeFolderId ? (
+              <>
+                <Ionicons name="folder-open-outline" size={60} color={colors.text.secondary} />
+                <Text style={[styles.emptyStateText, { color: colors.text.secondary }]}>
+                  {t('allCards.folderEmpty')}
+                </Text>
               </>
             ) : (
               <>
@@ -426,6 +595,83 @@ export default function AllCardsScreen() {
           </View>
         }
       />
+
+      <Modal
+        visible={folderModal != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFolderModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
+              {folderModal?.type === 'assign'
+                ? t('allCards.assignFolder')
+                : folderModal?.type === 'rename'
+                  ? t('allCards.rename')
+                  : t('allCards.newFolder')}
+            </Text>
+
+            {folderModal?.type === 'assign' ? (
+              <>
+                <TouchableOpacity
+                  style={styles.folderChoice}
+                  onPress={async () => {
+                    if (!session?.user?.id || folderModal?.type !== 'assign') return;
+                    const store = await assignCardFolder(session.user.id, folderModal.userCardId, null);
+                    rememberFolders(store);
+                    setFolderModal(null);
+                  }}
+                >
+                  <Text style={[styles.folderChoiceText, { color: colors.text.primary }]}>{t('allCards.noFolder')}</Text>
+                </TouchableOpacity>
+                {folders.map((folder) => (
+                  <TouchableOpacity
+                    key={folder.id}
+                    style={styles.folderChoice}
+                    onPress={async () => {
+                      if (!session?.user?.id || folderModal?.type !== 'assign') return;
+                      const store = await assignCardFolder(session.user.id, folderModal.userCardId, folder.id);
+                      rememberFolders(store);
+                      setFolderModal(null);
+                    }}
+                  >
+                    <Text style={[styles.folderChoiceText, { color: colors.text.primary }]}>{folder.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : (
+              <TextInput
+                style={[styles.priceInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text.primary }]}
+                value={folderName}
+                onChangeText={setFolderName}
+                placeholder={t('allCards.folderName')}
+                placeholderTextColor={colors.text.secondary}
+                autoFocus
+              />
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.border }]}
+                onPress={() => setFolderModal(null)}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text.secondary }]}>{t('general.cancel')}</Text>
+              </TouchableOpacity>
+              {folderModal?.type !== 'assign' ? (
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                  onPress={saveFolderName}
+                >
+                  <Text style={styles.modalButtonText}>
+                    {folderModal?.type === 'rename' ? t('allCards.rename') : t('allCards.create')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal de vente */}
       <Modal
@@ -525,6 +771,32 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
+    fontSize: 16,
+  },
+  folderScroll: {
+    flexGrow: 0,
+    marginTop: 8,
+  },
+  folderRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  folderChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  folderChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  folderChoice: {
+    paddingVertical: 12,
+  },
+  folderChoiceText: {
     fontSize: 16,
   },
   searchContainer: {

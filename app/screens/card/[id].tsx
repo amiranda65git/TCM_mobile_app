@@ -13,6 +13,15 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
 import { supabase, getUserWishlist, addOrRemoveFromWishlist } from '../../lib/supabase';
+import {
+  exactFinishMid,
+  latestQuotes,
+  preferredQuote,
+  quotesForFinish,
+  sourceLabel,
+  type CardFinish,
+  type PriceQuote,
+} from '../../lib/priceSource';
 import { EventRegister } from 'react-native-event-listeners';
 
 interface CardPrice {
@@ -105,6 +114,8 @@ export default function CardDetailScreen() {
   
   const [loading, setLoading] = useState(true);
   const [cardDetails, setCardDetails] = useState<CardDetails | null>(null);
+  const [priceQuotes, setPriceQuotes] = useState<PriceQuote[]>([]);
+  const [priceFinish, setPriceFinish] = useState<CardFinish | null>(null);
   const [inWishlist, setInWishlist] = useState<boolean>(false);
   
   // États pour le modal de vente
@@ -159,6 +170,7 @@ export default function CardDetailScreen() {
 
     const requestId = ++loadRequestRef.current;
     setLoading(true);
+    setPriceQuotes([]);
     try {
       // 1. Récupérer les détails de la carte officielle
       const { data: cardData, error: cardError } = await supabase
@@ -235,13 +247,14 @@ export default function CardDetailScreen() {
 
       const userPhotoUrl = primaryUserCard?.image_url ?? null;
 
-      // 3. Récupérer les prix du marché actuels
+      // 3. Récupérer les prix du marché actuels, une ligne récente par source
       const { data: marketPriceData, error: marketPriceError } = await supabase
         .from('market_prices')
-        .select('price_low, price_mid, price_high, price_market, updated_at')
+        .select('source, price_low, price_mid, price_high, price_market, date, updated_at')
         .eq('card_id', cardId)
         .order('date', { ascending: false })
-        .limit(1);
+        .limit(40);
+      const quotes = !marketPriceError && marketPriceData ? latestQuotes(marketPriceData) : [];
       
       // 4. Vérifier si l'utilisateur a mis une alerte de prix sur cette carte
       const { data: priceAlertData, error: priceAlertError } = await supabase
@@ -252,28 +265,15 @@ export default function CardDetailScreen() {
       
       if (priceAlertError) throw priceAlertError;
       
-      // Utiliser les prix du marché réels si disponibles, sinon générer des valeurs fictives
-      let priceData: CardPrice;
-      
-      if (!marketPriceError && marketPriceData && marketPriceData.length > 0) {
-        const latestPrice = marketPriceData[0];
-        priceData = {
-          low: parseFloat(latestPrice.price_low) || null,
-          mid: parseFloat(latestPrice.price_mid) || null,
-          high: parseFloat(latestPrice.price_high) || null,
-          market: parseFloat(latestPrice.price_market) || null,
-          lastUpdated: latestPrice.updated_at
-        };
-      } else {
-        // Valeurs fictives si aucun prix n'est disponible
-        priceData = {
-          low: Math.random() * 50,
-          mid: Math.random() * 100 + 50,
-          high: Math.random() * 150 + 100,
-          market: Math.random() * 100 + 75,
-          lastUpdated: new Date().toISOString()
-        };
-      }
+      const ownedFinish = (normalizeFinishKey(primaryUserCard?.finish) || null) as CardFinish | null;
+      const headline = preferredQuote(quotes, ownedFinish);
+      const priceData: CardPrice = {
+        low: headline?.low ?? null,
+        mid: headline?.mid ?? null,
+        high: headline?.high ?? null,
+        market: headline?.market ?? null,
+        lastUpdated: headline?.date ?? null,
+      };
       
       // Assembler les données
       const cardDetails: CardDetails = {
@@ -298,6 +298,8 @@ export default function CardDetailScreen() {
       };
       
       if (requestId !== loadRequestRef.current) return;
+      setPriceQuotes(quotes);
+      setPriceFinish(ownedFinish);
       setCardDetails(cardDetails);
     } catch (error) {
       console.error("Erreur lors du chargement des détails de la carte:", error);
@@ -311,6 +313,10 @@ export default function CardDetailScreen() {
     if (!cardDetails?.user_card_id || !user?.id) return;
     const previous = cardDetails;
     const targetCardId = cardDetails.id;
+    if (patch.finish) {
+      const nextFinish = normalizeFinishKey(patch.finish);
+      setPriceFinish((nextFinish || null) as CardFinish | null);
+    }
     setCardDetails({ ...cardDetails, ...patch });
     try {
       const { error } = await supabase
@@ -396,9 +402,12 @@ export default function CardDetailScreen() {
       // Ouvrir le modal pour mettre en vente
       setSelectedCondition(cardDetails.condition || 'Near Mint');
       
-      // Pré-remplir avec le prix du marché ou le prix actuel
+      // Pré-remplir avec le prix du tirage affiché, puis le prix actuel
       let initialPrice = '';
-      if (cardDetails.prices.mid) {
+      const visibleMid = preferredQuote(quotesForFinish(priceQuotes, priceFinish).quotes, priceFinish)?.mid;
+      if (visibleMid) {
+        initialPrice = visibleMid.toString();
+      } else if (cardDetails.prices.mid) {
         initialPrice = cardDetails.prices.mid.toString();
       } else if (cardDetails.price) {
         initialPrice = cardDetails.price.toString();
@@ -648,6 +657,14 @@ export default function CardDetailScreen() {
     );
   }
   
+  const finishNames = {
+    normale: t('card.finishes.normale'),
+    holo: t('card.finishes.holo'),
+    inverse: t('card.finishes.inverse'),
+  };
+  const shownQuotes = quotesForFinish(priceQuotes, priceFinish);
+  const shownPrice = preferredQuote(shownQuotes.quotes, priceFinish);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
@@ -886,14 +903,48 @@ export default function CardDetailScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>
             {t('card.prices')}
           </Text>
-          
+
+          {priceQuotes.length > 0 ? (
+            <>
+              <Text style={[styles.priceLabel, { color: colors.text.secondary, marginBottom: 8 }]}>
+                {t('card.priceByFinish')}
+              </Text>
+              <View style={styles.copyEditorRow}>
+                {CARD_FINISHES.map((finish) => {
+                  const selected = priceFinish === finish;
+                  const mid = exactFinishMid(priceQuotes, finish);
+                  return (
+                    <TouchableOpacity
+                      key={finish}
+                      style={[
+                        styles.copyChip,
+                        {
+                          borderColor: selected ? colors.primary : colors.border,
+                          backgroundColor: selected ? colors.primary : 'transparent',
+                        },
+                      ]}
+                      onPress={() => setPriceFinish(finish)}
+                    >
+                      <Text style={[styles.copyChipText, { color: selected ? '#FFFFFF' : colors.text.primary }]}>
+                        {t(`card.finishes.${finish}`)}
+                      </Text>
+                      <Text style={[styles.finishPrice, { color: selected ? '#FFFFFF' : colors.text.secondary }]}>
+                        {mid == null ? '—' : formatPrice(mid)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
           <View style={styles.pricesGrid}>
             <View style={styles.priceItem}>
               <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
                 {t('card.lowPrice')}
               </Text>
               <Text style={[styles.priceValue, { color: colors.text.primary }]}>
-                {formatPrice(cardDetails.prices.low)}
+                {formatPrice(shownPrice?.low ?? cardDetails.prices.low)}
               </Text>
             </View>
             
@@ -902,7 +953,7 @@ export default function CardDetailScreen() {
                 {t('card.midPrice')}
               </Text>
               <Text style={[styles.priceValue, { color: colors.text.primary }]}>
-                {formatPrice(cardDetails.prices.mid)}
+                {formatPrice(shownPrice?.mid ?? cardDetails.prices.mid)}
               </Text>
             </View>
             
@@ -911,7 +962,7 @@ export default function CardDetailScreen() {
                 {t('card.highPrice')}
               </Text>
               <Text style={[styles.priceValue, { color: colors.text.primary }]}>
-                {formatPrice(cardDetails.prices.high)}
+                {formatPrice(shownPrice?.high ?? cardDetails.prices.high)}
               </Text>
             </View>
             
@@ -920,15 +971,38 @@ export default function CardDetailScreen() {
                 {t('card.marketPrice')}
               </Text>
               <Text style={[styles.priceValue, { color: colors.secondary, fontWeight: 'bold' }]}>
-                {formatPrice(cardDetails.prices.market)}
+                {formatPrice(shownPrice?.market ?? cardDetails.prices.market)}
               </Text>
             </View>
           </View>
+
+          {shownQuotes.quotes.length > 0 ? (
+            <View style={styles.sourceList}>
+              <Text style={[styles.priceLabel, { color: colors.text.secondary }]}>
+                {t('card.priceSources')}
+              </Text>
+              {!shownQuotes.exact && priceFinish ? (
+                <Text style={[styles.genericPrice, { color: colors.text.secondary }]}>
+                  {t('card.genericPrice')}
+                </Text>
+              ) : null}
+              {shownQuotes.quotes.map((quote) => (
+                <View key={quote.source} style={styles.sourceRow}>
+                  <Text style={[styles.sourceName, { color: colors.text.primary }]} numberOfLines={1}>
+                    {sourceLabel(quote.source, finishNames)}
+                  </Text>
+                  <Text style={[styles.sourcePrice, { color: colors.text.primary }]}>
+                    {formatPrice(quote.mid)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           
           {/* Date de mise à jour des prix */}
-          {cardDetails.prices.lastUpdated && (
+          {(shownPrice?.date || cardDetails.prices.lastUpdated) && (
             <Text style={[styles.priceUpdateInfo, { color: colors.text.secondary }]}>
-              {t('card.lastUpdated')}: {new Date(cardDetails.prices.lastUpdated).toLocaleDateString()}
+              {t('card.lastUpdated')}: {new Date(shownPrice?.date || cardDetails.prices.lastUpdated || '').toLocaleDateString()}
             </Text>
           )}
           
@@ -1374,6 +1448,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginRight: 8,
     marginBottom: 8,
+  },
+  finishPrice: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sourceList: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  genericPrice: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  sourceName: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 12,
+  },
+  sourcePrice: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   copyChipText: {
     fontSize: 14,
