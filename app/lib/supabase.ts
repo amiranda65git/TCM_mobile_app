@@ -817,17 +817,63 @@ export const getEditionDetails = async (editionId: string, userId: string) => {
 // Fonction pour récupérer toutes les cartes que l'utilisateur vend avec le prix de vente et le prix du marché
 export const getUserCardsForSale = async (userId: string) => {
   try {
-    // Utiliser la fonction RPC optimisée
-    const { data, error } = await supabase.rpc('get_user_cards_for_sale', {
-      p_user_id: userId
-    });
+    const { data, error } = await supabase
+      .from('user_cards')
+      .select(`
+        id,
+        card_id,
+        price,
+        condition,
+        official_cards:card_id (
+          id,
+          name,
+          image_small,
+          lang,
+          editions:edition_id (name)
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_for_sale', true)
+      .eq('is_sold', false);
 
     if (error) {
       console.error('Erreur lors de la récupération des cartes en vente de l\'utilisateur:', error);
-      return { data: [], error };
+      const rpc = await supabase.rpc('get_user_cards_for_sale', { p_user_id: userId });
+      if (rpc.error) return { data: [], error: rpc.error };
+      return { data: rpc.data || [], error: null };
     }
 
-    return { data: data || [], error: null };
+    const cardIds = [...new Set((data || []).map((card) => card.card_id).filter(Boolean))];
+    const priceMap = new Map<string, number>();
+    if (cardIds.length > 0) {
+      const { data: pricesData } = await supabase.rpc('get_latest_market_prices_by_card_ids', {
+        p_card_ids: cardIds,
+      });
+      (pricesData || []).forEach((price: { card_id?: string; price_mid?: number | null }) => {
+        if (price?.card_id != null && price.price_mid != null) {
+          priceMap.set(price.card_id, Number(price.price_mid));
+        }
+      });
+    }
+
+    const formatted = (data || []).map((item: any) => {
+      const official = Array.isArray(item.official_cards) ? item.official_cards[0] : item.official_cards;
+      const edition = Array.isArray(official?.editions) ? official.editions[0] : official?.editions;
+      const numericPrice = Number(item.price);
+      return {
+        user_card_id: item.id,
+        card_id: official?.id ?? item.card_id,
+        card_name: official?.name ?? '',
+        image_small: official?.image_small,
+        lang: official?.lang || 'EN',
+        edition_name: edition?.name,
+        price: Number.isFinite(numericPrice) ? numericPrice : 0,
+        condition: item.condition,
+        market_price_mid: priceMap.get(item.card_id) ?? null,
+      };
+    });
+
+    return { data: formatted, error: null };
   } catch (error) {
     console.error('Erreur inattendue dans getUserCardsForSale:', error);
     return { data: [], error };
@@ -2731,6 +2777,8 @@ export const getAllUserCards = async (userId: string) => {
         card_id,
         created_at,
         is_sold,
+        is_for_sale,
+        price,
         image_url,
         official_cards:card_id (
           id,
@@ -2813,6 +2861,8 @@ export const getAllUserCards = async (userId: string) => {
         condition: userCard.condition,
         created_at: userCard.created_at,
         is_sold: userCard.is_sold,
+        is_for_sale: Boolean((userCard as { is_for_sale?: boolean }).is_for_sale),
+        price: (userCard as { price?: number | null }).price ?? null,
         image_url: (userCard as { image_url?: string | null }).image_url ?? null,
         card: {
           id: (cardData as any).id,

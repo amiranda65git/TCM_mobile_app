@@ -284,7 +284,8 @@ export default function EditionDetail() {
         .eq('id', selectedCard.user_card_id);
       
       if (error) throw error;
-      
+
+      EventRegister.emit('trading_data_changed');
       console.log('Carte mise en vente avec succès');
       
       // Fermer le modal et rafraîchir les données

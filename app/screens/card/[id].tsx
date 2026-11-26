@@ -437,12 +437,14 @@ export default function CardDetailScreen() {
         .from('user_cards')
         .update({ 
           is_for_sale: true,
+          is_sold: false,
           price: price,
           condition: selectedCondition
         })
         .eq('id', cardDetails.user_card_id);
       
       if (error) throw error;
+      EventRegister.emit('trading_data_changed');
       if (browse.activeCardRef.current.id !== targetCardId) return;
       
       // Mettre à jour l'état local
@@ -452,7 +454,6 @@ export default function CardDetailScreen() {
         price: price,
         condition: selectedCondition,
       });
-      EventRegister.emit('trading_data_changed');
 
       setShowSellModal(false);
       console.log('Carte mise en vente', cardDetails?.id);

@@ -8,7 +8,7 @@ import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { supabase, addOrRemoveFromWishlist, getAllUserCards, markCardAsSold } from '../lib/supabase';
+import { supabase, addOrRemoveFromWishlist, getAllUserCards } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../components/SwipeableCard';
 import LanguageFlag from '../components/LanguageFlag';
@@ -27,6 +27,8 @@ interface Card {
   condition: any;
   created_at: any;
   is_sold: any;
+  is_for_sale?: boolean;
+  price?: number | null;
   image_url: string | null;
   card: {
     id: any;
@@ -319,8 +321,8 @@ export default function AllCardsScreen() {
     image_small: card.card.image_small,
     image_large: card.card.image_large,
     owned: true, // Toutes les cartes dans cette page sont possédées
-    price: null, // Pas de prix de vente par défaut
-    is_for_sale: false, // Pas en vente par défaut
+    price: card.price ?? null,
+    is_for_sale: Boolean(card.is_for_sale),
     has_price_alert: false, // On pourrait récupérer cette info plus tard
     market_price_low: null,
     market_price_mid: card.card.market_price_mid,
@@ -396,19 +398,33 @@ export default function AllCardsScreen() {
     }
 
     try {
-      const { error } = await markCardAsSold(selectedCard.user_card_id, price);
-      
+      const { error } = await supabase
+        .from('user_cards')
+        .update({
+          price,
+          is_for_sale: true,
+          is_sold: false,
+          condition: selectedCondition || selectedCard.condition,
+        })
+        .eq('id', selectedCard.user_card_id);
+
       if (error) {
         Alert.alert(t('general.error'), t('sell.error'));
         return;
       }
 
-      // Retirer la carte de la liste
-      const updatedCards = allCards.filter(card => card.user_card_id !== selectedCard.user_card_id);
-      setAllCards(updatedCards);
-      filterCards(searchQuery); // Réappliquer le filtre
-      
-      Alert.alert(t('sell.success'), t('sell.cardSold'));
+      const listedId = selectedCard.user_card_id;
+      const listedCondition = selectedCondition || selectedCard.condition;
+      setAllCards((prev) =>
+        prev.map((card) =>
+          card.user_card_id === listedId
+            ? { ...card, is_for_sale: true, price, condition: listedCondition }
+            : card
+        )
+      );
+      EventRegister.emit('trading_data_changed');
+
+      Alert.alert(t('sell.success'), t('sell.listed'));
       setShowSellModal(false);
       setSelectedCard(null);
       setSalePrice('');

@@ -485,6 +485,7 @@ export default {
     confirm: 'Confirm',
     success: 'Success',
     cardSold: 'Card sold successfully',
+    listed: 'Card listed for sale. Find it in Trading, under the Sell tab.',
     error: 'Error selling card'
   },
   priceAlert: {

@@ -485,6 +485,7 @@ export default {
     confirm: 'Confirmer',
     success: 'Succès',
     cardSold: 'Carte vendue avec succès',
+    listed: 'Carte mise en vente. Retrouve-la dans Trading, onglet Vente.',
     error: 'Erreur lors de la vente'
   },
   priceAlert: {
