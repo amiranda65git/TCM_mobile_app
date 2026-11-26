@@ -24,7 +24,10 @@ export default {
     editions: 'Editions',
     cardsCategory: 'Cards',
     news: 'News',
-    user: 'User'
+    user: 'User',
+    newEditionAvailable: 'The “{{name}}” set is available. You can scan your cards.',
+    newEditionsAvailable: 'The sets {{names}} are available. You can scan your cards.',
+    newEditionDismiss: 'Close'
   },
   collection: {
     empty: 'Empty Collection',

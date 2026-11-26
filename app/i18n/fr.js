@@ -24,7 +24,10 @@ export default {
     editions: 'Editions',
     cardsCategory: 'Cartes',
     news: 'Nouveautés',
-    user: 'Utilisateur'
+    user: 'Utilisateur',
+    newEditionAvailable: "L'édition « {{name}} » est disponible. Vous pouvez scanner vos cartes.",
+    newEditionsAvailable: 'Les éditions {{names}} sont disponibles. Vous pouvez scanner vos cartes.',
+    newEditionDismiss: 'Fermer'
   },
   collection: {
     empty: 'Collection vide',
