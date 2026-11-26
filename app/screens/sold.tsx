@@ -10,7 +10,7 @@ import { useThemeColors } from '../lib/ThemeUtils';
 export default function SoldScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const [soldCards, setSoldCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,9 +37,18 @@ export default function SoldScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR');
+    if (Number.isNaN(date.getTime())) return '';
+    const locale = i18n.language?.startsWith('en') ? 'en-GB' : 'fr-FR';
+    return date.toLocaleDateString(locale);
+  };
+
+  const conditionLabel = (condition?: string | null) => {
+    if (!condition) return '';
+    const key = condition.toLowerCase().replace(/\s+/g, '');
+    return t(`card.conditions.${key}`, { defaultValue: condition });
   };
 
   const formatPrice = (price: number | null | undefined) => {
@@ -51,29 +60,49 @@ export default function SoldScreen() {
     router.push(`/screens/market-prices/card-sell-details?id=${card.user_card_id}`);
   };
 
-  const renderSoldCard = ({ item }: { item: any }) => (
+  const renderSoldCard = ({ item }: { item: any }) => {
+    const imageUri = item.image_small || item.card?.image_small || item.image_url || item.card?.image_large || null;
+    const cardName = item.card_name || item.card?.name || '';
+    const editionName = item.edition_name || item.card?.edition_name || '';
+    const soldLabel = conditionLabel(item.condition);
+    const soldDate = formatDate(item.sold_date || item.updated_at);
+    return (
     <TouchableOpacity 
       style={[styles.cardContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}
       onPress={() => handleCardPress(item)}
     >
-      <Image 
-        source={{ uri: item.image_small }} 
-        style={styles.cardImage}
-        resizeMode="contain"
-      />
+      {imageUri ? (
+        <Image 
+          source={{ uri: imageUri }} 
+          style={styles.cardImage}
+          resizeMode="contain"
+        />
+      ) : (
+        <View style={[styles.cardImage, styles.imageFallback, { backgroundColor: colors.border }]}>
+          <Ionicons name="image-outline" size={28} color={colors.text.secondary} />
+        </View>
+      )}
       <View style={styles.cardInfo}>
-        <Text style={[styles.cardName, { color: colors.text.primary }]} numberOfLines={2}>
-          {item.card_name}
-        </Text>
-        <Text style={[styles.editionName, { color: colors.text.secondary }]} numberOfLines={1}>
-          {item.edition_name}
-        </Text>
-        <Text style={[styles.condition, { color: colors.text.secondary }]}>
-          {t(`market.condition.${item.condition}`)}
-        </Text>
-        <Text style={[styles.soldDate, { color: colors.text.secondary }]}>
-          {t('sold.soldOn')} {formatDate(item.sold_date)}
-        </Text>
+        {cardName ? (
+          <Text style={[styles.cardName, { color: colors.text.primary }]} numberOfLines={2}>
+            {cardName}
+          </Text>
+        ) : null}
+        {editionName ? (
+          <Text style={[styles.editionName, { color: colors.text.secondary }]} numberOfLines={1}>
+            {editionName}
+          </Text>
+        ) : null}
+        {soldLabel ? (
+          <Text style={[styles.condition, { color: colors.text.secondary }]}>
+            {soldLabel}
+          </Text>
+        ) : null}
+        {soldDate ? (
+          <Text style={[styles.soldDate, { color: colors.text.secondary }]}>
+            {t('sold.soldOn')} {soldDate}
+          </Text>
+        ) : null}
         <View style={styles.priceContainer}>
           <Text style={[styles.price, { color: colors.success }]}>
             {formatPrice(item.price)}
@@ -84,7 +113,8 @@ export default function SoldScreen() {
         </View>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -175,6 +205,11 @@ const styles = StyleSheet.create({
     height: 112,
     borderRadius: 8,
     marginRight: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  imageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardInfo: {
     flex: 1,
