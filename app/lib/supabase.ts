@@ -2070,6 +2070,49 @@ export const createOfferNotification = async ({ seller_id, card_id, user_card_id
   }
 };
 
+// Prévenir les membres qui ont cette carte dans leur wishlist.
+export const notifyWishlistUsersOfSale = async ({
+  sellerId,
+  cardId,
+  userCardId,
+  cardName,
+}: {
+  sellerId: string;
+  cardId: string;
+  userCardId?: string;
+  cardName: string;
+}) => {
+  try {
+    const { data: watchers, error } = await supabase
+      .from('wishlists')
+      .select('user_id')
+      .eq('card_id', cardId)
+      .neq('user_id', sellerId);
+
+    if (error) throw error;
+
+    const userIds = [...new Set((watchers || []).map((row) => row.user_id).filter(Boolean))];
+    if (userIds.length === 0) return { data: [], error: null };
+
+    const rows = userIds.map((userId) => ({
+      user_id: userId,
+      type: 'wishlist_item_sale',
+      card_id: cardId,
+      user_card_id: userCardId,
+      message: `La carte ${cardName} de votre wishlist est maintenant en vente`,
+      is_read: false,
+      data: { card: cardName, cardName },
+    }));
+
+    const { data, error: insertError } = await supabase.from('notifications').insert(rows);
+    if (insertError) throw insertError;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Erreur lors de la notification wishlist:', error);
+    return { data: null, error };
+  }
+};
+
 // Fonction pour récupérer toutes les notifications d'un utilisateur
 export const getUserNotifications = async (userId: string) => {
   try {
@@ -2926,6 +2969,7 @@ const SupabaseService = {
   searchMarketCards,
   createOffer,
   createOfferNotification,
+  notifyWishlistUsersOfSale,
   getUserNotifications,
   archiveNotification,
   markAllNotificationsAsRead,

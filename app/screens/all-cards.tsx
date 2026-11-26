@@ -8,7 +8,7 @@ import { useSubscriptionRestrictions } from '../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
-import { supabase, addOrRemoveFromWishlist, getAllUserCards } from '../lib/supabase';
+import { supabase, addOrRemoveFromWishlist, getAllUserCards, notifyWishlistUsersOfSale } from '../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../components/SwipeableCard';
 import LanguageFlag from '../components/LanguageFlag';
@@ -423,6 +423,14 @@ export default function AllCardsScreen() {
         )
       );
       EventRegister.emit('trading_data_changed');
+      if (!selectedCard.is_for_sale && session?.user?.id) {
+        void notifyWishlistUsersOfSale({
+          sellerId: session.user.id,
+          cardId: String(selectedCard.card.id),
+          userCardId: String(selectedCard.user_card_id),
+          cardName: String(selectedCard.card.name || ''),
+        });
+      }
 
       Alert.alert(t('sell.success'), t('sell.listed'));
       setShowSellModal(false);

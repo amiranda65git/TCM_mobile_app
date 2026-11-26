@@ -7,7 +7,7 @@ import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
-import { supabase, getEditionDetails, addOrRemoveFromWishlist } from '../../lib/supabase';
+import { supabase, getEditionDetails, addOrRemoveFromWishlist, notifyWishlistUsersOfSale } from '../../lib/supabase';
 import { EventRegister } from 'react-native-event-listeners';
 import SwipeableCard from '../../components/SwipeableCard';
 import NotificationIcon from '../../components/NotificationIcon';
@@ -286,6 +286,14 @@ export default function EditionDetail() {
       if (error) throw error;
 
       EventRegister.emit('trading_data_changed');
+      if (!selectedCard.is_for_sale) {
+        void notifyWishlistUsersOfSale({
+          sellerId: user.id,
+          cardId: selectedCard.id,
+          userCardId: selectedCard.user_card_id,
+          cardName: selectedCard.name,
+        });
+      }
       console.log('Carte mise en vente avec succès');
       
       // Fermer le modal et rafraîchir les données

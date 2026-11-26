@@ -12,7 +12,7 @@ import { useSubscriptionRestrictions } from '../../lib/RevenueCatService';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../lib/ThemeContext';
 import { useThemeColors } from '../../lib/ThemeUtils';
-import { supabase, getUserWishlist, addOrRemoveFromWishlist } from '../../lib/supabase';
+import { supabase, getUserWishlist, addOrRemoveFromWishlist, notifyWishlistUsersOfSale } from '../../lib/supabase';
 import {
   exactFinishMid,
   latestQuotes,
@@ -445,6 +445,14 @@ export default function CardDetailScreen() {
       
       if (error) throw error;
       EventRegister.emit('trading_data_changed');
+      if (user?.id) {
+        void notifyWishlistUsersOfSale({
+          sellerId: user.id,
+          cardId: targetCardId,
+          userCardId: String(cardDetails.user_card_id),
+          cardName: cardDetails.name,
+        });
+      }
       if (browse.activeCardRef.current.id !== targetCardId) return;
       
       // Mettre à jour l'état local
