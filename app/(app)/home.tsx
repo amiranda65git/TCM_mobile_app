@@ -24,6 +24,41 @@ import { useTheme } from '../lib/ThemeContext';
 import { useThemeColors } from '../lib/ThemeUtils';
 import { CollectionValueChart } from '../components/CollectionValueChart';
 
+const DISMISSED_HOME_EDITIONS_KEY = '@dismissed_home_edition_announcements';
+const EDITION_BANNER_MAX_AGE_MS = 120 * 24 * 60 * 60 * 1000;
+
+type EditionAnnouncement = { edition_id: string; edition_name: string };
+
+async function readDismissedEditionIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DISMISSED_HOME_EDITIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function loadVisibleEditionAnnouncements(): Promise<EditionAnnouncement[]> {
+  const since = new Date(Date.now() - EDITION_BANNER_MAX_AGE_MS).toISOString();
+  const { data, error } = await supabase
+    .from('home_announcements')
+    .select('edition_id, edition_name')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(8);
+  if (error || !data?.length) return [];
+
+  const dismissed = await readDismissedEditionIds();
+  return data.filter(
+    (row): row is EditionAnnouncement =>
+      typeof row.edition_id === 'string' &&
+      typeof row.edition_name === 'string' &&
+      row.edition_name.trim().length > 0 &&
+      !dismissed.has(row.edition_id)
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -41,6 +76,7 @@ export default function HomeScreen() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [cardsWithOffersCount, setCardsWithOffersCount] = useState(0);
   const [soldCardsCount, setSoldCardsCount] = useState(0);
+  const [editionAnnouncements, setEditionAnnouncements] = useState<EditionAnnouncement[]>([]);
 
   // Écouter les changements de langue
   useEffect(() => {
@@ -80,6 +116,12 @@ export default function HomeScreen() {
       
       
       async function loadUserData() {
+        try {
+          setEditionAnnouncements(await loadVisibleEditionAnnouncements());
+        } catch (error) {
+          console.error("Annonce d'éditions indisponible:", error);
+        }
+
         if (user) {
           try {
             // Vérifier si la langue a changé
@@ -260,6 +302,26 @@ export default function HomeScreen() {
     return value.toFixed(2).replace('.', ',') + ' €';
   };
 
+  const dismissEditionAnnouncements = async () => {
+    const dismissed = await readDismissedEditionIds();
+    for (const announcement of editionAnnouncements) dismissed.add(announcement.edition_id);
+    await AsyncStorage.setItem(DISMISSED_HOME_EDITIONS_KEY, JSON.stringify([...dismissed]));
+    setEditionAnnouncements([]);
+  };
+
+  const editionBannerText = (() => {
+    if (editionAnnouncements.length === 0) return '';
+    if (editionAnnouncements.length === 1) {
+      return t('home.newEditionAvailable', { name: editionAnnouncements[0].edition_name });
+    }
+    const quoted = editionAnnouncements.map((item) => `« ${item.edition_name} »`);
+    const andWord = i18n.language?.startsWith('en') ? 'and' : 'et';
+    const names = quoted.length === 2
+      ? `${quoted[0]} ${andWord} ${quoted[1]}`
+      : `${quoted.slice(0, -1).join(', ')} ${andWord} ${quoted[quoted.length - 1]}`;
+    return t('home.newEditionsAvailable', { names });
+  })();
+
   const collectionCard = (
     <View style={[styles.collectionCard, { backgroundColor: colors.surface }]}>
       <View style={styles.collectionHeader}>
@@ -313,6 +375,28 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        {editionAnnouncements.length > 0 ? (
+          <View style={[styles.editionBanner, { backgroundColor: colors.primaryLight }]}>
+            <TouchableOpacity
+              style={styles.editionBannerBody}
+              onPress={() => router.push('/scan')}
+              accessibilityRole="button"
+            >
+              <Ionicons name="scan-outline" size={22} color={colors.secondary} />
+              <Text style={[styles.editionBannerText, { color: colors.text.primary }]}>
+                {editionBannerText}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={dismissEditionAnnouncements}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.newEditionDismiss')}
+            >
+              <Ionicons name="close" size={20} color={colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <View style={styles.header}>
           <View style={styles.userInfo}>
             <TouchableOpacity 
@@ -612,6 +696,29 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 120,
+  },
+  editionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingLeft: 14,
+    paddingRight: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  editionBannerBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  editionBannerText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    marginLeft: 10,
   },
   notificationBadge: {
     width: 20,
